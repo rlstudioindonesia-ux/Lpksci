@@ -319,7 +319,9 @@ export function syncEntityToFirestore(collectionName: string, id: string, data: 
     }
     writeCache.set(cacheKey, serialized);
     setDoc(doc(db, collectionName, id), sanitized).catch(e => {
-      handleFirestoreError(e, OperationType.WRITE, cacheKey);
+      // Fire-and-forget write: log the structured error but never let it become
+      // an unhandled rejection, which would crash the whole Node process.
+      try { handleFirestoreError(e, OperationType.WRITE, cacheKey); } catch (logged) {}
       writeCache.delete(cacheKey);
     });
   } catch(e) {
@@ -339,7 +341,7 @@ export function syncCustomizationToFirestore(data: any) {
     }
     writeCache.set(cacheKey, serialized);
     setDoc(doc(db, 'system', 'customization'), sanitized).catch(e => {
-      handleFirestoreError(e, OperationType.WRITE, cacheKey);
+      try { handleFirestoreError(e, OperationType.WRITE, cacheKey); } catch (logged) {}
       writeCache.delete(cacheKey);
     });
   } catch(e) {
@@ -358,7 +360,7 @@ export function syncLmsClassToFirestore(lmsClass: any) {
     }
     writeCache.set(cacheKey, serialized);
     setDoc(doc(db, 'lmsClasses', lmsClass.id), sanitized).catch(e => {
-      handleFirestoreError(e, OperationType.WRITE, cacheKey);
+      try { handleFirestoreError(e, OperationType.WRITE, cacheKey); } catch (logged) {}
       writeCache.delete(cacheKey);
     });
   } catch(e) {
@@ -372,7 +374,7 @@ export function deleteEntityFromFirestore(collectionName: string, id: string) {
     const cacheKey = `${collectionName}/${id}`;
     writeCache.delete(cacheKey);
     deleteDoc(doc(db, collectionName, id)).catch(e => {
-      handleFirestoreError(e, OperationType.DELETE, cacheKey);
+      try { handleFirestoreError(e, OperationType.DELETE, cacheKey); } catch (logged) {}
     });
   } catch(e) {
     console.error(e);

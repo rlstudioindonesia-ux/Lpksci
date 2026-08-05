@@ -1324,7 +1324,7 @@ app.post("/api/state/update", (req, res) => {
         if (oldLen !== newLen) {
            if (!state.logs) state.logs = [];
            const actionDesc = newLen > oldLen ? "Menambahkan Kelas Baru" : "Menghapus Kelas";
-           state.logs.unshift({
+           const auditLogEntry = {
               id: `LOG-${Date.now()}`,
               user: req.body.actingUserName ? `[${req.body.userRole || 'Admin'}] ${req.body.actingUserName}` : "Admin/VVIP",
               action: actionDesc,
@@ -1332,9 +1332,12 @@ app.post("/api/state/update", (req, res) => {
               time: new Date().toISOString(),
               type: "system",
               details: `Total kelas berubah dari ${oldLen} menjadi ${newLen}`
-           });
+           };
+           state.logs.unshift(auditLogEntry);
            if (state.logs.length > 200) state.logs.pop();
-           syncEntityToFirestore("logs", "audit_trail", { entries: state.logs });
+           // Sync as its own document - see note above about avoiding the oversized
+           // consolidated "audit_trail" document.
+           syncEntityToFirestore("logs", auditLogEntry.id, auditLogEntry);
         }
       }
 
@@ -2155,7 +2158,7 @@ app.post("/api/state/update", (req, res) => {
           }
 
           if (!state.logs) state.logs = [];
-          state.logs.unshift({
+          const auditLogEntry = {
             id: `LOG-${Date.now()}`,
             user: req.body.actingUserName ? `[${req.body.userRole || 'Admin'}] ${req.body.actingUserName}` : "Admin/VVIP",
             action: actionMsg,
@@ -2163,9 +2166,13 @@ app.post("/api/state/update", (req, res) => {
             time: new Date().toISOString(),
             type: "security",
             details: detailsMsg
-          });
+          };
+          state.logs.unshift(auditLogEntry);
           if (state.logs.length > 200) state.logs.pop();
-          syncEntityToFirestore("logs", "audit_trail", { entries: state.logs });
+          // Each log is synced as its own Firestore document - never re-pack the whole
+          // array into one "audit_trail" doc, which can exceed Firestore's 1MB/doc limit
+          // once entries carry embedded biometric photos.
+          syncEntityToFirestore("logs", auditLogEntry.id, auditLogEntry);
 
           // Synchronize profile picture, name, and class down to ActiveStudents and registeredStudents if they exist
           const currentUserObj = state.users[index];
@@ -2301,8 +2308,9 @@ app.post("/api/state/update", (req, res) => {
           state.logs.pop();
         }
         
+        // Sync as its own document only - packing the whole array into one "audit_trail"
+        // doc can exceed Firestore's 1MB/doc limit once entries carry embedded photos.
         syncEntityToFirestore("logs", logId, newLog);
-        syncEntityToFirestore("logs", "audit_trail", { entries: state.logs });
         return res.json({ success: true, item: newLog });
       }
 
@@ -2311,7 +2319,6 @@ app.post("/api/state/update", (req, res) => {
         if (id) {
           state.logs = state.logs.filter((l: any) => l.id !== id);
           deleteEntityFromFirestore("logs", id);
-          syncEntityToFirestore("logs", "audit_trail", { entries: state.logs });
         }
         return res.json({ success: true, id });
       }
