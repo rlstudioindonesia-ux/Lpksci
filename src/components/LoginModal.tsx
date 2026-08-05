@@ -267,29 +267,12 @@ export default function LoginModal({
         return;
       }
       
-      let expectedPassword = (existingUser.password || existingUser.username || "").trim();
       const isAdminAccount = ["linggadhani79@gmail.com", "ekaichiro@gmail.com", "rlstudioindonesia@gmail.com", "admin"].includes((existingUser.email || "").trim().toLowerCase()) || (existingUser.username || "").trim().toLowerCase() === "admin";
-      
+
       try {
         // Coba login via Firebase Auth (untuk sinkronisasi password setelah reset email)
         if (existingUser.email) {
            await signInWithEmailAndPassword(auth, existingUser.email, cleanPassword);
-           
-           // Jika berhasil login via Firebase tapi password beda dengan database lokal,
-           // ini berarti password baru saja direset via email! Sync ke database.
-           if (cleanPassword !== expectedPassword && !isAdminAccount) {
-              await fetch("/api/state/update", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  dataType: "users",
-                  action: "edit",
-                  payload: { username: existingUser.username, password: cleanPassword }
-                })
-              });
-              existingUser.password = cleanPassword; // Update local memory instantly
-           }
-           
            onLoginSuccess(existingUser);
            onClose();
            return;
@@ -299,21 +282,30 @@ export default function LoginModal({
          // Jika password manual cocok, maka kita buatkan akun Firebase-nya secara seamless!
       }
 
-      if (isAdminAccount) {
-         if (cleanPassword === "adminadmin" || cleanPassword === expectedPassword) {
-            onLoginSuccess(existingUser);
-            onClose();
-            return;
-         }
-      } else if (cleanPassword === expectedPassword) {
-        // Seamlessly register them in Firebase so they can reset password later
-        if (existingUser.email) {
-            createUserWithEmailAndPassword(auth, existingUser.email, cleanPassword).catch(() => {});
-        }
+      if (isAdminAccount && cleanPassword === "adminadmin") {
         onLoginSuccess(existingUser);
         onClose();
         return;
       }
+
+      // Verify against the server-side (bcrypt-hashed) credential store.
+      try {
+        const loginRes = await fetch("/api/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username: normalizedUsername, password: cleanPassword }),
+        });
+        if (loginRes.ok) {
+          const { user: verifiedUser } = await loginRes.json();
+          // Seamlessly register them in Firebase so they can reset password later
+          if (existingUser.email) {
+              createUserWithEmailAndPassword(auth, existingUser.email, cleanPassword).catch(() => {});
+          }
+          onLoginSuccess(verifiedUser);
+          onClose();
+          return;
+        }
+      } catch (err) {}
     }
 
     setErrorMsg("Username/Email atau password salah.");

@@ -166,41 +166,37 @@ export function InlineLoginPanel({
         return;
       }
       
-      let expectedPassword = (existingUser.password || existingUser.username || "").trim();
       const isAdminAccount = ["linggadhani79@gmail.com", "ekaichiro@gmail.com", "rlstudioindonesia@gmail.com", "admin"].includes((existingUser.email || "").trim().toLowerCase()) || (existingUser.username || "").trim().toLowerCase() === "admin";
-      
+
       try {
         if (existingUser.email) {
            await signInWithEmailAndPassword(auth, existingUser.email, cleanPassword);
-           if (cleanPassword !== expectedPassword && !isAdminAccount) {
-              await fetch("/api/state/update", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  dataType: "users",
-                  action: "edit",
-                  payload: { username: existingUser.username, password: cleanPassword }
-                })
-              });
-              existingUser.password = cleanPassword;
-           }
            onLoginSuccess(existingUser);
            return;
         }
       } catch (err) {}
-      
-      if (isAdminAccount) {
-         if (cleanPassword === "adminadmin" || cleanPassword === expectedPassword) {
-            onLoginSuccess(existingUser);
-            return;
-         }
-      } else if (cleanPassword === expectedPassword) {
-        if (existingUser.email) {
-            createUserWithEmailAndPassword(auth, existingUser.email, cleanPassword).catch(() => {});
-        }
+
+      if (isAdminAccount && cleanPassword === "adminadmin") {
         onLoginSuccess(existingUser);
         return;
       }
+
+      // Verify against the server-side (bcrypt-hashed) credential store.
+      try {
+        const loginRes = await fetch("/api/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username: normalizedUsername, password: cleanPassword }),
+        });
+        if (loginRes.ok) {
+          const { user: verifiedUser } = await loginRes.json();
+          if (existingUser.email) {
+            createUserWithEmailAndPassword(auth, existingUser.email, cleanPassword).catch(() => {});
+          }
+          onLoginSuccess(verifiedUser);
+          return;
+        }
+      } catch (err) {}
     }
     setErrorMsg("Username/Email atau password salah.");
   };

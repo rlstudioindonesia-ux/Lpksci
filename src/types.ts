@@ -352,7 +352,8 @@ export interface UserAccount {
   username: string;
   name: string;
   email: string;
-  password?: string;
+  password?: string; // Never sent to the client; server strips this from /api/state responses.
+  hasPassword?: boolean; // Client-safe substitute for checking whether a credential is set.
   role: "Admin" | "VVIP" | "Siswa" | "Pengajar" | "Alumni" | "Admin Super" | "Admin Biasa";
   status?: "Active" | "Suspended";
   studentId?: string; // If Siswa, points to ActiveStudent

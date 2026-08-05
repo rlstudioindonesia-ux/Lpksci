@@ -4,12 +4,38 @@ import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
 import fs from "fs";
+import bcrypt from "bcryptjs";
 import { testConnection, loadStateFromFirestore, syncEntityToFirestore, syncCustomizationToFirestore, syncLmsClassToFirestore, deleteEntityFromFirestore, uploadBufferToFirebaseStorage } from "./src/db/firebase-adapter.ts";
 
 dotenv.config();
 
 const app = express();
 const PORT = 3000;
+
+// Bcrypt hashes always start with $2a$/$2b$/$2y$ followed by the cost factor.
+function isHashedPassword(pw: unknown): pw is string {
+  return typeof pw === "string" && /^\$2[aby]\$\d{2}\$/.test(pw);
+}
+
+function hashPassword(plain: string): string {
+  if (!plain) return "";
+  return bcrypt.hashSync(plain, 10);
+}
+
+// Accepts legacy plaintext passwords for existing accounts so nobody gets locked out;
+// a successful legacy match is immediately re-hashed by the caller.
+function verifyPassword(plain: string, stored: unknown): boolean {
+  if (!plain || !stored || typeof stored !== "string") return false;
+  if (isHashedPassword(stored)) {
+    return bcrypt.compareSync(plain, stored);
+  }
+  return plain === stored;
+}
+
+function stripPassword<T extends { password?: unknown }>(obj: T): Omit<T, "password"> {
+  const { password, ...rest } = obj;
+  return rest;
+}
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
@@ -278,7 +304,7 @@ app.post("/api/reset-password", async (req, res) => {
   
   const userIndex = state.users.findIndex((u) => u.username === resetReq.username);
   if (userIndex !== -1) {
-    state.users[userIndex].password = newPassword;
+    state.users[userIndex].password = hashPassword(newPassword);
     
     // Save state to firestore if needed
     try {
@@ -294,7 +320,39 @@ app.post("/api/reset-password", async (req, res) => {
 });
 
 app.get("/api/state", (req, res) => {
-  res.json(state);
+  res.json({
+    ...state,
+    users: (state.users || []).map(u => ({ ...stripPassword(u), hasPassword: !!u.password })),
+    registeredStudents: (state.registeredStudents || []).map(stripPassword),
+  });
+});
+
+// Server-side credential verification (bcrypt) - replaces the old client-side plaintext check.
+app.post("/api/login", (req, res) => {
+  const { username, password } = req.body || {};
+  if (!username || !password) {
+    return res.status(400).json({ error: "Username dan password wajib diisi." });
+  }
+  const normalized = String(username).trim().toLowerCase();
+  const user = state.users.find(u =>
+    (u.username || "").trim().toLowerCase() === normalized ||
+    (u.email || "").trim().toLowerCase() === normalized
+  );
+
+  if (!user || !verifyPassword(password, user.password)) {
+    return res.status(401).json({ error: "Username/Email atau password salah." });
+  }
+  if (user.status === "Suspended") {
+    return res.status(403).json({ error: "Akses Ditolak: Akun Anda telah disuspend oleh Admin atau Direktur." });
+  }
+
+  // Lazy-migrate any still-plaintext password to a bcrypt hash on successful login.
+  if (!isHashedPassword(user.password)) {
+    user.password = hashPassword(password);
+    syncEntityToFirestore("users", user.username, user);
+  }
+
+  res.json({ user: stripPassword(user) });
 });
 
 // Student sign up from the landing page with integrated Midtrans Sandbox Payment
@@ -313,12 +371,13 @@ app.post("/api/register", (req, res) => {
   const isAutomatic = !paymentMethod || paymentMethod.includes("Virtual Account") || paymentMethod.includes("QRIS") || paymentMethod.includes("Credit Card") || paymentMethod.includes("Gopay");
   const payStatus = isAlumni ? "Lunas" : (isAutomatic ? "Lunas" : "Belum Bayar");
   const newRegStatus = isAlumni ? "Disetujui" : "Pending";
+  const rawPassword = password || "123456";
 
   const newReg = {
     id: `REG-${Date.now().toString().slice(-6)}`,
     name,
     email,
-    password: password || "123456",
+    password: hashPassword(rawPassword),
     phone,
     birthDate: birthDate || "2003-01-01",
     education: education || "SMA",
@@ -393,7 +452,7 @@ app.post("/api/register", (req, res) => {
         username: email,
         name: name,
         email: email,
-        password: password || "123456",
+        password: hashPassword(rawPassword),
         role: "Alumni" as "Siswa" | "Alumni",
         status: "Active" as const,
         studentId: assignedStudentId,
@@ -419,7 +478,7 @@ app.post("/api/register", (req, res) => {
   state.payments.unshift(newPay);
   syncEntityToFirestore('payments', newPay.id, newPay);
 
-  res.json({ success: true, registered: newReg, payment: newPay });
+  res.json({ success: true, registered: stripPassword(newReg), payment: newPay });
 });
 
 // Update standard datasets from the Admin Portal or LMS E-Benkyou
@@ -816,7 +875,7 @@ app.post("/api/state/update", (req, res) => {
             username: match.email,
             name: match.name,
             email: match.email,
-            password: match.password || "123456",
+            password: isHashedPassword(match.password) ? match.password : hashPassword(match.password || "123456"),
             role: (match.statusPendaftaran === "Alumni" ? "Alumni" : "Siswa") as "Siswa" | "Alumni",
             status: "Active" as const,
             studentId: assignedStudentId,
@@ -2034,7 +2093,7 @@ app.post("/api/state/update", (req, res) => {
         if (exists) {
           return res.status(400).json({ error: "Username sudah digunakan!" });
         }
-        const newUser = { username, name, email, role, studentId, assignedClass, password, japaneseLevel, kecakapanSensei };
+        const newUser = { username, name, email, role, studentId, assignedClass, password: isHashedPassword(password) ? password : hashPassword(password || "123456"), japaneseLevel, kecakapanSensei };
         state.users.push(newUser);
 
         // Sync to ActiveStudents if role is Siswa
@@ -2045,7 +2104,7 @@ app.post("/api/state/update", (req, res) => {
             syncEntityToFirestore("activeStudents", state.activeStudents[actIndex].id, state.activeStudents[actIndex]);
           }
         }
-        return res.json({ success: true, item: newUser });
+        return res.json({ success: true, item: stripPassword(newUser) });
       }
       if (action === "edit") {
         const { username, name, email, role, studentId, profilePicture, assignedClass, password, status, bankAccount, faceRegistered, faceBiometricData, lastActive, japaneseLevel, kecakapanSensei, docCV, docIjazah, docSertifikat, docKTP } = payload;
@@ -2060,7 +2119,7 @@ app.post("/api/state/update", (req, res) => {
             studentId: studentId !== undefined ? studentId : state.users[index].studentId,
             profilePicture: profilePicture !== undefined ? profilePicture : state.users[index].profilePicture,
             assignedClass: assignedClass !== undefined ? assignedClass : state.users[index].assignedClass,
-            password: password !== undefined ? password : state.users[index].password,
+            password: password !== undefined ? (isHashedPassword(password) ? password : hashPassword(password)) : state.users[index].password,
             status: status !== undefined ? status : (state.users[index].status || "Active"),
             bankAccount: bankAccount !== undefined ? bankAccount : state.users[index].bankAccount,
             faceRegistered: faceRegistered !== undefined ? faceRegistered : state.users[index].faceRegistered,
@@ -2144,7 +2203,7 @@ app.post("/api/state/update", (req, res) => {
             }
           }
           syncEntityToFirestore("users", state.users[index].username, state.users[index]);
-          return res.json({ success: true, item: state.users[index] });
+          return res.json({ success: true, item: stripPassword(state.users[index]) });
         }
         return res.status(404).json({ error: "User tidak ditemukan!" });
       }
@@ -2154,7 +2213,7 @@ app.post("/api/state/update", (req, res) => {
         if (index !== -1) {
           state.users[index].bankAccount = bankAccount;
           syncEntityToFirestore("users", state.users[index].username, state.users[index]);
-          return res.json({ success: true, item: state.users[index] });
+          return res.json({ success: true, item: stripPassword(state.users[index]) });
         }
         return res.status(404).json({ error: "User tidak ditemukan!" });
       }
@@ -2165,7 +2224,7 @@ app.post("/api/state/update", (req, res) => {
           state.users[index].faceRegistered = true;
           state.users[index].faceBiometricData = faceBiometricData || "REGISTERED_OK";
           syncEntityToFirestore("users", state.users[index].username, state.users[index]);
-          return res.json({ success: true, item: state.users[index] });
+          return res.json({ success: true, item: stripPassword(state.users[index]) });
         }
         return res.status(404).json({ error: "User tidak ditemukan!" });
       }
