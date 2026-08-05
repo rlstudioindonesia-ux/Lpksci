@@ -1,0 +1,201 @@
+                                            <p className="text-sm font-bold text-slate-800">Materi Dikunci</p>
+                                            <p className="text-[10px] text-slate-500 mt-1 max-w-[200px] mx-auto">
+                                              Silakan ikuti instruksi Sensei di kelas.
+                                            </p>
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              )}
+
+                              {/* Quizzes Section */}
+                              {filteredQuizzes.length > 0 && (
+                                <div className="space-y-4 pt-4 border-t border-slate-150/60 text-left">
+                                  <div className="mb-2">
+                                    <h4 className="font-display font-extrabold text-slate-900 text-sm">📋 Soal Latihan & Kuis Bab {chapter.number}</h4>
+                                    <p className="text-[10px] text-slate-500">Kerjakan kuis interaktif di bawah untuk menguji pemahaman materi Anda.</p>
+                                  </div>
+
+                                  <div className="space-y-4">
+                                    {(!filteredQuizzes[0].durationMinutes || cbtStartTimes[`kuis_ch_${chapter.id}`] || currentUser?.role !== "Siswa") && filteredQuizzes.map((quiz, idx) => {
+                                      const isSubmitted = submittedQuizIds.includes(quiz.id);
+                                      const selectedAns = studentQuizAnswers[quiz.id];
+                                      const essayAns = studentQuizEssayAnswers[quiz.id] || "";
+                                      const isCorrect = selectedAns === quiz.correctAnswerIndex;
+                                      const isQuizDeadlinePassed = quiz.deadline ? new Date() > new Date(quiz.deadline) : false;
+
+                                      return (
+                                        <div key={quiz.id} className="bg-slate-50 border border-slate-200 rounded-2xl p-4 sm:p-5 flex flex-col gap-3.5 relative overflow-hidden shadow-2xs">
+                                          {/* Quiz Header Info */}
+                                          <div className="flex items-start justify-between gap-3 flex-wrap">
+                                            <div className="flex items-center gap-2 flex-wrap">
+                                              <span className="text-[9px] font-bold bg-amber-100 text-amber-800 border border-amber-200 px-2 py-0.5 rounded-md uppercase">
+                                                ❓ {quiz.questionType === "essay" ? "Essay" : "Pilihan Ganda"}
+                                              </span>
+                                              {quiz.deadline && (
+                                                isQuizDeadlinePassed ? (
+                                                  <span className="text-[9px] font-black bg-red-600 text-white border border-red-700 px-2 py-0.5 rounded-md flex items-center gap-1 animate-pulse">
+                                                    🚨 Batas Terlewati: {new Date(quiz.deadline).toLocaleString("id-ID", { dateStyle: "short", timeStyle: "short" })}
+                                                  </span>
+                                                ) : (
+                                                  <span className="text-[9px] font-bold bg-rose-50 text-rose-700 border border-rose-150 px-2 py-0.5 rounded-md flex items-center gap-1 animate-pulse">
+                                                    ⏳ Batas: {new Date(quiz.deadline).toLocaleString("id-ID", { dateStyle: "short", timeStyle: "short" })}
+                                                  </span>
+                                                )
+                                              )}
+                                              {quiz.durationMinutes && (
+                                                <span className="text-[9px] font-bold bg-teal-50 text-teal-700 border border-teal-150 px-2 py-0.5 rounded-md">
+                                                  ⏱️ {quiz.durationMinutes} Menit
+                                                </span>
+                                              )}
+                                            </div>
+
+                                            {/* Staff Action to delete */}
+                                            {(currentUser?.role === "Pengajar" || currentUser?.role === "Admin" || currentUser?.role === "Admin Super" || currentUser?.role === "Admin Biasa" || currentUser?.role === "VVIP") && (
+                                              <button
+                                                onClick={() => handleQuizDelete(quiz.id, quiz.question)}
+                                                className="p-1.5 text-rose-600 bg-rose-50 border border-rose-150 hover:bg-rose-100 rounded-lg transition cursor-pointer shadow-3xs flex items-center justify-center"
+                                                title="Hapus Kuis"
+                                              >
+                                                <Trash2 className="h-3.5 w-3.5" />
+                                              </button>
+                                            )}
+                                          </div>
+
+                                          {/* Question Text */}
+                                          <div className="text-xs font-bold text-slate-800 font-sans leading-relaxed">
+                                            {idx + 1}. {quiz.question}
+                                          </div>
+
+                                          {/* Media Attachments */}
+                                          {(quiz.imageUrl || quiz.videoUrl || quiz.audioUrl) && (
+                                            <div className="space-y-3 p-3 bg-white border border-slate-200 rounded-2xl shadow-3xs max-w-xl text-left">
+                                              {quiz.imageUrl && (
+                                                <div className="rounded-xl overflow-hidden border border-slate-100 bg-slate-50 max-h-[300px] flex items-center justify-center">
+                                                  <img src={quiz.imageUrl} alt="Lampiran Kuis" className="max-h-[300px] object-contain" referrerPolicy="no-referrer" />
+                                                </div>
+                                              )}
+                                              {quiz.videoUrl && (
+                                                <div className="rounded-xl overflow-hidden border border-slate-100 bg-slate-50 aspect-video">
+                                                  <video src={quiz.videoUrl} controls className="w-full h-full" />
+                                                </div>
+                                              )}
+                                              {quiz.audioUrl && (
+                                                <div className="p-2 bg-slate-50 rounded-xl border border-slate-100 flex flex-col gap-1">
+                                                  <span className="text-[9px] font-black text-slate-500 uppercase tracking-wider flex items-center gap-1">🎙️ Dengarkan Rekaman Suara:</span>
+                                                  <audio src={quiz.audioUrl} controls className="w-full h-9" />
+                                                </div>
+                                              )}
+                                            </div>
+                                          )}
+
+                                          {/* Options / Input body */}
+                                          {quiz.questionType === "essay" ? (
+                                            <div className="space-y-2">
+                                              <textarea
+                                                rows={2}
+                                                disabled={isSubmitted || (isQuizDeadlinePassed && currentUser?.role === "Siswa")}
+                                                placeholder={isQuizDeadlinePassed && currentUser?.role === "Siswa" ? "Batas waktu pengerjaan telah berakhir." : "Ketik jawaban Anda di sini..."}
+                                                value={essayAns}
+                                                onChange={(e) => setStudentQuizEssayAnswers({...studentQuizEssayAnswers, [quiz.id]: e.target.value})}
+                                                className="w-full bg-white border border-slate-200 rounded-xl p-3 text-xs text-slate-700 focus:outline-emerald-600 disabled:bg-slate-100 disabled:text-slate-500"
+                                              />
+                                              {isQuizDeadlinePassed && currentUser?.role === "Siswa" ? (
+                                                <div className="p-3 bg-red-50 border border-red-200 text-red-800 text-[10px] font-bold rounded-xl flex items-center gap-1.5 animate-fade-in shadow-3xs">
+                                                  <span>🚫 Batas waktu pengerjaan kuis ini telah berakhir. Anda tidak dapat mengirimkan jawaban.</span>
+                                                </div>
+                                              ) : !isSubmitted ? null : (
+                                                <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-xl text-[10px] font-bold text-emerald-800 flex items-center gap-1.5 animate-fade-in">
+                                                  <span>✅ Jawaban essay Anda telah disimpan!</span>
+                                                </div>
+                                              )}
+                                            </div>
+                                          ) : (
+                                            <div className="space-y-2">
+                                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                                {(quiz.options || []).map((opt, oIdx) => {
+                                                  const isSelected = selectedAns === oIdx;
+                                                  const isCorrectOpt = oIdx === quiz.correctAnswerIndex;
+                                                  
+                                                  let btnStyle = "bg-white border border-slate-200 text-slate-700 hover:bg-slate-100";
+                                                  if (isSubmitted) {
+                                                    if (isCorrectOpt) {
+                                                      btnStyle = "bg-emerald-100 border-emerald-300 text-emerald-800 font-bold";
+                                                    } else if (isSelected) {
+                                                      btnStyle = "bg-rose-100 border-rose-300 text-rose-800";
+                                                    } else {
+                                                      btnStyle = "bg-white border-slate-200 text-slate-400 opacity-60";
+                                                    }
+                                                  } else if (isSelected) {
+                                                    btnStyle = "bg-emerald-50 border-emerald-500 text-emerald-700 font-bold";
+                                                  }
+
+                                                  return (
+                                                    <button
+                                                      key={oIdx}
+                                                      disabled={isSubmitted || (isQuizDeadlinePassed && currentUser?.role === "Siswa")}
+                                                      onClick={() => setStudentQuizAnswers({...studentQuizAnswers, [quiz.id]: oIdx})}
+                                                      className={`px-3 py-2.5 rounded-xl text-left text-xs transition duration-150 flex items-start gap-2 cursor-pointer ${btnStyle}`}
+                                                    >
+                                                      <span className="font-black bg-slate-100 text-slate-500 text-[10px] px-1.5 py-0.5 rounded-md uppercase">
+                                                        {String.fromCharCode(65 + oIdx)}
+                                                      </span>
+                                                      <span className="flex-1">{opt}</span>
+                                                    </button>
+                                                  );
+                                                })}
+                                              </div>
+
+                                              {/* Submit button / Deadline notice */}
+                                              {isQuizDeadlinePassed && currentUser?.role === "Siswa" ? (
+                                                <div className="p-3 bg-red-50 border border-red-200 text-red-800 text-[10px] font-bold rounded-xl flex items-center gap-1.5 animate-fade-in mt-2 shadow-3xs">
+                                                  <span>🚫 Batas waktu pengerjaan kuis ini telah berakhir. Anda tidak dapat mengirimkan atau mengubah jawaban.</span>
+                                                </div>
+                                              ) : !isSubmitted ? null : (
+                                                <div className={`p-3 rounded-xl text-[10px] font-bold flex items-center gap-1.5 animate-fade-in ${
+                                                  isCorrect ? "bg-emerald-50 border border-emerald-150 text-emerald-800" : "bg-rose-50 border border-rose-150 text-rose-800"
+                                                }`}>
+                                                  <span>{isCorrect ? "🎉 Jawaban Benar!" : `❌ Kurang Tepat. Jawaban yang benar adalah Opsi ${String.fromCharCode(65 + quiz.correctAnswerIndex)}.`}</span>
+                                                </div>
+                                              )}
+                                            </div>
+                                          )}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                  
+                                  {/* CBT Submit Button / Start CBT logic */}
+                                  {filteredQuizzes.length > 0 && currentUser?.role === "Siswa" && (
+                                    <div className="mt-6 border-t border-slate-200 pt-6">
+                                      {filteredQuizzes[0].durationMinutes && !cbtStartTimes[`kuis_ch_${chapter.id}`] ? (
+                                        <div className="text-center p-6 bg-slate-50 border border-slate-200 rounded-xl space-y-3 shadow-2xs">
+                                          <p className="text-sm font-bold text-slate-700">Kuis ini merupakan Computer Based Test (CBT).</p>
+                                          <p className="text-xs text-slate-500">Durasi CBT: {filteredQuizzes[0].durationMinutes} Menit. Waktu akan terus berjalan meskipun aplikasi ditutup.</p>
+                                          <button onClick={() => handleStartCbt(`kuis_ch_${chapter.id}`)} className="px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow-sm cursor-pointer transition">
+                                            Mulai Kerjakan Kuis CBT
+                                          </button>
+                                        </div>
+                                      ) : (
+                                        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-slate-50 p-4 rounded-xl border border-slate-200 shadow-2xs">
+                                          <div className="flex items-center gap-4">
+                                            <span className="text-xs font-bold text-slate-700">Aksi Kuis:</span>
+                                            {filteredQuizzes[0].durationMinutes && cbtStartTimes[`kuis_ch_${chapter.id}`] && (
+                                              <CBTTimer 
+                                                startTime={cbtStartTimes[`kuis_ch_${chapter.id}`]} 
+                                                durationMinutes={filteredQuizzes[0].durationMinutes} 
+                                                onExpire={() => {
+                                                  // Auto submit if expired
+                                                  const allQuizIds = filteredQuizzes.map(q => q.id);
+                                                  const newSubmitted = [...submittedQuizIds];
+                                                  allQuizIds.forEach(id => {
+                                                    if (!newSubmitted.includes(id)) newSubmitted.push(id);
+                                                  });
+                                                  setSubmittedQuizIds(newSubmitted);
+                                                  setCbtStartTimes(prev => ({...prev}));
+                                                }} 
+                                              />
+                                            )}
+                                          </div>

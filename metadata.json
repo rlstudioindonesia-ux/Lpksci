@@ -1,0 +1,11 @@
+{
+  "name": "Remix: Remix: LPK Source Course Indonesia",
+  "description": "Aplikasi Web Terpadu LPK Bahasa Jepang Source Course Indonesia dengan website interatif, LMS E-Benkyou, Admin Desk, dan VVIP strategic monitoring.",
+  "requestFramePermissions": [
+    "camera",
+    "geolocation"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

@@ -1,0 +1,2671 @@
+7d6
+< import { createPortal } from "react-dom";
+9d7
+< import { ConfirmModal } from "./ConfirmModal";
+14c12
+<   Percent, Hash, Brain, Scale, Volume2, Lock, Unlock, ChevronDown, ChevronUp, Image, Paperclip
+---
+>   Percent, Hash, Brain, Scale, Volume2, Lock, Unlock, ChevronDown, ChevronUp
+19d16
+< import { LessonCommentsSection } from "./LessonCommentsSection";
+196d192
+<   const [babNumber, setBabNumber] = React.useState(1);
+227c223
+<       subject: `Bab ${babNumber} - ${subject}`,
+---
+>       subject,
+330,349c326,334
+<                 <label className="text-[10px] font-bold text-slate-500 uppercase">Subjek / Bab</label>
+<                 <div className="flex gap-1.5">
+<                   <select
+<                     value={subject}
+<                     onChange={(e) => setSubject(e.target.value)}
+<                     className="flex-1 bg-white border border-slate-200 rounded px-2 py-1.5 text-xs outline-hidden cursor-pointer font-bold"
+<                   >
+<                     <option value="Bahasa Jepang">Bahasa Jepang</option>
+<                     <option value="Matematika">Matematika</option>
+<                   </select>
+<                   <select
+<                     value={babNumber}
+<                     onChange={(e) => setBabNumber(Number(e.target.value))}
+<                     className="w-20 bg-white border border-slate-200 rounded px-2 py-1.5 text-xs outline-hidden cursor-pointer font-bold"
+<                   >
+<                     {Array.from({ length: 25 }, (_, i) => (
+<                       <option key={i + 1} value={i + 1}>Bab {i + 1}</option>
+<                     ))}
+<                   </select>
+<                 </div>
+---
+>                 <label className="text-[10px] font-bold text-slate-500 uppercase">Subjek / Kelas</label>
+>                 <select
+>                   value={subject}
+>                   onChange={(e) => setSubject(e.target.value)}
+>                   className="w-full bg-white border border-slate-200 rounded px-2 py-1.5 text-xs outline-hidden cursor-pointer font-bold"
+>                 >
+>                   <option value="Bahasa Jepang">Bahasa Jepang</option>
+>                   <option value="Matematika">Matematika</option>
+>                 </select>
+392,491d376
+< const getFileType = (url: string) => {
+<   if (!url) return "unknown";
+<   const urlLower = url.toLowerCase();
+<   if (urlLower.startsWith("data:application/pdf") || urlLower.endsWith(".pdf") || urlLower.includes("pdf") || urlLower.includes("application/pdf")) {
+<     return "pdf";
+<   }
+<   if (urlLower.startsWith("data:image/") || /\.(jpg|jpeg|png|gif|webp|svg|bmp)(\?|$)/i.test(urlLower) || urlLower.includes("image") || urlLower.includes("img") || urlLower.includes("png") || urlLower.includes("jpg") || urlLower.includes("jpeg")) {
+<     return "image";
+<   }
+<   if (urlLower.startsWith("data:video/") || /\.(mp4|webm|ogg|mov|avi|m4v)(\?|$)/i.test(urlLower) || urlLower.includes("video") || urlLower.includes("mp4")) {
+<     return "video";
+<   }
+<   return "unknown";
+< };
+< 
+< const getDeadlineStatus = (startTime: string | null | undefined, endTime: string | null | undefined, contentType: string) => {
+<   if (!startTime && !endTime) return null;
+<   const now = new Date();
+<   const typeLabel = contentType === "quiz" ? "Quiz" : "Tugas";
+<   
+<   const formatDate = (isoString: string) => {
+<     try {
+<       return new Date(isoString).toLocaleString('id-ID', {
+<         weekday: 'long',
+<         day: 'numeric',
+<         month: 'short',
+<         year: 'numeric',
+<         hour: '2-digit',
+<         minute: '2-digit'
+<       });
+<     } catch(e) {
+<       return isoString;
+<     }
+<   };
+< 
+<   if (startTime) {
+<     const start = new Date(startTime);
+<     if (now < start) {
+<       const diffMs = start.getTime() - now.getTime();
+<       const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+<       const diffHours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+<       let timeStr = "";
+<       if (diffDays > 0) timeStr += `${diffDays} hari `;
+<       timeStr += `${diffHours} jam`;
+<       return {
+<         status: "upcoming",
+<         label: `Belum Dimulai`,
+<         text: `Dibuka pada ${formatDate(startTime)} (Mulai ${timeStr} lagi)`,
+<         colorClass: "bg-amber-50 text-amber-700 border-amber-200 text-amber-600",
+<         icon: "🕒"
+<       };
+<     }
+<   }
+< 
+<   if (endTime) {
+<     const end = new Date(endTime);
+<     if (now > end) {
+<       return {
+<         status: "ended",
+<         label: `${typeLabel} Selesai / Ditutup`,
+<         text: `Batas waktu pengumpulan telah berakhir pada ${formatDate(endTime)}`,
+<         colorClass: "bg-rose-50 text-rose-700 border-rose-200 text-rose-600",
+<         icon: "❌"
+<       };
+<     } else {
+<       const diffMs = end.getTime() - now.getTime();
+<       const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+<       const diffHours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+<       const diffMins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+<       let sisaWaktu = "";
+<       if (diffDays > 0) {
+<         sisaWaktu = `${diffDays} hari ${diffHours} jam`;
+<       } else if (diffHours > 0) {
+<         sisaWaktu = `${diffHours} jam ${diffMins} menit`;
+<       } else {
+<         sisaWaktu = `${diffMins} menit`;
+<       }
+<       return {
+<         status: "active",
+<         label: `${typeLabel} Aktif`,
+<         text: `Tenggang Waktu: ${formatDate(endTime)} (Sisa waktu pengerjaan: ${sisaWaktu})`,
+<         colorClass: "bg-emerald-50 text-emerald-800 border-emerald-200 text-emerald-700",
+<         icon: "⏳"
+<       };
+<     }
+<   }
+< 
+<   if (startTime) {
+<     return {
+<       status: "active",
+<       label: `${typeLabel} Berlangsung`,
+<       text: `Mulai sejak ${formatDate(startTime)}`,
+<       colorClass: "bg-blue-50 text-blue-700 border-blue-200 text-blue-600",
+<       icon: "📢"
+<     };
+<   }
+< 
+<   return null;
+< };
+< 
+563d447
+<   const [editingQuizId, setEditingQuizId] = React.useState<string | null>(null);
+577,578c461
+<   const [gradingStatus, setGradingStatus] = React.useState("Telah Dinilai");
+< 
+---
+>   const [gradingStatus, setGradingStatus] = React.useState("Draft");
+582,596d464
+<   const [deleteConfirmation, setDeleteConfirmation] = React.useState<{
+<     isOpen: boolean;
+<     title: string;
+<     message: string;
+<     onConfirm: () => void;
+<   }>({
+<     isOpen: false,
+<     title: "",
+<     message: "",
+<     onConfirm: () => {},
+<   });
+< 
+<   const [gradingScores, setGradingScores] = React.useState<Record<string, string>>({});
+<   const [gradingNotesMap, setGradingNotesMap] = React.useState<Record<string, string>>({});
+<   const [isGradingSubmittingMap, setIsGradingSubmittingMap] = React.useState<Record<string, boolean>>({});
+734,738d601
+<     setLessonQuizUrl(lesson.quizUrl || "");
+<     setLessonSoalUrl(lesson.soalUrl || "");
+<     setLessonQuizQuestions(lesson.quizQuestions || []);
+<     setLessonQuizStartTime(lesson.quizStartTime || "");
+<     setLessonQuizEndTime(lesson.quizEndTime || "");
+745c608
+<   const handleLessonDelete = (id: string) => {
+---
+>   const handleLessonDelete = async (id: string) => {
+747,754c610,612
+<     setDeleteConfirmation({
+<       isOpen: true,
+<       title: "Hapus Materi",
+<       message: "Apakah Anda yakin ingin menghapus materi ini? Tindakan ini tidak dapat dibatalkan.",
+<       onConfirm: async () => {
+<         await onUpdateState("lmsLessons", "delete", { id });
+<       }
+<     });
+---
+>     if (window.confirm("Apakah Anda yakin ingin menghapus materi ini?")) {
+>       await onUpdateState("lmsLessons", "delete", { id });
+>     }
+764,788d621
+< 
+<   React.useEffect(() => {
+<     const studentIdToView = currentUser?.role === "Siswa" ? (currentUser.studentId || "SIS-001") : selectedStudentId;
+<     if (studentIdToView && selectedBabNumber) {
+<       const assessment = (chapterAssessments || []).find(
+<         c => c.studentId === studentIdToView && c.chapterNumber === selectedBabNumber && (c.subject || "Bahasa Jepang") === assessmentSubject
+<       );
+<       if (assessment) {
+<         setScoreKanji(assessment.scoreKanji !== undefined && assessment.scoreKanji !== null ? assessment.scoreKanji : "");
+<         setScoreKotoba(assessment.scoreKotoba !== undefined && assessment.scoreKotoba !== null ? assessment.scoreKotoba : "");
+<         setScoreBumpo(assessment.scoreBumpo !== undefined && assessment.scoreBumpo !== null ? assessment.scoreBumpo : "");
+<         setScoreKaiwa(assessment.scoreKaiwa !== undefined && assessment.scoreKaiwa !== null ? assessment.scoreKaiwa : "");
+<         setGradingNotes(assessment.notes || "");
+<         setGradingStatus(assessment.status || "Telah Dinilai");
+<       } else {
+<         setScoreKanji("");
+<         setScoreKotoba("");
+<         setScoreBumpo("");
+<         setScoreKaiwa("");
+<         setGradingNotes("");
+<         setGradingStatus("Telah Dinilai");
+<       }
+<     }
+<   }, [selectedStudentId, selectedBabNumber, assessmentSubject, chapterAssessments, currentUser]);
+< 
+797,798d629
+<   const [lessonQuizUrl, setLessonQuizUrl] = React.useState("");
+<   const [lessonSoalUrl, setLessonSoalUrl] = React.useState("");
+803,806d633
+<   const [lessonQuizQuestions, setLessonQuizQuestions] = React.useState<any[]>([]);
+<   const [activeQuestionMediaModal, setActiveQuestionMediaModal] = React.useState<number | null>(null);
+<   const [lessonQuizStartTime, setLessonQuizStartTime] = React.useState("");
+<   const [lessonQuizEndTime, setLessonQuizEndTime] = React.useState("");
+808,809d634
+<   const [quizAnswers, setQuizAnswers] = React.useState<Record<string, Record<string, any>>>({});
+<   const [quizResults, setQuizResults] = React.useState<Record<string, {score: number, total: number, show: boolean}>>({});
+832,885d656
+<     if (!onUpdateState) return;
+< 
+<     setIsGradingSubmitting(true);
+<     try {
+<       const studentIdToView = currentUser?.role === "Siswa" ? (currentUser.studentId || "SIS-001") : selectedStudentId;
+<       const targetStudent = filteredActiveStudents.find(s => s.id === studentIdToView) || filteredActiveStudents[0] || { id: "SIS-001", name: "Siswa LPK", class: "" };
+<       const studentClass = activeStudentClass || targetStudent?.class || "";
+<       const activeChaptersList = getClassChaptersList(studentClass, assessmentSubject, true);
+<       const chapter = activeChaptersList.find(b => b.number === selectedBabNumber) || activeChaptersList[0];
+<       const assessment = chapterAssessments.find(
+<         c => c.studentId === studentIdToView && c.chapterNumber === chapter.number && (c.subject || "Bahasa Jepang") === assessmentSubject
+<       );
+< 
+<       const averageScore = Math.round(((Number(scoreKotoba) + Number(scoreBumpo) + Number(scoreKaiwa) + Number(scoreKanji)) / 4) * 10) / 10;
+<       const getGradeFromScore = (s: number) => {
+<         if (s >= 90) return "A";
+<         if (s >= 80) return "B";
+<         if (s >= 70) return "C";
+<         if (s >= 60) return "D";
+<         return "E";
+<       };
+<       const grade = getGradeFromScore(averageScore);
+< 
+<       const payload: any = {
+<         id: assessment?.id || `${studentIdToView}_${selectedBabNumber}_${assessmentSubject}`,
+<         studentId: studentIdToView,
+<         studentName: targetStudent.name,
+<         chapterNumber: Number(selectedBabNumber),
+<         title: chapter?.title || `Bab ${selectedBabNumber}`,
+<         status: "Telah Dinilai",
+<         subject: assessmentSubject,
+<         scoreKotoba: Number(scoreKotoba) || 0,
+<         scoreBumpo: Number(scoreBumpo) || 0,
+<         scoreKaiwa: Number(scoreKaiwa) || 0,
+<         scoreKanji: Number(scoreKanji) || 0,
+<         score: averageScore,
+<         grade: grade,
+<         notes: gradingNotes || "Sangat baik",
+<         assessedBy: currentUser?.name || "Sensei Utama",
+<         assessedDate: new Date().toISOString().split("T")[0],
+<       };
+< 
+<       const success = await onUpdateState("chapterAssessments", "update", payload);
+<       if (success) {
+<         alert("Nilai berhasil disimpan!");
+<       } else {
+<         alert("Gagal menyimpan nilai.");
+<       }
+<     } catch (err) {
+<       console.error(err);
+<       alert("Terjadi kesalahan saat menyimpan nilai.");
+<     } finally {
+<       setIsGradingSubmitting(false);
+<     }
+911,915d681
+<       quizUrl: lessonQuizUrl,
+<       soalUrl: lessonSoalUrl,
+<       quizQuestions: lessonQuizQuestions,
+<       quizStartTime: lessonQuizStartTime,
+<       quizEndTime: lessonQuizEndTime,
+944,948d709
+<       setLessonQuizUrl("");
+<       setLessonSoalUrl("");
+<       setLessonQuizQuestions([]);
+<       setLessonQuizStartTime("");
+<       setLessonQuizEndTime("");
+1274,1275d1034
+<   const isAdminOrVvip = currentUser?.role === "VVIP" || currentUser?.role === "Admin" || currentUser?.role === "Admin Super" || currentUser?.role === "Admin Biasa";
+< 
+1982a1742,1750
+>               id: "absen",
+>               name: "Absen Harian",
+>               desc: "Presensi Real-time",
+>               ic: Calendar,
+>               color: "text-amber-600",
+>               bg: "bg-amber-50",
+>               actColor: "bg-amber-600 border-amber-600 text-white shadow-md shadow-amber-600/15"
+>             },
+>             {
+2079a1848,2231
+>         {/* SUBTAB 2: ATTENDANCE (ABSENSI) */}
+>         {activeSubTab === "absen" && (
+>           <div className="grid gap-6 md:grid-cols-5">
+>             
+>             {/* Action Card: Submit attendance */}
+>             <div className="md:col-span-2">
+>               <div className="bg-white p-5 rounded-2xl border border-slate-200 space-y-4">
+>                 <div className="flex items-center gap-2 mb-1">
+>                   <Calendar className="h-5 w-5 text-blue-600" />
+>                   <h4 className="font-display font-bold text-slate-900">Input Absensi Harian</h4>
+>                 </div>
+>                 
+>                 {!isStaff && matchingStudent && (
+>                   <div className="bg-blue-50/70 border border-blue-150 p-3.5 rounded-xl flex items-start gap-2.5 shadow-3xs">
+>                     <span className="p-2 bg-blue-100 text-blue-700 rounded-xl shrink-0">
+>                       <GraduationCap className="h-4 w-4" />
+>                     </span>
+>                     <div className="text-left leading-normal flex-1">
+>                       <p className="text-[10px] font-extrabold uppercase text-blue-800 tracking-wider">Plotting Kelas & Sensei Aktif</p>
+>                       <div className="grid grid-cols-2 gap-2 mt-1.5">
+>                         <div>
+>                           <span className="text-[9px] text-slate-400 block font-bold uppercase leading-none">Kelas</span>
+>                           <span className="text-xs font-bold text-slate-800">{matchingStudent.class || "Belum Terplot"}</span>
+>                         </div>
+>                         <div>
+>                           <span className="text-[9px] text-slate-400 block font-bold uppercase leading-none">Sensei Pengajar</span>
+>                           <span className="text-xs font-bold text-slate-800">{matchingStudent.sensei || "Belum Ditentukan"}</span>
+>                         </div>
+>                       </div>
+>                       <p className="text-[9px] text-slate-400 mt-1 font-normal italic">
+>                         *Absensi ini otomatis disinkronkan dengan guru dan kelas Anda.
+>                       </p>
+>                     </div>
+>                   </div>
+>                 )}
+> 
+>                 {currentUser?.role === "Pengajar" || currentUser?.role === "Admin" ? (
+>                   <div className="bg-slate-50 p-3 rounded-xl border border-slate-200">
+>                     <p className="text-[10px] font-bold text-slate-700 mb-1">Jadwal Jam Kerja Staff:</p>
+>                     <ul className="text-[9px] text-slate-500 list-disc list-inside space-y-1">
+>                       <li><span className="font-semibold">Sensei:</span> 09:00 - 16:00 (Sen-Kam), 09:00 - 16:30 (Jum)</li>
+>                       <li><span className="font-semibold">Admin:</span> 08:00 - 16:00 (Sen-Kam), 08:00 - 16:30 (Jum)</li>
+>                       <li><span className="font-semibold">E-learning (Zoom):</span> Fleksibel (sesuai jadwal LPK)</li>
+>                     </ul>
+>                   </div>
+>                 ) : (
+>                   <p className="text-[11px] text-slate-500">
+>                     Rekam kehadiran kelas Anda (Absen Masuk dan Pulang). Absensi tersinkronisasi real-time.
+>                   </p>
+>                 )}
+> 
+>                 {absenMsg && (
+>                   <div className="p-3 bg-emerald-50 border border-emerald-100 text-emerald-800 rounded-xl text-xs flex gap-2">
+>                     <CheckCircle className="h-4 w-4 text-emerald-600 flex-shrink-0" />
+>                     <span>{absenMsg}</span>
+>                   </div>
+>                 )}
+> 
+>                 <ConfirmForm confirmTitle="Kirim Presensi" confirmMessage="Kirim data kehadiran Anda sekarang?" onSubmit={handleAbsenSubmit} className="space-y-4">
+>                   <div className="space-y-1">
+>                     <label className="text-xs font-semibold text-slate-700 block">Jenis Absen</label>
+>                     <div className="grid grid-cols-2 gap-2">
+>                       {["Masuk", "Pulang"].map((type) => (
+>                         <button
+>                           key={type}
+>                           type="button"
+>                           onClick={() => setAbsenType(type as any)}
+>                           className={`py-2 rounded-lg text-xs font-medium border transition ${
+>                             absenType === type
+>                               ? "bg-blue-600 text-white border-blue-600 font-bold"
+>                               : "bg-slate-50 text-slate-600 hover:bg-slate-100 border-slate-200"
+>                           }`}
+>                         >
+>                           {type}
+>                         </button>
+>                       ))}
+>                     </div>
+>                   </div>
+> 
+>                   <div className="space-y-1">
+>                     <label className="text-xs font-semibold text-slate-700 block">Status Kehadiran</label>
+>                     <div className="grid grid-cols-3 gap-2">
+>                       {["Hadir", "Izin", "Sakit"].map((st) => (
+>                         <button
+>                           key={st}
+>                           type="button"
+>                           onClick={() => setAbsenStatus(st as any)}
+>                           className={`py-2 rounded-lg text-xs font-medium border transition ${
+>                             absenStatus === st
+>                               ? "bg-indigo-600 text-white border-indigo-600 font-bold"
+>                               : "bg-slate-50 text-slate-600 hover:bg-slate-100 border-slate-200"
+>                           }`}
+>                         >
+>                           {st}
+>                         </button>
+>                       ))}
+>                     </div>
+>                   </div>
+> 
+>                   {(!["Pengajar", "Admin"].includes(currentUser?.role || "")) && (
+>                     <div className="space-y-1">
+>                       <label className="text-xs font-semibold text-slate-700 block">Materi / Subjek (Opsional)</label>
+>                       <select 
+>                         value={absenSubject}
+>                         onChange={(e) => setAbsenSubject(e.target.value as any)}
+>                         className="w-full text-xs rounded-lg border border-slate-200 px-3 py-2 outline-none focus:border-blue-500 bg-slate-50"
+>                       >
+>                         {Array.from({ length: currentClassMaxBab }, (_, i) => (
+>                           <option key={i + 1} value={`Bab ${i + 1}`}>Bab {i + 1} / ({currentClassMaxBab})</option>
+>                         ))}
+>                         <option value="Hiragana">Hiragana</option>
+>                         <option value="Katakana">Katakana</option>
+>                         <option value="KAIWA">KAIWA</option>
+>                         <option value="Kanji">Kanji</option>
+>                         <option value="BUNPO">BUNPO</option>
+>                         <option value="Lainnya">Lainnya</option>
+>                       </select>
+>                     </div>
+>                   )}
+> 
+>                   <div className="space-y-3 pt-2 border-t border-slate-100">
+>                     <div className="space-y-2">
+>                       <label className="text-xs font-semibold text-slate-700 flex items-center justify-between">
+>                         <span>Lokasi GPS</span>
+>                         <button type="button" onClick={getLocation} className="text-blue-600 hover:text-blue-700 flex items-center gap-1 cursor-pointer">
+>                           <MapPin className="h-3 w-3" /> Ambil Lokasi
+>                         </button>
+>                       </label>
+>                       <input 
+>                         type="text" 
+>                         readOnly 
+>                         value={isGettingLocation ? "Mendapatkan lokasi..." : absenLocation || "Lokasi belum diambil"} 
+>                         className="w-full text-[10px] rounded-lg border border-slate-200 px-3 py-2 bg-slate-100 text-slate-500 font-mono" 
+>                       />
+>                     </div>
+> 
+>                     <div className="space-y-2">
+>                       <label className="text-xs font-semibold text-slate-700 flex items-center justify-between">
+>                         <span>Bukti Kehadiran (Opsional)</span>
+>                         {!showCamera && !absenPhoto && (
+>                           <button type="button" onClick={startCamera} className="text-blue-600 hover:text-blue-700 flex items-center gap-1 cursor-pointer">
+>                             <Camera className="h-3 w-3" /> Buka Kamera
+>                           </button>
+>                         )}
+>                       </label>
+>                       
+>                       {showCamera && (
+>                         <div className="relative rounded-xl overflow-hidden bg-black aspect-video flex items-center justify-center">
+>                           <video ref={videoRef} autoPlay playsInline className="w-full h-full object-cover" />
+>                           <div className="absolute bottom-3 left-0 right-0 flex justify-center gap-3">
+>                             <button type="button" onClick={capturePhoto} className="bg-white text-black px-4 py-1.5 rounded-full text-[10px] font-bold cursor-pointer">Jepret Foto</button>
+>                             <button type="button" onClick={stopCamera} className="bg-rose-500 text-white px-4 py-1.5 rounded-full text-[10px] font-bold cursor-pointer">Batal</button>
+>                           </div>
+>                         </div>
+>                       )}
+>                       
+>                       {absenPhoto && (
+>                         <div className="relative rounded-xl overflow-hidden border border-slate-200 group">
+>                           <img src={absenPhoto} alt="Bukti Kehadiran" className="w-full aspect-video object-cover" />
+>                           <button type="button" onClick={() => setAbsenPhoto(null)} className="absolute top-2 right-2 bg-rose-500 text-white p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition cursor-pointer">
+>                             <Trash2 className="h-3 w-3" />
+>                           </button>
+>                         </div>
+>                       )}
+>                     </div>
+>                   </div>
+> 
+>                   <div className="space-y-1">
+>                     <label className="text-xs font-semibold text-slate-700 block">Catatan / Keterangan tambahan</label>
+>                     <textarea
+>                       placeholder="Tulis alasan jika Izin/Sakit..."
+>                       value={absenNotes}
+>                       onChange={(e) => setAbsenNotes(e.target.value)}
+>                       rows={2}
+>                       className="w-full text-xs rounded-lg border border-slate-200 px-3 py-2 outline-none focus:border-blue-500 bg-slate-50"
+>                     />
+>                   </div>
+>                   <button
+>                     type="submit"
+>                     disabled={isSubmittingAbsen}
+>                     className="w-full inline-flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-xl text-xs transition cursor-pointer shadow-sm"
+>                   >
+>                     {isSubmittingAbsen ? "Mengirim..." : `Kirim Absen ${absenType}`}
+>                   </button>
+>                 </ConfirmForm>
+>               </div>
+>             </div>
+> 
+>             {/* List Screen: History matching the logged student */}
+>             <div className="md:col-span-3 space-y-4">
+>               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-2">
+>                 <div className="text-left">
+>                   <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+>                     {isStaff ? "REKAP ABSENSI TERINTEGRASI" : "REKAP KEHADIRAN ANDA"} ({myAttendance.length} Entri)
+>                   </span>
+>                   {isStaff && (
+>                     <p className="text-[10px] text-slate-400 font-medium">Data absen sinkron dengan plotting kelas & guru pengajar.</p>
+>                   )}
+>                 </div>
+>                 <span className="text-[10px] font-mono text-slate-400 bg-slate-100 px-2.5 py-1 rounded-lg">
+>                   Hari: {new Date().toLocaleDateString("id-ID", {weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'})}
+>                 </span>
+>               </div>
+> 
+>               {/* Filters for Teachers and Admins */}
+>               {isStaff && (
+>                 <div className="bg-slate-50 border border-slate-200 p-3.5 rounded-2xl space-y-3 shadow-3xs text-left">
+>                   <div className="flex items-center gap-1.5 mb-1 text-slate-700">
+>                     <SlidersHorizontal className="h-3.5 w-3.5 text-blue-600" />
+>                     <span className="text-[10px] font-extrabold uppercase tracking-wider">Filter Sinkronisasi Absen</span>
+>                   </div>
+>                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+>                     {/* Filter Kelas */}
+>                     <div className="space-y-1">
+>                       <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Filter Kelas</label>
+>                       <select
+>                         value={attendanceClassFilter}
+>                         onChange={(e) => setAttendanceClassFilter(e.target.value)}
+>                         className="w-full text-xs font-bold bg-white rounded-xl border border-slate-250 px-2.5 py-2 cursor-pointer outline-none text-slate-700 focus:border-blue-500"
+>                       >
+>                         <option value="Semua">Semua Kelas</option>
+>                         {Array.from(new Set((activeStudents || []).map(s => s.class).filter(Boolean))).map(cls => (
+>                           <option key={cls} value={cls}>{cls}</option>
+>                         ))}
+>                       </select>
+>                     </div>
+> 
+>                     {/* Filter Sensei */}
+>                     <div className="space-y-1">
+>                       <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Filter Sensei</label>
+>                       <select
+>                         value={attendanceSenseiFilter}
+>                         onChange={(e) => setAttendanceSenseiFilter(e.target.value)}
+>                         className="w-full text-xs font-bold bg-white rounded-xl border border-slate-250 px-2.5 py-2 cursor-pointer outline-none text-slate-700 focus:border-blue-500"
+>                       >
+>                         <option value="Semua">Semua Sensei</option>
+>                         {Array.from(new Set((activeStudents || []).map(s => s.sensei).filter(Boolean))).map(sensei => (
+>                           <option key={sensei} value={sensei}>{sensei}</option>
+>                         ))}
+>                       </select>
+>                     </div>
+> 
+>                     {/* Pencarian Siswa */}
+>                     <div className="space-y-1">
+>                       <label className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">Cari Siswa / Subjek</label>
+>                       <div className="relative">
+>                         <input
+>                           type="text"
+>                           placeholder="Cari..."
+>                           value={attendanceSearchQuery}
+>                           onChange={(e) => setAttendanceSearchQuery(e.target.value)}
+>                           className="w-full text-xs bg-white rounded-xl border border-slate-250 pl-2.5 pr-7 py-2 outline-none text-slate-700 focus:border-blue-500 font-semibold"
+>                         />
+>                         {attendanceSearchQuery && (
+>                           <button
+>                             onClick={() => setAttendanceSearchQuery("")}
+>                             className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 font-bold text-xs"
+>                           >
+>                             ×
+>                           </button>
+>                         )}
+>                       </div>
+>                     </div>
+>                   </div>
+>                 </div>
+>               )}
+> 
+>               {myAttendance.length > 0 ? (
+>                 <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
+>                   <div className="divide-y divide-slate-100">
+>                     {myAttendance.map((rec) => {
+>                       const studentPlotInfo = activeStudents.find((s: any) => s.id === rec.studentId || s.name === rec.studentName);
+>                       const displayClass = rec.class || studentPlotInfo?.class || "Umum";
+>                       const displaySensei = rec.sensei || studentPlotInfo?.sensei || "Tidak Terplot";
+> 
+>                       return (
+>                         <div key={rec.id} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs hover:bg-slate-50 transition-colors">
+>                           <div className="space-y-1.5 text-left flex-1 min-w-0">
+>                             <div className="flex flex-wrap items-center gap-1.5">
+>                               {isStaff ? (
+>                                 <span className="font-extrabold text-slate-900 text-xs truncate max-w-[160px] sm:max-w-none">
+>                                   👤 {rec.studentName || "Siswa"} ({rec.studentId || "SIS-000"})
+>                                 </span>
+>                               ) : (
+>                                 <span className="font-bold text-slate-800 text-xs">
+>                                   📚 {rec.subject}
+>                                 </span>
+>                               )}
+>                               
+>                               <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase border leading-none ${
+>                                 displayClass.includes("Alumni")
+>                                   ? "bg-emerald-50 text-emerald-700 border-emerald-150"
+>                                   : "bg-blue-50 text-blue-700 border-blue-150"
+>                               }`}>
+>                                 {displayClass}
+>                               </span>
+>                               
+>                               <span className="bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full text-[9px] font-bold border border-slate-200 leading-none">
+>                                 Sensei: {displaySensei}
+>                               </span>
+>                             </div>
+> 
+>                             {isStaff && (
+>                               <p className="text-[11px] text-slate-700 font-bold">
+>                                 Subjek / Materi: <span className="text-indigo-600">{rec.subject || "-"}</span>
+>                               </p>
+>                             )}
+> 
+>                             <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[10px] text-slate-500 font-mono">
+>                               <span className="flex items-center gap-1">
+>                                 <Clock className="h-3 w-3 text-slate-400" />
+>                                 {new Date(rec.date).toLocaleDateString("id-ID", {day: 'numeric', month: 'short', year: 'numeric'})} • {new Date(rec.date).toLocaleTimeString("id-ID", {hour: '2-digit', minute: '2-digit'})} WIB
+>                               </span>
+>                               
+>                               {rec.type && (
+>                                 <span className={`font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded text-[8px] ${
+>                                   rec.type === "Masuk" 
+>                                     ? "bg-cyan-50 text-cyan-700 border border-cyan-150" 
+>                                     : "bg-amber-50 text-amber-700 border border-amber-150"
+>                                 }`}>
+>                                   {rec.type}
+>                                 </span>
+>                               )}
+> 
+>                               {rec.location && (
+>                                 <span className="text-slate-400 truncate max-w-[160px]" title={rec.location}>
+>                                   📍 {rec.location}
+>                                 </span>
+>                               )}
+>                             </div>
+> 
+>                             {rec.notes && (
+>                               <p className="text-[10px] bg-slate-50 border border-slate-150 px-2.5 py-1.5 rounded-lg text-slate-600 mt-1 italic leading-relaxed">
+>                                 <span className="font-bold not-italic text-slate-500">Keterangan:</span> "{rec.notes}"
+>                               </p>
+>                             )}
+> 
+>                             {rec.photo && (
+>                               <div className="mt-2.5 max-w-[160px] rounded-lg overflow-hidden border border-slate-200">
+>                                 <img 
+>                                   src={rec.photo} 
+>                                   alt="Bukti Absen" 
+>                                   className="w-full aspect-video object-cover hover:scale-105 transition duration-150 cursor-pointer"
+>                                   onClick={() => window.open(rec.photo, '_blank')}
+>                                 />
+>                               </div>
+>                             )}
+>                           </div>
+> 
+>                           <span 
+>                             className={`font-black px-3 py-1 rounded-xl text-[10px] uppercase tracking-wider text-center border shrink-0 ${
+>                               rec.status === "Hadir" ? "bg-emerald-500 text-white border-emerald-600" :
+>                               rec.status === "Izin" ? "bg-indigo-500 text-white border-indigo-600" : 
+>                               rec.status === "Sakit" ? "bg-amber-500 text-white border-amber-600" : "bg-rose-500 text-white border-rose-600"
+>                             }`}
+>                           >
+>                             {rec.status}
+>                           </span>
+>                         </div>
+>                       );
+>                     })}
+>                   </div>
+>                 </div>
+>               ) : (
+>                 <div className="bg-slate-50 border border-slate-200 rounded-2xl p-8 text-center text-xs text-slate-500">
+>                   <AlertCircle className="h-8 w-8 text-slate-300 mx-auto mb-2" />
+>                   {isStaff 
+>                     ? "Tidak ada data absensi siswa yang cocok dengan filter sinkronisasi saat ini."
+>                     : "Anda belum memasukkan absen harian Anda. Silakan isi form di samping kiri untuk merekam kehadiran pertama Anda!"}
+>                 </div>
+>               )}
+>             </div>
+> 
+>           </div>
+>         )}
+> 
+>         {/* SUBTAB 3: INTERACTIVE QUIZ PRACTICE (KUIS) */}
+>         {activeSubTab === "kuis" && (isClassActive || !isSiswaOrAlumni) && (
+>           <div className="space-y-6">
+>             {isSiswaOrAlumni && currentChapterObj?.isActive === false ? (
+>               <div className="bg-white border border-slate-200 rounded-3xl p-10 text-center max-w-lg mx-auto my-12 shadow-md space-y-4 animate-fade-in">
+>                 <div className="mx-auto w-16 h-16 bg-rose-50 text-rose-500 rounded-full flex items-center justify-center border border-rose-100 text-2xl animate-bounce">
+>                   🔒
+>                 </div>
+2097,2185c2249,2256
+<               <div className="bg-white rounded-3xl border border-slate-200 p-6 max-w-2xl mx-auto shadow-sm space-y-4 mb-6 text-left">
+<                 <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+<                   <div>
+<                     <h4 className="font-display font-black text-slate-900 text-sm">Daftar Semua Soal Kuis LPK ({realQuizzes.length} Soal)</h4>
+<                     <p className="text-[10px] text-slate-500 font-normal">Berikut adalah semua soal kuis yang telah Anda buat di Bank Latihan.</p>
+<                   </div>
+<                   <button
+<                     type="button"
+<                     onClick={() => {
+<                       setEditingQuizId(null);
+<                       setNewQuiz({
+<                         subject: "Bahasa Jepang",
+<                         questionType: "pilihan_ganda",
+<                         question: "",
+<                         options: ["", "", "", ""],
+<                         correctAnswerIndex: 0
+<                       });
+<                       setIsQuizFormOpen(true);
+<                     }}
+<                     className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-xl text-[11px] font-bold transition flex items-center gap-1.5 cursor-pointer"
+<                   >
+<                     <Plus className="h-3.5 w-3.5" /> Tambah Soal Kuis
+<                   </button>
+<                 </div>
+< 
+<                 {realQuizzes.length === 0 ? (
+<                   <div className="text-center py-6 text-slate-400 text-xs">Belum ada soal di Bank Kuis LPK. Silakan buat baru.</div>
+<                 ) : (
+<                   <div className="space-y-3 max-h-96 overflow-y-auto pr-1 custom-scrollbar">
+<                     {realQuizzes.map((q: any, idx: number) => (
+<                       <div key={q.id || idx} className="bg-slate-50 border border-slate-150 rounded-xl p-3.5 space-y-2 text-xs relative group text-left">
+<                         <div className="flex items-center justify-between gap-2">
+<                           <span className="text-[9px] font-mono font-bold uppercase tracking-wider bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded">
+<                             {q.subject} • {q.questionType === "essay" ? "Essay" : "Pilihan Ganda"}
+<                           </span>
+<                           <div className="flex items-center gap-1.5">
+<                             <button
+<                               type="button"
+<                               onClick={() => {
+<                                 setEditingQuizId(q.id);
+<                                 setNewQuiz({
+<                                   subject: q.subject || "Bahasa Jepang",
+<                                   questionType: q.questionType || "pilihan_ganda",
+<                                   question: q.question || "",
+<                                   options: q.options || ["", "", "", ""],
+<                                   correctAnswerIndex: q.correctAnswerIndex || 0
+<                                 });
+<                                 setIsQuizFormOpen(true);
+<                               }}
+<                               className="text-blue-600 hover:text-blue-800 p-1 bg-white hover:bg-blue-50 border border-slate-200 rounded transition cursor-pointer"
+<                               title="Edit Soal"
+<                             >
+<                               <Edit3 className="w-3.5 h-3.5" />
+<                             </button>
+<                             <button
+<                               type="button"
+<                               onClick={() => {
+<                                 if (onUpdateState) {
+<                                   setDeleteConfirmation({
+<                                     isOpen: true,
+<                                     title: "Hapus Soal Kuis",
+<                                     message: "Apakah Anda yakin ingin menghapus soal kuis ini? Tindakan ini tidak dapat dibatalkan.",
+<                                     onConfirm: async () => {
+<                                       await onUpdateState('lmsQuizzes', 'delete', { id: q.id });
+<                                     }
+<                                   });
+<                                 }
+<                               }}
+<                               className="text-rose-500 hover:text-rose-700 p-1 bg-white hover:bg-rose-50 border border-slate-200 rounded transition cursor-pointer"
+<                               title="Hapus Soal"
+<                             >
+<                               <Trash2 className="w-3.5 h-3.5" />
+<                             </button>
+<                           </div>
+<                         </div>
+<                         <p className="font-semibold text-slate-800 leading-normal">{idx + 1}. {q.question}</p>
+<                         {q.questionType !== "essay" && q.options && (
+<                           <div className="grid grid-cols-2 gap-2 pt-1 pl-2">
+<                             {q.options.map((opt: string, optIdx: number) => (
+<                               <div key={optIdx} className={`px-2 py-1 rounded-lg border text-[11px] font-medium ${optIdx === q.correctAnswerIndex ? 'bg-emerald-50 border-emerald-300 text-emerald-800' : 'bg-white border-slate-200 text-slate-600'}`}>
+<                                 <span className="font-mono text-[10px] font-bold mr-1">{String.fromCharCode(65 + optIdx)}.</span> {opt}
+<                               </div>
+<                             ))}
+<                           </div>
+<                         )}
+<                       </div>
+<                     ))}
+<                   </div>
+<                 )}
+---
+>               <div className="flex justify-end max-w-2xl mx-auto mb-4">
+>                 <button
+>                   type="button"
+>                   onClick={() => setIsQuizFormOpen(true)}
+>                   className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2"
+>                 >
+>                   <Plus className="h-4 w-4" /> Tambah Soal Kuis
+>                 </button>
+2280,2297d2350
+<                       {quizQuestions[quizIndex].mediaUrl && (
+<                         <div className="bg-slate-50 p-2 rounded-xl flex justify-center border border-slate-100">
+<                           {quizQuestions[quizIndex].mediaType === 'image' && (
+<                             <img src={quizQuestions[quizIndex].mediaUrl} alt="Lampiran Soal" className="max-w-full h-auto max-h-64 rounded-lg object-contain" referrerPolicy="no-referrer" />
+<                           )}
+<                           {quizQuestions[quizIndex].mediaType === 'video' && (
+<                             <video src={quizQuestions[quizIndex].mediaUrl} controls className="max-w-full h-auto max-h-64 rounded-lg" />
+<                           )}
+<                           {quizQuestions[quizIndex].mediaType === 'pdf' && (
+<                             <div className="flex flex-col items-center p-4">
+<                               <FileText className="w-8 h-8 text-rose-500 mb-2" />
+<                               <a href={quizQuestions[quizIndex].mediaUrl} target="_blank" rel="noopener noreferrer" className="text-xs bg-white border border-slate-200 shadow-sm px-3 py-1.5 rounded-lg text-slate-700 font-bold hover:bg-slate-50 transition cursor-pointer">
+<                                 Buka Dokumen PDF
+<                               </a>
+<                             </div>
+<                           )}
+<                         </div>
+<                       )}
+2301,2317c2354
+<                         {quizQuestions[quizIndex].type === "essay" ? (
+<                           <div>
+<                             <textarea
+<                               rows={4}
+<                               value={essayAnswer}
+<                               onChange={(e) => setEssayAnswer(e.target.value)}
+<                               disabled={isQuizSubmitted}
+<                               placeholder="Ketik jawaban essay Anda di sini..."
+<                               className="w-full bg-white border border-slate-200 rounded-xl p-3 text-xs font-medium text-slate-800 focus:outline-blue-600 disabled:opacity-60"
+<                             />
+<                             {isQuizSubmitted && (
+<                               <div className="mt-2 bg-blue-50 border border-blue-200 text-blue-800 px-3 py-2 rounded-lg text-xs font-bold">
+<                                 ✓ Jawaban telah disimpan.
+<                               </div>
+<                             )}
+<                           </div>
+<                         ) : (quizQuestions[quizIndex].options || []).map((opt, idx) => {
+---
+>                         {quizQuestions[quizIndex].options.map((opt, idx) => {
+2660c2697
+<                 <div className="flex overflow-x-auto gap-1.5 pt-1.5 pb-2.5 scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-transparent" id="lms-teacher-student-roster">
+---
+>                 <div className="grid grid-cols-2 sm:grid-cols-5 gap-1.5 pt-1.5" id="lms-teacher-student-roster">
+2673c2710
+<                         className={`shrink-0 w-36 sm:w-44 p-2.5 rounded-xl border text-left transition relative cursor-pointer ${
+---
+>                         className={`p-2.5 rounded-xl border text-left transition relative cursor-pointer ${
+2772c2809
+<             <div className="space-y-6">
+---
+>             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+2775c2812
+<               <div className={`space-y-3 ${isSidebarCollapsed ? 'hidden' : 'w-full'}`}>
+---
+>               <div className={`space-y-3 ${isSidebarCollapsed ? 'hidden' : 'lg:col-span-5'}`}>
+2814c2851
+<                       <div className="flex overflow-x-auto gap-2 pb-2.5 scroll-smooth scrollbar-thin scrollbar-thumb-slate-300 scrollbar-track-transparent" id="lms-chapters-list-scrollable">
+---
+>                       <div className="max-h-[460px] overflow-y-auto scroll-smooth space-y-2 pr-1.5" id="lms-chapters-list-scrollable">
+2841c2878
+<                             const isLocked = chapter.number > nextTargetChapterNum;
+---
+>                             const isLocked = false;
+2876,2883d2912
+<                             } else if (chapter.number < nextTargetChapterNum) {
+<                               statusBadge = (
+<                                 <span className="text-[9px] text-emerald-700 bg-emerald-50 border border-emerald-150 px-1.5 py-0.5 rounded-lg font-bold flex items-center gap-0.5 whitespace-nowrap">
+<                                   ✅ Sudah Dipelajari
+<                                 </span>
+<                               );
+<                             } else if (isSelected || isTarget) {
+<                               statusBadge = <></>;
+2890,2897c2919,2920
+<                                 onClick={() => {
+<                                   if (!isLocked || isAdminOrVvip || currentUser?.role === "Pengajar") {
+<                                     setSelectedBabNumber(chapter.number);
+<                                   } else {
+<                                     alert("Bab ini terkunci. Anda harus menyelesaikan bab sebelumnya dan mendapatkan nilai dari Sensei.");
+<                                   }
+<                                 }}
+<                                 className={`shrink-0 w-64 sm:w-72 text-left p-3 rounded-2xl border transition flex flex-col gap-2 cursor-pointer ${
+---
+>                                 onClick={() => setSelectedBabNumber(chapter.number)}
+>                                 className={`w-full text-left p-3 rounded-2xl border transition flex items-center justify-between gap-3 cursor-pointer ${
+2915,2916c2938,2939
+<                                 <div className="w-full flex items-start justify-between gap-2">
+<                                   <div className="flex flex-wrap items-center gap-1.5">
+---
+>                                 <div className="max-w-[70%] space-y-1">
+>                                   <div className="flex items-center gap-1.5">
+2929,2933c2952,2954
+<                                     {(isSelected || isTarget) && (
+<                                       <span className={`text-[8px] px-1.5 py-0.5 flex items-center gap-1 rounded font-black uppercase ${
+<                                         isSelected
+<                                           ? "bg-white/20 text-white border border-white/20"
+<                                           : isAlumniClass ? "bg-emerald-100 text-emerald-700" : "bg-blue-100 text-blue-700"
+---
+>                                     {isTarget && (
+>                                       <span className={`text-[8px] px-1 rounded font-black uppercase ${
+>                                         isAlumniClass ? "bg-emerald-100 text-emerald-700" : "bg-blue-100 text-blue-700"
+2935c2956
+<                                         📖 Sedang Dipelajari
+---
+>                                         LANJUTAN
+2944,2946d2964
+<                                   {statusBadge}
+<                                 </div>
+<                                 <div className="flex-1 min-w-0 space-y-1 mt-1">
+2953a2972
+>                                 {statusBadge}
+2965c2984
+<               <div className="w-full">
+---
+>               <div className={isSidebarCollapsed ? 'lg:col-span-12' : 'lg:col-span-7'}>
+2983,2984c3002,3003
+<                   let nextTargetChapterNum = (targetStudent as any)?.currentChapter || classObj?.[activeChapterNumKey] || trulyActiveChapters[0]?.number || 1;
+<                   if (!(targetStudent as any)?.currentChapter && !classObj?.[activeChapterNumKey]) {
+---
+>                   let nextTargetChapterNum = targetStudent?.currentChapter || classObj?.[activeChapterNumKey] || trulyActiveChapters[0]?.number || 1;
+>                   if (!targetStudent?.currentChapter && !classObj?.[activeChapterNumKey]) {
+3072,3153c3091,3113
+<                             <div className="flex gap-2 items-center flex-wrap">
+<                               <button 
+<                                 onClick={() => {
+<                                   setSelectedLessonToEdit(null);
+<                                   setLessonSubject(assessmentSubject);
+<                                   setLessonTitle("");
+<                                   setLessonJapaneseTitle("");
+<                                   setLessonDifficulty("Dasar");
+<                                   setLessonContentType("text_only");
+<                                   setLessonContent("");
+<                                   setLessonVideoUrl("");
+<                                   setLessonSlidesUrl("");
+<                                   setLessonBookUrl("");
+<                                   setLessonQuizUrl("");
+<                                   setLessonSoalUrl("");
+<                                   setLessonQuizQuestions([]);
+<                                   setLessonQuizStartTime("");
+<                                   setLessonQuizEndTime("");
+<                                   setLessonIsLocked(false);
+<                                   setLessonError("");
+<                                   setIsLessonFormOpen(true);
+<                                   // Set the new bab number for the form
+<                                   setSelectedBabNumber(chapter.number);
+<                                 }}
+<                                 className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[10px] px-3 py-1.5 rounded-lg transition cursor-pointer flex items-center gap-1.5 active:scale-95 shadow-sm"
+<                               >
+<                                 <Plus className="h-3 w-3" />
+<                                 <span>Materi</span>
+<                               </button>
+<                               
+<                               <button 
+<                                 onClick={() => {
+<                                   setSelectedLessonToEdit(null);
+<                                   setLessonSubject(assessmentSubject);
+<                                   setLessonTitle("");
+<                                   setLessonJapaneseTitle("");
+<                                   setLessonDifficulty("Dasar");
+<                                   setLessonContentType("quiz");
+<                                   setLessonContent("");
+<                                   setLessonVideoUrl("");
+<                                   setLessonSlidesUrl("");
+<                                   setLessonBookUrl("");
+<                                   setLessonQuizUrl("");
+<                                   setLessonSoalUrl("");
+<                                   setLessonQuizStartTime("");
+<                                   setLessonQuizEndTime("");
+<                                   setLessonIsLocked(false);
+<                                   setLessonError("");
+<                                   setIsLessonFormOpen(true);
+<                                   setSelectedBabNumber(chapter.number);
+<                                 }}
+<                                 className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px] px-3 py-1.5 rounded-lg transition cursor-pointer flex items-center gap-1.5 active:scale-95 shadow-sm"
+<                               >
+<                                 <Plus className="h-3 w-3" />
+<                                 <span>Kuis / Soal</span>
+<                               </button>
+<                               
+<                               <button 
+<                                 onClick={() => {
+<                                   setSelectedLessonToEdit(null);
+<                                   setLessonSubject(assessmentSubject);
+<                                   setLessonTitle("");
+<                                   setLessonJapaneseTitle("");
+<                                   setLessonDifficulty("Dasar");
+<                                   setLessonContentType("soal_mandiri");
+<                                   setLessonContent("");
+<                                   setLessonVideoUrl("");
+<                                   setLessonSlidesUrl("");
+<                                   setLessonBookUrl("");
+<                                   setLessonQuizUrl("");
+<                                   setLessonSoalUrl("");
+<                                   setLessonIsLocked(false);
+<                                   setLessonError("");
+<                                   setIsLessonFormOpen(true);
+<                                   setSelectedBabNumber(chapter.number);
+<                                 }}
+<                                 className="bg-amber-600 hover:bg-amber-700 text-white font-bold text-[10px] px-3 py-1.5 rounded-lg transition cursor-pointer flex items-center gap-1.5 active:scale-95 shadow-sm"
+<                               >
+<                                 <Plus className="h-3 w-3" />
+<                                 <span>Tugas</span>
+<                               </button>
+<                             </div>
+---
+>                             <button 
+>                               onClick={() => {
+>                                 setSelectedLessonToEdit(null);
+>                                 setLessonSubject(assessmentSubject);
+>                                 setLessonTitle("");
+>                                 setLessonJapaneseTitle("");
+>                                 setLessonDifficulty("Dasar");
+>                                 setLessonContentType("text_only");
+>                                 setLessonContent("");
+>                                 setLessonVideoUrl("");
+>                                 setLessonSlidesUrl("");
+>                                 setLessonBookUrl("");
+>                                 setLessonIsLocked(false);
+>                                 setLessonError("");
+>                                 setIsLessonFormOpen(true);
+>                                 // Set the new bab number for the form
+>                                 setSelectedBabNumber(chapter.number);
+>                               }}
+>                               className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[10px] px-3 py-1.5 rounded-lg transition cursor-pointer flex items-center gap-1.5 active:scale-95 shadow-sm"
+>                             >
+>                               <Plus className="h-3 w-3" />
+>                               <span>Tambah Materi</span>
+>                             </button>
+3188,3216c3148
+<                                 
+<                                 const now = new Date();
+<                                 let isQuizTimeLocked = false;
+<                                 let quizLockReason = "";
+< 
+<                                 if ((lesson.contentType === "quiz" || lesson.contentType === "soal_mandiri") && currentUser?.role === "Siswa") {
+<                                   if (lesson.quizStartTime) {
+<                                     const start = new Date(lesson.quizStartTime);
+<                                     if (now < start) {
+<                                       isQuizTimeLocked = true;
+<                                       quizLockReason = `Belum dimulai (Buka pada: ${new Date(lesson.quizStartTime).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })})`;
+<                                     }
+<                                   }
+<                                   if (lesson.quizEndTime) {
+<                                     const end = new Date(lesson.quizEndTime);
+<                                     if (now > end) {
+<                                       isQuizTimeLocked = true;
+<                                       quizLockReason = `Sudah berakhir (Selesai pada: ${new Date(lesson.quizEndTime).toLocaleString('id-ID', { dateStyle: 'medium', timeStyle: 'short' })})`;
+<                                     }
+<                                   }
+<                                 }
+< 
+<                                 const isLockedBySensei = (lesson.contentType === "quiz" || lesson.contentType === "soal_mandiri")
+<                                   ? (isQuizTimeLocked && currentUser?.role === "Siswa")
+<                                   : (lesson.isLocked && currentUser?.role === "Siswa");
+<                                 
+<                                 const deadlineStatus = (lesson.contentType === "quiz" || lesson.contentType === "soal_mandiri")
+<                                   ? getDeadlineStatus(lesson.quizStartTime, lesson.quizEndTime, lesson.contentType)
+<                                   : null;
+---
+>                                 const isLockedBySensei = lesson.isLocked && currentUser?.role === "Siswa";
+3232,3233d3163
+<                                           lesson.contentType === "quiz" ? "📝 Quiz" :
+<                                           lesson.contentType === "soal_mandiri" ? "🧠 Tugas" :
+3241c3171
+<                                         {lesson.contentType !== "quiz" && lesson.contentType !== "soal_mandiri" && lesson.isLocked && (
+---
+>                                         {lesson.isLocked && (
+3246,3261d3175
+<                                         {(lesson.contentType === "quiz" || lesson.contentType === "soal_mandiri") && isQuizTimeLocked && (
+<                                           <span className="text-[9px] font-bold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-md border border-amber-200 flex items-center gap-1 uppercase">
+<                                             <Lock className="w-3 h-3" /> Belum Dibuka / Tutup
+<                                           </span>
+<                                         )}
+<                                         {(() => {
+<                                           const deadline = (lesson.contentType === "quiz" || lesson.contentType === "soal_mandiri")
+<                                             ? getDeadlineStatus(lesson.quizStartTime, lesson.quizEndTime, lesson.contentType)
+<                                             : null;
+<                                           if (!deadline) return null;
+<                                           return (
+<                                             <span className={`text-[9px] font-bold px-2 py-0.5 rounded-md border flex items-center gap-1 uppercase ${deadline.colorClass}`}>
+<                                               <span>{deadline.icon}</span> {deadline.label}
+<                                             </span>
+<                                           );
+<                                         })()}
+3268,3282d3181
+<                                         {(() => {
+<                                           const deadline = (lesson.contentType === "quiz" || lesson.contentType === "soal_mandiri")
+<                                             ? getDeadlineStatus(lesson.quizStartTime, lesson.quizEndTime, lesson.contentType)
+<                                             : null;
+<                                           if (!deadline) return null;
+<                                           return (
+<                                             <div className={`mt-2 p-2.5 rounded-xl border text-[10px] font-medium flex flex-col gap-1 ${deadline.colorClass}`}>
+<                                               <div className="flex items-center gap-1.5 font-bold uppercase tracking-wider text-[9px]">
+<                                                 <span>{deadline.icon}</span>
+<                                                 <span>Informasi Tenggang Waktu</span>
+<                                               </div>
+<                                               <span>{deadline.text}</span>
+<                                             </div>
+<                                           );
+<                                         })()}
+3288c3187,3194
+<                                         <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+---
+>                                         <div className="flex items-center gap-1 bg-white border border-slate-200 p-1 rounded-lg shadow-3xs" onClick={(e) => e.stopPropagation()}>
+>                                           <button
+>                                             onClick={() => handleToggleLessonLock(lesson)}
+>                                             className={`p-1 rounded-md transition cursor-pointer ${lesson.isLocked ? "text-red-600 bg-red-50 hover:bg-red-100" : "text-slate-400 hover:text-emerald-600 hover:bg-emerald-50"}`}
+>                                             title={lesson.isLocked ? "Buka Kunci" : "Kunci Materi"}
+>                                           >
+>                                             {lesson.isLocked ? <Unlock className="h-3.5 w-3.5" /> : <Lock className="h-3.5 w-3.5" />}
+>                                           </button>
+3294c3200
+<                                             className="p-2 text-blue-600 bg-blue-50 border border-blue-200 hover:bg-blue-100 rounded-xl transition cursor-pointer flex items-center justify-center"
+---
+>                                             className="p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-md transition cursor-pointer"
+3297c3203
+<                                             <Edit3 className="h-4 w-4" />
+---
+>                                             <Edit3 className="h-3.5 w-3.5" />
+3301c3207
+<                                             className="p-2 text-rose-600 bg-rose-50 border border-rose-200 hover:bg-rose-100 rounded-xl transition cursor-pointer flex items-center justify-center"
+---
+>                                             className="p-1 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-md transition cursor-pointer"
+3304c3210
+<                                             <Trash2 className="h-4 w-4" />
+---
+>                                             <Trash2 className="h-3.5 w-3.5" />
+3316,3329d3221
+<                                   {isExpanded && isLockedBySensei && (
+<                                     <div className="p-6 border-t border-slate-100 flex flex-col items-center justify-center text-center bg-slate-50/50 animate-fade-in">
+<                                       <div className="h-11 w-11 flex items-center justify-center bg-red-100 text-red-600 rounded-full mb-3 shadow-3xs">
+<                                         <Lock className="w-5 h-5" />
+<                                       </div>
+<                                       <h5 className="font-display font-bold text-xs text-slate-800 mb-1.5 uppercase tracking-wide">Materi Ini Terkunci</h5>
+<                                       <p className="text-[10px] text-slate-500 max-w-xs leading-relaxed">
+<                                         {lesson.contentType === "quiz" || lesson.contentType === "soal_mandiri"
+<                                           ? (quizLockReason || "Kuis/Tugas ini hanya dapat dikerjakan pada jadwal pengerjaan yang telah ditentukan oleh Sensei.")
+<                                           : "Materi ini belum dibuka oleh Sensei / Admin. Silakan hubungi pengajar Anda untuk info lebih lanjut."}
+<                                       </p>
+<                                     </div>
+<                                   )}
+< 
+3332,3342d3223
+<                                       {deadlineStatus && (
+<                                         <div className={`p-3.5 rounded-xl border flex flex-col gap-1 text-left shadow-3xs ${deadlineStatus.colorClass}`}>
+<                                           <div className="flex items-center gap-2 font-bold text-xs">
+<                                             <span>{deadlineStatus.icon}</span>
+<                                             <span>Batas Waktu {lesson.contentType === "quiz" ? "Quiz" : "Tugas"}</span>
+<                                           </div>
+<                                           <p className="text-xs font-medium leading-relaxed">
+<                                             {deadlineStatus.text}
+<                                           </p>
+<                                         </div>
+<                                       )}
+3359,3375c3240,3247
+<                                       {lesson.contentType === "buku" && lesson.bookUrl && (() => {
+<                                         const fileType = getFileType(lesson.bookUrl);
+<                                         return (
+<                                           <div className="space-y-3">
+<                                             <div className="bg-gradient-to-r from-emerald-500/5 to-teal-500/5 border border-emerald-200/60 p-4 rounded-xl flex items-center justify-between gap-3 text-left">
+<                                               <div className="flex items-center gap-3">
+<                                                 <span className="h-9 w-9 flex items-center justify-center bg-emerald-100 text-emerald-700 rounded-xl font-bold text-base">
+<                                                   {fileType === "image" ? "🖼️" : fileType === "video" ? "🎬" : "📚"}
+<                                                 </span>
+<                                                 <div>
+<                                                   <p className="font-bold text-[11px] text-slate-800">
+<                                                     {fileType === "image" ? "Materi Gambar" : fileType === "video" ? "Materi Video" : "Dokumen Pendukung"}
+<                                                   </p>
+<                                                   <p className="text-[9px] text-slate-500">
+<                                                     {fileType === "image" ? "File Gambar / Citra" : fileType === "video" ? "File Video Rekaman" : "Materi PDF / Docs"}
+<                                                   </p>
+<                                                 </div>
+---
+>                                       {lesson.contentType === "buku" && lesson.bookUrl && (
+>                                         <div className="space-y-3">
+>                                           <div className="bg-gradient-to-r from-emerald-500/5 to-teal-500/5 border border-emerald-200/60 p-4 rounded-xl flex items-center justify-between gap-3 text-left">
+>                                             <div className="flex items-center gap-3">
+>                                               <span className="h-9 w-9 flex items-center justify-center bg-emerald-100 text-emerald-700 rounded-xl font-bold text-base">📚</span>
+>                                               <div>
+>                                                 <p className="font-bold text-[11px] text-slate-800">Dokumen Pendukung</p>
+>                                                 <p className="text-[9px] text-slate-500">Materi PDF / Docs</p>
+3377d3248
+<                                               <a href={lesson.bookUrl} target="_blank" rel="noopener noreferrer" className="bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold px-3 py-1.5 rounded-lg transition active:scale-95 shadow-2xs shrink-0">Unduh / Buka</a>
+3379,3417c3250
+<                                             
+<                                             {/* Directly visible Preview */}
+<                                             {fileType === "image" && (
+<                                               <div className="border border-slate-200 rounded-xl overflow-hidden bg-white p-2 shadow-3xs flex justify-center">
+<                                                 <img src={lesson.bookUrl} alt={lesson.title} className="max-w-full max-h-[500px] object-contain rounded-lg" referrerPolicy="no-referrer" />
+<                                               </div>
+<                                             )}
+<                                             
+<                                             {fileType === "video" && (
+<                                               <div className="relative aspect-video rounded-xl overflow-hidden border border-slate-200 shadow-3xs bg-black">
+<                                                 <video src={lesson.bookUrl} controls className="w-full h-full" />
+<                                               </div>
+<                                             )}
+< 
+<                                             {fileType === "pdf" && (
+<                                               <div className="space-y-2">
+<                                                 <div className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-3xs h-[500px]">
+<                                                   <iframe src={lesson.bookUrl} className="w-full h-full" title="PDF Viewer" />
+<                                                 </div>
+<                                                 <div className="text-center">
+<                                                   <p className="text-[10px] text-slate-500">
+<                                                     PDF tidak tampil? <a href={lesson.bookUrl} target="_blank" rel="noopener noreferrer" className="text-emerald-600 hover:underline font-bold">Klik di sini untuk Membuka PDF di Tab Baru ↗</a>
+<                                                   </p>
+<                                                 </div>
+<                                               </div>
+<                                             )}
+< 
+<                                             {fileType === "unknown" && (
+<                                               <div className="space-y-2">
+<                                                 <div className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-3xs h-[500px]">
+<                                                   <iframe src={lesson.bookUrl} className="w-full h-full" title="Document Viewer" />
+<                                                 </div>
+<                                                 <div className="text-center">
+<                                                   <p className="text-[10px] text-slate-500">
+<                                                     Dokumen tidak tampil? <a href={lesson.bookUrl} target="_blank" rel="noopener noreferrer" className="text-emerald-600 hover:underline font-bold">Klik di sini untuk Membuka Dokumen di Tab Baru ↗</a>
+<                                                   </p>
+<                                                 </div>
+<                                               </div>
+<                                             )}
+---
+>                                             <a href={lesson.bookUrl} target="_blank" rel="noopener noreferrer" className="bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold px-3 py-1.5 rounded-lg transition active:scale-95 shadow-2xs shrink-0">Unduh / Buka</a>
+3419,3420c3252,3259
+<                                         );
+<                                       })()}
+---
+>                                           {/* Direct PDF Embed viewer */}
+>                                           {(lesson.bookUrl.startsWith("data:application/pdf") || lesson.bookUrl.toLowerCase().endsWith(".pdf") || lesson.bookUrl.includes("pdf")) && (
+>                                             <div className="border border-slate-200 rounded-xl overflow-hidden bg-white shadow-3xs h-[500px]">
+>                                               <iframe src={lesson.bookUrl} className="w-full h-full" title="PDF Viewer" />
+>                                             </div>
+>                                           )}
+>                                         </div>
+>                                       )}
+3439,3961d3277
+<                                       {lesson.contentType === "quiz" && lesson.quizQuestions && lesson.quizQuestions.length > 0 && (() => {
+<                                         const existingAssessment = (chapterAssessments || []).find(
+<                                           c => c.studentId === (currentUser?.studentId || "SIS-001") && c.lessonId === lesson.id
+<                                         );
+<                                         const isQuizSubmitted = quizResults[lesson.id]?.show || !!existingAssessment;
+<                                         return (
+<                                           <div className="bg-white p-6 rounded-2xl border border-emerald-100 shadow-sm space-y-6">
+<                                           <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+<                                             <div className="flex items-center gap-3">
+<                                               <div className="h-10 w-10 flex items-center justify-center bg-emerald-100 text-emerald-700 rounded-full font-bold shadow-sm">
+<                                                 📝
+<                                               </div>
+<                                               <div>
+<                                                 <p className="font-bold text-[13px] text-slate-800">Quiz Pilihan Ganda</p>
+<                                                 <p className="text-[10px] text-slate-500">Jawab semua pertanyaan untuk menyelesaikan materi ini</p>
+<                                               </div>
+<                                             </div>
+<                                             {(currentUser?.role === "Pengajar" || currentUser?.role === "Admin" || currentUser?.role === "Admin Super") && (
+<                                               <button
+<                                                 type="button"
+<                                                 onClick={() => {
+<                                                   handleOpenEditLesson(lesson);
+<                                                   setSelectedBabNumber(chapter.number);
+<                                                 }}
+<                                                 className="bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shrink-0"
+<                                               >
+<                                                 <Edit3 className="w-3.5 h-3.5" /> Ubah Pertanyaan & Waktu Quiz
+<                                               </button>
+<                                             )}
+<                                           </div>
+<                                           
+<                                           <div className="space-y-6">
+<                                             {lesson.quizQuestions.map((q: any, qIndex: number) => (
+<                                               <div key={q.id || qIndex} className="space-y-3">
+<                                                 <p className="text-xs font-bold text-slate-800">
+<                                                   {qIndex + 1}. {q.question}
+<                                                  </p>
+<                                                  {q.mediaUrl && (
+<                                                    <div className="bg-slate-50 p-2 rounded-xl flex justify-center border border-slate-200 my-2 max-h-64 overflow-hidden w-full">
+<                                                      {q.mediaType === 'video' ? (
+<                                                        <video src={q.mediaUrl} controls className="max-h-60 rounded-lg object-contain w-full animate-fade-in" />
+<                                                      ) : q.mediaType === 'pdf' ? (
+<                                                        <div className="flex flex-col items-center p-4 w-full animate-fade-in">
+<                                                          <FileText className="w-8 h-8 text-rose-500 mb-2" />
+<                                                          <a href={q.mediaUrl} target="_blank" rel="noopener noreferrer" className="text-xs bg-white border border-slate-200 shadow-sm px-3 py-1.5 rounded-lg text-slate-700 font-bold hover:bg-slate-50 transition cursor-pointer">
+<                                                            Buka Dokumen PDF
+<                                                          </a>
+<                                                        </div>
+<                                                      ) : (
+<                                                        <img src={q.mediaUrl} alt="Lampiran" className="max-h-60 rounded-lg object-contain animate-fade-in" referrerPolicy="no-referrer" />
+<                                                      )}
+<                                                    </div>
+<                                                  )}
+<                                                  
+<                                                 <div className="space-y-2 pl-4">
+<                                                   {q.type === 'essay' ? (
+<                                                     <textarea
+<                                                       rows={4}
+<                                                       disabled={isQuizSubmitted}
+<                                                       value={quizAnswers[lesson.id]?.[q.id] || ""}
+<                                                       onChange={(e) => {
+<                                                         setQuizAnswers(prev => ({
+<                                                           ...prev,
+<                                                           [lesson.id]: {
+<                                                             ...(prev[lesson.id] || {}),
+<                                                             [q.id]: e.target.value
+<                                                           }
+<                                                         }));
+<                                                       }}
+<                                                       className="w-full bg-white border border-slate-200 rounded-xl p-3 text-xs focus:outline-emerald-600 disabled:bg-slate-50 disabled:text-slate-500"
+<                                                       placeholder="Tuliskan jawaban Anda di sini..."
+<                                                     />
+<                                                   ) : (
+<                                                     (q.options || []).map((opt: string, oIndex: number) => (
+<                                                       <label key={oIndex} className={`flex items-center gap-3 p-3 rounded-xl border transition cursor-pointer ${
+<                                                         quizAnswers[lesson.id]?.[q.id] === oIndex 
+<                                                           ? "bg-emerald-50 border-emerald-300 ring-1 ring-emerald-200" 
+<                                                           : "bg-white border-slate-200 hover:bg-slate-50"
+<                                                       } ${
+<                                                         isQuizSubmitted && q.correctAnswerIndex === oIndex
+<                                                           ? "!bg-emerald-100 !border-emerald-500 !text-emerald-800"
+<                                                           : isQuizSubmitted && quizAnswers[lesson.id]?.[q.id] === oIndex && q.correctAnswerIndex !== oIndex
+<                                                           ? "!bg-rose-50 !border-rose-400 !text-rose-800"
+<                                                           : ""
+<                                                       }`}>
+<                                                         <input
+<                                                           type="radio"
+<                                                           name={`quiz-${lesson.id}-${q.id}`}
+<                                                           disabled={isQuizSubmitted}
+<                                                           checked={quizAnswers[lesson.id]?.[q.id] === oIndex}
+<                                                           onChange={() => {
+<                                                             setQuizAnswers(prev => ({
+<                                                               ...prev,
+<                                                               [lesson.id]: {
+<                                                                 ...(prev[lesson.id] || {}),
+<                                                                 [q.id]: oIndex
+<                                                               }
+<                                                             }));
+<                                                           }}
+<                                                           className="text-emerald-600 focus:ring-emerald-500 disabled:opacity-50"
+<                                                         />
+<                                                         <span className="text-xs font-medium text-slate-700">
+<                                                           {String.fromCharCode(65 + oIndex)}. {opt}
+<                                                         </span>
+<                                                         {isQuizSubmitted && q.correctAnswerIndex === oIndex && (
+<                                                           <span className="ml-auto text-emerald-600">✅</span>
+<                                                         )}
+<                                                         {isQuizSubmitted && quizAnswers[lesson.id]?.[q.id] === oIndex && q.correctAnswerIndex !== oIndex && (
+<                                                           <span className="ml-auto text-rose-500">❌</span>
+<                                                         )}
+<                                                       </label>
+<                                                     ))
+<                                                   )}
+<                                                 </div>
+<                                               </div>
+<                                             ))}
+<                                           </div>
+<                                           
+<                                           {isQuizSubmitted ? (() => {
+<                                               const displayedScore = quizResults[lesson.id]?.score !== undefined 
+<                                                 ? quizResults[lesson.id].score 
+<                                                 : (existingAssessment?.score !== undefined ? Math.round((existingAssessment.score / 100) * lesson.quizQuestions.filter((q: any) => q.type !== 'essay').length) : 0);
+<                                               const displayedTotal = quizResults[lesson.id]?.total !== undefined
+<                                                 ? quizResults[lesson.id].total
+<                                                 : (lesson.quizQuestions || []).filter((q: any) => q.type !== 'essay').length;
+<                                               const displayRatio = displayedTotal > 0 ? (displayedScore / displayedTotal) : 1;
+<                                               
+<                                               return (
+<                                                 <div className="bg-slate-50 border border-slate-200 rounded-xl p-5 text-center space-y-2">
+<                                                   <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Hasil Quiz Anda</p>
+<                                                   {displayedTotal > 0 && (
+<                                                     <>
+<                                                       <div className="text-3xl font-black text-slate-800">
+<                                                         {displayedScore} <span className="text-base text-slate-400 font-medium">/ {displayedTotal}</span>
+<                                                       </div>
+<                                                       <p className={`text-xs font-bold ${displayRatio >= 0.7 ? "text-emerald-600" : "text-amber-600"}`}>
+<                                                         {displayRatio >= 0.7 ? "Luar biasa! Anda memahami materi ini dengan baik." : "Terus belajar dan coba lagi nanti!"}
+<                                                       </p>
+<                                                     </>
+<                                                   )}
+<                                               {lesson.quizQuestions.some((q: any) => q.type === 'essay') && (
+<                                                 <div className="bg-amber-50 text-amber-700 text-xs font-medium p-3 rounded-xl border border-amber-200 mt-4">
+<                                                   Jawaban essay Anda telah disimpan dan akan diperiksa oleh Sensei.
+<                                                 </div>
+<                                               )}
+<                                               <button
+<                                                 type="button"
+<                                                 onClick={async () => {
+<                                                   setQuizResults(prev => {
+<                                                     const updated = {...prev};
+<                                                     delete updated[lesson.id];
+<                                                     return updated;
+<                                                   });
+<                                                   setQuizAnswers(prev => {
+<                                                     const updated = {...prev};
+<                                                     delete updated[lesson.id];
+<                                                     return updated;
+<                                                   });
+<                                                   if (existingAssessment && onUpdateState) {
+<                                                     await onUpdateState("chapterAssessments", "delete", { id: existingAssessment.id });
+<                                                   }
+<                                                 }}
+<                                                 className="mt-4 px-4 py-2 bg-white border border-slate-200 text-slate-600 rounded-lg text-[10px] font-bold hover:bg-slate-100 transition cursor-pointer"
+<                                               >
+<                                                 Kerjakan Ulang
+<                                               </button>
+<                                             </div>
+<                                           );
+<                                         })() : (
+<                                           <div className="pt-4 border-t border-slate-100 flex justify-end">
+<                                             <button
+<                                               type="button"
+<                                               disabled={Object.keys(quizAnswers[lesson.id] || {}).length < lesson.quizQuestions.length}
+<                                               onClick={async () => {
+<                                                 let score = 0;
+<                                                 const total = lesson.quizQuestions.filter((q: any) => q.type !== 'essay').length;
+<                                                 const userAnswers = quizAnswers[lesson.id] || {};
+<                                                 lesson.quizQuestions.forEach((q: any) => {
+<                                                   if (q.type !== 'essay' && userAnswers[q.id] === q.correctAnswerIndex) {
+<                                                     score++;
+<                                                   }
+<                                                 });
+<                                                 setQuizResults(prev => ({
+<                                                   ...prev,
+<                                                   [lesson.id]: { score, total, show: true }
+<                                                 }));
+< 
+<                                                 if (onUpdateState) {
+<                                                   const finalScore = total > 0 ? Math.round((score / total) * 100) : 100;
+<                                                   await onUpdateState("chapterAssessments", "update", {
+<                                                     studentId: currentUser?.studentId || "SIS-001",
+<                                                     studentName: currentUser?.name || "Siswa LPK",
+<                                                     chapterNumber: Number(lesson.chapterNumber || 1),
+<                                                     title: lesson.title,
+<                                                     status: "Sudah Dinilai",
+<                                                     subject: lesson.subject || assessmentSubject,
+<                                                     lessonId: lesson.id,
+<                                                     score: finalScore,
+<                                                     notes: `Menyelesaikan kuis dengan skor ${score}/${total}`,
+<                                                     assessedBy: "Sistem Otomatis"
+<                                                   });
+<                                                 }
+<                                               }}
+<                                               className="bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white px-6 py-2.5 rounded-xl font-bold text-xs transition cursor-pointer shadow-sm"
+<                                             >
+<                                               Kirim Jawaban
+<                                             </button>
+<                                           </div>
+<                                         )}
+<                                       </div>
+<                                     );
+<                                   })()}
+<                                       
+<                                       {lesson.contentType === "soal_mandiri" && (
+<                                         <div className="bg-amber-50 p-4 rounded-xl border border-amber-200 shadow-3xs space-y-4">
+<                                           {lesson.soalUrl && (
+<                                             <div>
+<                                               <h4 className="font-bold text-amber-800 text-xs mb-2">Tugas</h4>
+<                                               {lesson.soalUrl.includes("alt=media") && lesson.soalUrl.includes("firebase") ? (
+<                                                 <a href={lesson.soalUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 bg-white text-amber-700 px-4 py-2 rounded-lg text-xs font-bold border border-amber-300 shadow-sm hover:bg-amber-100 transition">
+<                                                   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
+<                                                   Lihat / Unduh Soal Tugas
+<                                                 </a>
+<                                               ) : (
+<                                                 <a href={lesson.soalUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 bg-white text-amber-700 px-4 py-2 rounded-lg text-xs font-bold border border-amber-300 shadow-sm hover:bg-amber-100 transition">
+<                                                   <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+<                                                   Buka Tautan Tugas
+<                                                 </a>
+<                                               )}
+<                                             </div>
+<                                           )}
+<                                           
+<                                           {currentUser?.role === "Siswa" ? (
+<                                             <div className="pt-3 border-t border-amber-200">
+<                                               <h4 className="font-bold text-slate-800 text-xs mb-2">Unggah Hasil Pekerjaan (Siswa)</h4>
+<                                               {(() => {
+<                                                 const sub = (chapterAssessments || []).find(
+<                                                   c => c.studentId === (currentUser?.studentId || "SIS-001") && c.lessonId === lesson.id
+<                                                 );
+<                                                 
+<                                                 if (sub) {
+<                                                   return (
+<                                                     <div className="space-y-2">
+<                                                       <div className="p-3 bg-white border border-emerald-200 rounded-xl flex items-center justify-between">
+<                                                         <div className="flex items-center gap-2 text-emerald-700 text-xs font-bold">
+<                                                           <CheckCircle className="w-4 h-4" /> Tugas Berhasil Dikumpulkan
+<                                                         </div>
+<                                                         {sub.submissionUrl && (
+<                                                           <a href={sub.submissionUrl} target="_blank" rel="noopener noreferrer" className="text-[10px] text-blue-600 underline font-bold flex items-center gap-1">
+<                                                             <Eye className="w-3 h-3" /> Lihat File Anda
+<                                                           </a>
+<                                                         )}
+<                                                       </div>
+<                                                       <div className="bg-white border border-slate-200 rounded-xl p-3 text-xs space-y-1.5 text-slate-700">
+<                                                         <p className="font-semibold text-slate-800">Detail Penilaian:</p>
+<                                                         <p>Tanggal Pengumpulan: <span className="font-medium text-slate-600">{sub.submissionDate || sub.assessedDate || "-"}</span></p>
+<                                                         <p>
+<                                                           Status Nilai:{" "}
+<                                                           {sub.score !== undefined && sub.score !== null ? (
+<                                                             <span className="font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-100">
+<                                                               {sub.score} / 100
+<                                                             </span>
+<                                                           ) : (
+<                                                             <span className="font-medium text-amber-600 bg-amber-50 px-2 py-0.5 rounded border border-amber-100 animate-pulse">
+<                                                               Menunggu Penilaian oleh Sensei ⏳
+<                                                             </span>
+<                                                           )}
+<                                                         </p>
+<                                                         {sub.notes && (
+<                                                           <div className="bg-slate-50 p-2.5 rounded-lg border border-slate-150 mt-1 text-slate-600">
+<                                                             <span className="font-bold text-slate-700 text-[11px]">Masukan Sensei:</span>
+<                                                             <p className="mt-0.5 text-[11px] leading-relaxed italic">"{sub.notes}"</p>
+<                                                           </div>
+<                                                         )}
+<                                                       </div>
+<                                                     </div>
+<                                                   );
+<                                                 }
+<                                                 
+<                                                 return (
+<                                                   <div className="flex flex-col sm:flex-row gap-2">
+<                                                     <div className="relative flex-1">
+<                                                       <input
+<                                                         type="file"
+<                                                         accept="image/*,.pdf"
+<                                                         onChange={async (e) => {
+<                                                           const file = e.target.files?.[0];
+<                                                           if (file) {
+<                                                             try {
+<                                                               const btn = document.getElementById("student-upload-" + lesson.id);
+<                                                               if (btn) btn.innerHTML = '<span class="animate-spin inline-block mr-2">⏳</span> Mengunggah...';
+<                                                               const url = await uploadFileToFirebase(file, "lms_student_submissions");
+<                                                               
+<                                                               // Store submission url in quizAnswers
+<                                                               setQuizAnswers(prev => ({
+<                                                                 ...prev,
+<                                                                 [lesson.id]: {
+<                                                                   ...(prev[lesson.id] || {}),
+<                                                                   submissionUrl: url
+<                                                                 }
+<                                                               }));
+<                                                               
+<                                                               if (btn) btn.innerHTML = 'File Anda Berhasil Diunggah ✅';
+<                                                             } catch (err) {
+<                                                               console.error("Upload error", err);
+<                                                               alert("Gagal mengunggah file hasil tugas.");
+<                                                               const btn = document.getElementById("student-upload-" + lesson.id);
+<                                                               if (btn) btn.innerHTML = 'Pilih & Unggah File Tugas (PDF/Image)';
+<                                                             }
+<                                                           }
+<                                                         }}
+<                                                         className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+<                                                       />
+<                                                       <button type="button" id={"student-upload-" + lesson.id} className="w-full bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs py-2.5 px-4 rounded-xl border border-slate-300 border-dashed transition flex items-center justify-center gap-2 cursor-pointer">
+<                                                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
+<                                                         {quizAnswers[lesson.id]?.submissionUrl ? 'File Siap Dikirim ✅ (Klik untuk ganti)' : 'Pilih & Unggah File Tugas (PDF/Image)'}
+<                                                       </button>
+<                                                     </div>
+<                                                     <button
+<                                                       onClick={async () => {
+<                                                         const url = quizAnswers[lesson.id]?.submissionUrl;
+<                                                         if (!url) return;
+<                                                         if (onUpdateState) {
+<                                                           const success = await onUpdateState("chapterAssessments", "update", {
+<                                                             studentId: currentUser?.studentId || "SIS-001",
+<                                                             studentName: currentUser?.name || "Siswa LPK",
+<                                                             chapterNumber: Number(lesson.chapterNumber || 1),
+<                                                             title: lesson.title,
+<                                                             status: "Menunggu Penilaian",
+<                                                             subject: lesson.subject || assessmentSubject,
+<                                                             lessonId: lesson.id,
+<                                                             submissionUrl: url,
+<                                                             submissionDate: new Date().toISOString().split("T")[0],
+<                                                           });
+<                                                           if (success) {
+<                                                             alert("Tugas berhasil dikumpulkan!");
+<                                                           }
+<                                                         }
+<                                                       }}
+<                                                       disabled={!quizAnswers[lesson.id]?.submissionUrl}
+<                                                       className="bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-300 disabled:cursor-not-allowed text-white font-bold text-xs px-5 py-2.5 rounded-xl transition cursor-pointer"
+<                                                     >
+<                                                       Kirim Tugas
+<                                                     </button>
+<                                                   </div>
+<                                                 );
+<                                               })()}
+<                                             </div>
+<                                           ) : (
+<                                             /* SENSEI grading dashboard */
+<                                             <div className="pt-3 border-t border-amber-200 space-y-3 text-left">
+<                                               <div className="flex items-center justify-between">
+<                                                 <h4 className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
+<                                                   <Users className="w-3.5 h-3.5 text-slate-500" /> Dashboard Penilaian Tugas (Sensei)
+<                                                 </h4>
+<                                                 <span className="text-[10px] font-bold text-amber-700 bg-amber-100/50 px-2 py-0.5 rounded-full border border-amber-200">
+<                                                   {(() => {
+<                                                     const classStudents = activeStudents.filter(s => {
+<                                                       const normalizedLessonClass = (lesson.targetClass || "Semua").trim().toLowerCase();
+<                                                       const normalizedStudentClass = (s.class || "").trim().toLowerCase();
+<                                                       return normalizedLessonClass === "semua" || normalizedLessonClass === normalizedStudentClass;
+<                                                     });
+<                                                     const subsCount = (chapterAssessments || []).filter(c => c.lessonId === lesson.id).length;
+<                                                     return `${subsCount} / ${classStudents.length} Siswa Mengumpulkan`;
+<                                                   })()}
+<                                                 </span>
+<                                               </div>
+<                                               
+<                                               <div className="space-y-3 max-h-[450px] overflow-y-auto pr-1">
+<                                                 {(() => {
+<                                                   const classStudents = activeStudents.filter(s => {
+<                                                     const normalizedLessonClass = (lesson.targetClass || "Semua").trim().toLowerCase();
+<                                                     const normalizedStudentClass = (s.class || "").trim().toLowerCase();
+<                                                     return normalizedLessonClass === "semua" || normalizedLessonClass === normalizedStudentClass;
+<                                                   });
+<                                                   
+<                                                   if (classStudents.length === 0) {
+<                                                     return <p className="text-[10px] text-slate-500 text-center py-2">Tidak ada siswa terdaftar di kelas target materi ini.</p>;
+<                                                   }
+<                                                   
+<                                                   return classStudents.map(student => {
+<                                                     const sub = (chapterAssessments || []).find(
+<                                                       c => c.studentId === student.id && c.lessonId === lesson.id
+<                                                     );
+<                                                     
+<                                                     const isImg = sub?.submissionUrl && (
+<                                                       sub.submissionUrl.toLowerCase().endsWith(".png") ||
+<                                                       sub.submissionUrl.toLowerCase().endsWith(".jpg") ||
+<                                                       sub.submissionUrl.toLowerCase().endsWith(".jpeg") ||
+<                                                       sub.submissionUrl.toLowerCase().endsWith(".webp") ||
+<                                                       sub.submissionUrl.toLowerCase().endsWith(".gif") ||
+<                                                       sub.submissionUrl.includes("image") ||
+<                                                       sub.submissionUrl.includes("alt=media")
+<                                                     );
+<                                                     
+<                                                     const currentScoreVal = gradingScores[student.id] !== undefined 
+<                                                       ? gradingScores[student.id] 
+<                                                       : (sub?.score !== undefined ? String(sub.score) : "");
+<                                                       
+<                                                     const currentNotesVal = gradingNotesMap[student.id] !== undefined
+<                                                       ? gradingNotesMap[student.id]
+<                                                       : (sub?.notes || "");
+<                                                     
+<                                                     return (
+<                                                       <div key={student.id} className="bg-white p-3 rounded-xl border border-slate-200 hover:border-slate-300 transition space-y-2">
+<                                                         <div className="flex items-center justify-between gap-2 flex-wrap">
+<                                                           <div>
+<                                                             <p className="font-bold text-xs text-slate-800">{student.name}</p>
+<                                                             <p className="text-[9px] text-slate-500 font-medium">{student.id} • Kelas: {student.class || "-"}</p>
+<                                                           </div>
+<                                                           {sub ? (
+<                                                             sub.score !== undefined && sub.score !== null ? (
+<                                                               <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full flex items-center gap-1">
+<                                                                 Nilai: {sub.score} / 100 ✅
+<                                                               </span>
+<                                                             ) : (
+<                                                               <span className="text-[10px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full flex items-center gap-1 animate-pulse">
+<                                                                 Menunggu Penilaian ⏳
+<                                                               </span>
+<                                                             )
+<                                                           ) : (
+<                                                             <span className="text-[10px] font-semibold text-slate-500 bg-slate-150/80 px-2 py-0.5 rounded-full">
+<                                                               Belum Mengumpulkan
+<                                                             </span>
+<                                                           )}
+<                                                         </div>
+<                                                         
+<                                                         {sub && (
+<                                                           <div className="mt-2 pt-2 border-t border-slate-100 space-y-2.5">
+<                                                             <div className="bg-slate-50 p-2 rounded-lg border border-slate-200 flex flex-col gap-1.5">
+<                                                               <span className="text-[9px] font-extrabold text-slate-400 uppercase tracking-wider block">File Pekerjaan Siswa:</span>
+<                                                               {isImg ? (
+<                                                                 <div className="relative group/preview max-w-sm rounded-lg overflow-hidden border border-slate-200 bg-white shadow-3xs max-h-48 flex justify-center">
+<                                                                   <img src={sub.submissionUrl} alt="Jawaban Siswa" className="max-h-48 object-contain transition-transform group-hover/preview:scale-[1.02] duration-200" referrerPolicy="no-referrer" />
+<                                                                   <a href={sub.submissionUrl} target="_blank" rel="noopener noreferrer" className="absolute bottom-2 right-2 bg-slate-900/80 hover:bg-slate-900 text-white p-1 rounded transition text-[9px] font-bold flex items-center gap-1">
+<                                                                     <Eye className="w-3 h-3" /> Perbesar
+<                                                                   </a>
+<                                                                 </div>
+<                                                               ) : (
+<                                                                 <div className="flex items-center gap-2 bg-white p-2 rounded border border-slate-150">
+<                                                                   <FileText className="w-5 h-5 text-indigo-500" />
+<                                                                   <div className="flex-1 min-w-0">
+<                                                                     <p className="text-[10px] font-bold text-slate-700 truncate">Dokumen Pekerjaan (PDF/Gambar)</p>
+<                                                                     <p className="text-[8px] text-slate-400">Diunggah pada: {sub.submissionDate || "-"}</p>
+<                                                                   </div>
+<                                                                   <a href={sub.submissionUrl} target="_blank" rel="noopener noreferrer" className="bg-indigo-50 text-indigo-700 hover:bg-indigo-100 text-[9px] font-bold px-2 py-1 rounded border border-indigo-200 transition shrink-0 flex items-center gap-1">
+<                                                                     <Eye className="w-3 h-3" /> Buka
+<                                                                   </a>
+<                                                                 </div>
+<                                                               )}
+<                                                             </div>
+<                                                             
+<                                                             <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 pt-1">
+<                                                               <div className="sm:col-span-1">
+<                                                                 <label className="block text-[8px] font-bold text-slate-500 uppercase tracking-wider mb-1">Nilai (0-100)</label>
+<                                                                 <input
+<                                                                   type="number"
+<                                                                   min="0"
+<                                                                   max="100"
+<                                                                   value={currentScoreVal}
+<                                                                   onChange={(e) => {
+<                                                                     const val = e.target.value;
+<                                                                     setGradingScores(prev => ({ ...prev, [student.id]: val }));
+<                                                                   }}
+<                                                                   placeholder="85"
+<                                                                   className="w-full bg-white border border-slate-200 rounded-lg p-1.5 text-xs font-bold text-center focus:outline-indigo-600"
+<                                                                 />
+<                                                               </div>
+<                                                               <div className="sm:col-span-3">
+<                                                                 <label className="block text-[8px] font-bold text-slate-500 uppercase tracking-wider mb-1">Catatan / Umpan Balik</label>
+<                                                                 <div className="flex gap-1.5">
+<                                                                   <input
+<                                                                     type="text"
+<                                                                     value={currentNotesVal}
+<                                                                     onChange={(e) => {
+<                                                                       const val = e.target.value;
+<                                                                       setGradingNotesMap(prev => ({ ...prev, [student.id]: val }));
+<                                                                     }}
+<                                                                     placeholder="Bagus sekali, perhatikan tata bahasa..."
+<                                                                     className="flex-1 bg-white border border-slate-200 rounded-lg p-1.5 text-xs focus:outline-indigo-600"
+<                                                                   />
+<                                                                   <button
+<                                                                     type="button"
+<                                                                     disabled={isGradingSubmittingMap[student.id] || !currentScoreVal}
+<                                                                     onClick={async () => {
+<                                                                       if (!onUpdateState) return;
+<                                                                       setIsGradingSubmittingMap(prev => ({ ...prev, [student.id]: true }));
+<                                                                       const success = await onUpdateState("chapterAssessments", "update", {
+<                                                                         studentId: student.id,
+<                                                                         studentName: student.name,
+<                                                                         chapterNumber: Number(lesson.chapterNumber || 1),
+<                                                                         title: lesson.title,
+<                                                                         status: "Sudah Dinilai",
+<                                                                         subject: lesson.subject || assessmentSubject,
+<                                                                         lessonId: lesson.id,
+<                                                                         score: Number(currentScoreVal),
+<                                                                         notes: currentNotesVal,
+<                                                                         assessedBy: currentUser?.name || "Sensei"
+<                                                                       });
+<                                                                       setIsGradingSubmittingMap(prev => ({ ...prev, [student.id]: false }));
+<                                                                       if (success) {
+<                                                                         alert(`Nilai untuk ${student.name} berhasil disimpan!`);
+<                                                                       }
+<                                                                     }}
+<                                                                     className="bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-300 text-white font-bold text-[10px] px-3.5 rounded-lg transition shrink-0 flex items-center justify-center gap-1 shadow-2xs"
+<                                                                   >
+<                                                                     {isGradingSubmittingMap[student.id] ? "..." : <Save className="w-3.5 h-3.5" />} Simpan
+<                                                                   </button>
+<                                                                 </div>
+<                                                               </div>
+<                                                             </div>
+<                                                           </div>
+<                                                         )}
+<                                                       </div>
+<                                                     );
+<                                                   });
+<                                                 })()}
+<                                               </div>
+<                                             </div>
+<                                           )}
+<                                         </div>
+<                                       )}
+<                                       
+3980,3987d3295
+< 
+<                                       {/* Sesi Diskusi / Komentar */}
+<                                       <LessonCommentsSection
+<                                         lesson={lesson}
+<                                         currentUser={currentUser}
+<                                         systemState={systemState}
+<                                         onUpdateState={onUpdateState}
+<                                       />
+3993,3994c3301,3302
+<                                       <div className="bg-amber-100 p-3 rounded-full mb-2 shadow-3xs">
+<                                         <Lock className="w-5 h-5 text-amber-600" />
+---
+>                                       <div className="bg-red-100 p-3 rounded-full mb-2 shadow-3xs">
+>                                         <Lock className="w-5 h-5 text-red-600" />
+3996,4003c3304,3306
+<                                       <p className="text-sm font-bold text-slate-800">
+<                                         {(lesson.contentType === "quiz" || lesson.contentType === "soal_mandiri") ? "Pengerjaan Belum Dibuka / Telah Selesai" : "Materi Dikunci"}
+<                                       </p>
+<                                       <p className="text-[10px] text-slate-600 mt-1 max-w-[280px] mx-auto font-medium leading-relaxed">
+<                                         {(lesson.contentType === "quiz" || lesson.contentType === "soal_mandiri") && quizLockReason
+<                                           ? quizLockReason
+<                                           : "Silakan ikuti instruksi Sensei di kelas."
+<                                         }
+---
+>                                       <p className="text-sm font-bold text-slate-800">Materi Dikunci</p>
+>                                       <p className="text-[10px] text-slate-500 mt-1 max-w-[200px] mx-auto">
+>                                         Silakan ikuti instruksi Sensei di kelas.
+4105,4136c3408,3412
+<                         <div className={`bg-gradient-to-b from-white to-slate-50 border border-slate-200 border-l-4 ${isAlumniClass ? "border-l-emerald-600" : "border-l-indigo-600"} rounded-3xl p-6 sm:p-8 shadow-xs space-y-6 text-left relative overflow-hidden`} id="lms-chapter-grading-panel">
+<                           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-100 pb-5">
+<                             <div className="space-y-1">
+<                               <div className="flex items-center gap-2 flex-wrap">
+<                                 <span className={`text-[8px] font-black uppercase px-2 py-0.5 rounded-md tracking-widest border inline-block select-none ${
+<                                   isAlumniClass ? "bg-emerald-50 text-emerald-700 border-emerald-150/70" : "bg-indigo-50 text-indigo-700 border-indigo-100"
+<                                 }`}>
+<                                   SENSEI PANEL
+<                                 </span>
+<                                 <h4 className="font-display font-black text-slate-900 text-sm tracking-tight">Panel Penilaian Siswa</h4>
+<                               </div>
+<                               <p className="text-[11px] text-slate-500 font-medium">
+<                                 Evaluasi kemampuan {assessmentSubject === "Matematika" ? "logika matematika industri & SSW" : "bahasa Jepang akademik & lisan"} ({assessmentSubject})
+<                               </p>
+<                             </div>
+<                             <div className="flex items-center gap-2">
+<                               <label className="text-[10px] font-black text-slate-400 uppercase tracking-wider hidden sm:inline">Pilih Siswa:</label>
+<                               <select
+<                                 value={targetStudent.id}
+<                                 onChange={(e) => setSelectedStudentId(e.target.value)}
+<                                 className={`text-[11px] font-black uppercase ${
+<                                   isAlumniClass 
+<                                     ? "bg-emerald-50 text-emerald-800 border-emerald-200 focus:ring-emerald-500" 
+<                                     : "bg-blue-50 text-blue-800 border-blue-200 focus:ring-blue-500"
+<                                 } px-3 py-1.5 rounded-xl border tracking-wider shadow-3xs focus:outline-none focus:ring-2 font-display cursor-pointer`}
+<                               >
+<                                 {filteredActiveStudents.map(st => (
+<                                   <option key={st.id} value={st.id}>
+<                                     👤 {st.name} ({st.id})
+<                                   </option>
+<                                 ))}
+<                               </select>
+---
+>                         <div className="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 shadow-sm space-y-6 text-left">
+>                           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 border-b border-slate-100 pb-4">
+>                             <div>
+>                               <h4 className="font-display font-black text-slate-850 text-xs sm:text-sm tracking-tight">Panel Penilaian Siswa ({assessmentSubject})</h4>
+>                               <p className="text-[10px] text-slate-400 font-medium">Penilaian kemampuan {assessmentSubject === "Matematika" ? "logika matematika industri & SSW" : "bahasa Jepang akademik & lisan"}</p>
+4137a3414,3416
+>                             <span className="text-[10px] font-bold uppercase bg-blue-50 text-blue-700 px-3 py-1 rounded border border-blue-150/80 tracking-wider">
+>                               SISWA: {targetStudent.name}
+>                             </span>
+4140,4177c3419,3430
+<                           {/* Class Roster Grid for Sensei to easily select/grade all students */}
+<                           <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4.5 space-y-3">
+<                             <div className="flex justify-between items-center flex-wrap gap-2">
+<                               <span className="text-[10px] font-black uppercase text-slate-500 tracking-wider flex items-center gap-1.5">
+<                                 <span>👥</span> ROSTER & STATUS NILAI KELAS: <strong className="text-slate-800">{studentClass}</strong>
+<                               </span>
+<                               <span className="text-[9px] font-bold text-slate-400">
+<                                 Klik nama siswa untuk memuat lembar penilaiannya
+<                               </span>
+<                             </div>
+<                             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
+<                               {filteredActiveStudents.map((st) => {
+<                                 const stAss = (chapterAssessments || []).find(
+<                                   c => c.studentId === st.id && c.chapterNumber === selectedBabNumber && (c.subject || "Bahasa Jepang") === assessmentSubject
+<                                 );
+<                                 const isCurrent = st.id === targetStudent.id;
+<                                 
+<                                 let statusColor = "bg-white text-slate-650 border-slate-200 hover:bg-slate-100/70";
+<                                 let badgeIcon = "⚪";
+<                                 if (stAss?.status === "Telah Dinilai") {
+<                                   statusColor = isCurrent 
+<                                     ? "bg-emerald-600 text-white border-emerald-600 font-black shadow-3xs"
+<                                     : "bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100/80 font-bold";
+<                                   badgeIcon = `⭐ ${stAss.score}`;
+<                                 } else if (stAss?.status === "Selesai Belajar") {
+<                                   statusColor = isCurrent
+<                                     ? "bg-amber-500 text-white border-amber-500 font-black shadow-3xs"
+<                                     : "bg-amber-50 text-amber-800 border-amber-250 hover:bg-amber-100 font-bold";
+<                                   badgeIcon = "📝 Ujian";
+<                                 } else {
+<                                   if (isCurrent) {
+<                                     statusColor = isAlumniClass 
+<                                       ? "bg-emerald-600 text-white border-emerald-600 font-black shadow-3xs" 
+<                                       : "bg-indigo-600 text-white border-indigo-600 font-black shadow-3xs";
+<                                   }
+<                                 }
+<                                 
+<                                 return (
+---
+>                           
+> 
+>                           <div className="space-y-5">
+>                             {/* Status Selector */}
+>                             <div className="space-y-1.5">
+>                               <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block">Status Pembelajaran</label>
+>                               <div className="grid grid-cols-3 gap-2">
+>                                 {[
+>                                   { key: "Belum Belajar", title: "Belum Mulai", desc: "Reset progress" },
+>                                   { key: "Selesai Belajar", title: "Belajar Mandiri", desc: "Nunggu tes lisan" },
+>                                   { key: "Telah Dinilai", title: "Telah Dinilai", desc: "Selesai dievaluasi" }
+>                                 ].map((option) => (
+4179c3432
+<                                     key={st.id}
+---
+>                                     key={option.key}
+4181,4182c3434,3443
+<                                     onClick={() => setSelectedStudentId(st.id)}
+<                                     className={`p-2.5 rounded-xl border text-left transition-all duration-200 text-xs flex flex-col gap-1 cursor-pointer hover:scale-[1.02] ${statusColor}`}
+---
+>                                     onClick={() => {
+>                                       if (isReadOnlyView) return;
+>                                       setGradingStatus(option.key as any);
+>                                     }}
+>                                     disabled={isReadOnlyView}
+>                                     className={`p-2.5 rounded-xl border text-center transition ${
+>                                       gradingStatus === option.key
+>                                         ? "bg-slate-900 text-white border-slate-900 shadow-3xs"
+>                                         : "bg-slate-50 hover:bg-slate-100 border-slate-200 text-slate-700"
+>                                     } ${isReadOnlyView ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}
+4184,4188c3445,3446
+<                                     <div className="flex justify-between items-center w-full gap-1">
+<                                       <span className="font-extrabold truncate max-w-[85px] sm:max-w-[110px]">{st.name}</span>
+<                                       <span className="text-[9px] opacity-90 shrink-0 font-mono font-bold">{badgeIcon}</span>
+<                                     </div>
+<                                     <span className="text-[9px] opacity-75 font-mono">{st.id}</span>
+---
+>                                     <p className="font-extrabold text-[10px]">{option.title}</p>
+>                                     <p className="text-[8px] opacity-70 leading-normal">{option.desc}</p>
+4190,4191c3448,3449
+<                                 );
+<                               })}
+---
+>                                 ))}
+>                               </div>
+4193d3450
+<                           </div>
+4195d3451
+<                           <div className="space-y-5">
+4197c3453,3454
+<                             <div className="space-y-5 animate-fade-in">
+---
+>                             {gradingStatus === "Telah Dinilai" && (
+>                               <div className="space-y-5 animate-fade-in">
+4199,4205c3456,3458
+<                                 <div className={`flex gap-3 p-4 rounded-2xl text-xs font-semibold leading-relaxed border ${
+<                                   isAlumniClass 
+<                                     ? "bg-emerald-50/60 text-emerald-800 border-emerald-100/80" 
+<                                     : "bg-indigo-50/60 text-indigo-800 border-indigo-100/80"
+<                                 }`}>
+<                                   <Info className={`h-4.5 w-4.5 shrink-0 mt-0.5 ${isAlumniClass ? "text-emerald-600" : "text-indigo-600"}`} />
+<                                   <span className="text-left">Nilai akan dihitung otomatis berdasarkan rata-rata dari ke-4 poin penilaian di bawah ini. Pastikan untuk memasukkan skor antara 0 hingga 100.</span>
+---
+>                                 <div className="flex gap-3 bg-blue-50/70 text-blue-800 p-3.5 rounded-xl text-xs font-semibold leading-relaxed border border-blue-100/65">
+>                                   <Info className="h-4 w-4 shrink-0 text-blue-600 mt-0.5" />
+>                                   <span>Nilai akan dihitung otomatis berdasarkan rata-rata dari ke-4 poin penilaian di bawah ini.</span>
+4385c3638
+<                                     <div className={`p-5 sm:p-6 rounded-2xl border flex flex-col gap-4 shadow-3xs ${
+---
+>                                     <div className={`p-4 sm:p-5 rounded-2xl border flex flex-col gap-4 ${
+4387,4388c3640,3641
+<                                         ? "bg-gradient-to-br from-emerald-50/40 to-teal-50/40 border-emerald-100" 
+<                                         : "bg-gradient-to-br from-indigo-50/40 to-blue-50/40 border-indigo-100"
+---
+>                                         ? "bg-emerald-50/40 border-emerald-100" 
+>                                         : "bg-blue-50/40 border-blue-100"
+4390,4399c3643,3646
+<                                       <div className="flex justify-between items-center flex-wrap gap-4">
+<                                         <div className="text-left">
+<                                           <h5 className="font-display font-black text-slate-800 text-sm tracking-tight">Nilai Rata-rata {assessmentSubject}</h5>
+<                                           <p className="text-[10px] text-slate-500 font-medium">Dihitung otomatis dari kalkulasi 4 poin penilaian di atas</p>
+<                                         </div>
+<                                         <div className={`px-4 py-2 rounded-xl border bg-white shadow-2xs text-right ${isAlumniClass ? "border-emerald-100" : "border-indigo-100"}`}>
+<                                           <span className={`font-mono font-black text-xl sm:text-2xl ${isAlumniClass ? "text-emerald-600" : "text-indigo-600"}`}>
+<                                             {computedAverage.toFixed(1)}
+<                                           </span>
+<                                           <span className="text-slate-400 text-xs font-black ml-1">/ 100</span>
+---
+>                                       <div className="flex justify-between items-center flex-wrap gap-2">
+>                                         <div>
+>                                           <h5 className="font-display font-black text-slate-800 text-xs sm:text-sm tracking-tight text-left">Nilai Rata-rata {assessmentSubject}</h5>
+>                                           <p className="text-[10px] text-slate-400 font-medium">Dihitung otomatis dari rata-rata ke 4 poin di atas</p>
+4400a3648,3650
+>                                         <span className={`font-mono font-black text-lg sm:text-2xl ${isAlumniClass ? "text-emerald-600" : "text-blue-600"}`}>
+>                                           {computedAverage.toFixed(1)} <span className="text-slate-400 text-xs font-bold">/ 100</span>
+>                                         </span>
+4403c3653
+<                                       <div className="space-y-2.5">
+---
+>                                       <div className="space-y-2">
+4405c3655
+<                                         <div className="relative w-full h-2 bg-slate-200/80 rounded-full overflow-visible">
+---
+>                                         <div className="relative w-full h-1.5 bg-slate-200 rounded-full">
+4408c3658
+<                                               isAlumniClass ? "bg-gradient-to-r from-emerald-500 to-teal-600 shadow-xs" : "bg-gradient-to-r from-indigo-500 to-blue-600 shadow-xs"
+---
+>                                               isAlumniClass ? "bg-emerald-600" : "bg-blue-600"
+4413,4414c3663,3664
+<                                             className={`absolute w-3.5 h-3.5 border-2 border-white rounded-full shadow -top-0.5 transition-all duration-300 ${
+<                                               isAlumniClass ? "bg-emerald-600" : "bg-indigo-600"
+---
+>                                             className={`absolute w-3 h-3 border-2 border-white rounded-full shadow -top-1 transition-all duration-300 ${
+>                                               isAlumniClass ? "bg-emerald-600" : "bg-blue-600"
+4416c3666
+<                                             style={{ left: `calc(${computedAverage}% - 7px)` }}
+---
+>                                             style={{ left: `calc(${computedAverage}% - 6px)` }}
+4421,4425c3671,3675
+<                                         <div className="flex justify-between text-[9px] text-slate-400 font-black font-mono uppercase tracking-wider">
+<                                           <span className={computedAverage < 60 ? (isAlumniClass ? "text-emerald-600" : "text-indigo-600") : ""}>0 (Kurang)</span>
+<                                           <span className={computedAverage >= 60 && computedAverage < 80 ? (isAlumniClass ? "text-emerald-600" : "text-indigo-600") : ""}>60 (Cukup)</span>
+<                                           <span className={computedAverage >= 80 && computedAverage < 90 ? (isAlumniClass ? "text-emerald-600" : "text-indigo-600") : ""}>80 (Baik)</span>
+<                                           <span className={computedAverage >= 90 ? (isAlumniClass ? "text-emerald-600" : "text-indigo-600") : ""}>100 (Sangat Baik)</span>
+---
+>                                         <div className="flex justify-between text-[9px] text-slate-400 font-black font-mono">
+>                                           <span>0 (Kurang)</span>
+>                                           <span>60 (Cukup)</span>
+>                                           <span>80 (Baik)</span>
+>                                           <span>100 (Sangat Baik)</span>
+4431a3682,3696
+>                             )}
+> 
+>                             {/* Feedback notes */}
+>                             <div className="space-y-1.5">
+>                               <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Catatan & Evaluasi Pengajar</label>
+>                               <textarea
+>                                 rows={3}
+>                                 placeholder={assessmentSubject === "Matematika" ? "Tulis catatan evaluasi logika dan ketelitian berhitung matematika (Contoh: Kuat di logika konversi berat, namun perlu latihan ekstra pada estimasi rasio penyusutan...)" : "Tulis catatan evaluasi lisan siswa (Contoh: Pelafalan Jikoshoukai lancar, Ojigi bungkuk badan perlu dilatih lagi...)"}
+>                                 value={gradingNotes}
+>                                 onChange={(e) => setGradingNotes(e.target.value)}
+>                                 className={`w-full bg-white border border-slate-200 rounded-xl p-3 text-xs text-slate-700 placeholder-slate-400 font-normal ${
+>                                   isAlumniClass ? "focus:outline-emerald-500" : "focus:outline-blue-500"
+>                                 }`}
+>                               />
+>                             </div>
+4433c3698
+<                              {/* Bottom section with auto-save hint and submit button */}
+---
+>                             {/* Bottom section with auto-save hint and submit button */}
+4846,4848c4111
+<                   <h3 className="font-display font-black text-lg text-slate-900">
+<                     {editingQuizId ? "Ubah Soal Kuis" : "Tambah Soal Kuis"}
+<                   </h3>
+---
+>                   <h3 className="font-display font-black text-lg text-slate-900">Tambah Soal Kuis</h3>
+4853,4863c4116
+<                 onClick={() => {
+<                   setIsQuizFormOpen(false);
+<                   setEditingQuizId(null);
+<                   setNewQuiz({
+<                     subject: "Bahasa Jepang",
+<                     questionType: "pilihan_ganda",
+<                     question: "",
+<                     options: ["", "", "", ""],
+<                     correctAnswerIndex: 0
+<                   });
+<                 }}
+---
+>                 onClick={() => setIsQuizFormOpen(false)}
+4909c4162
+<                   {(newQuiz.options || ["", "", "", ""]).map((opt, i) => (
+---
+>                   {newQuiz.options.map((opt, i) => (
+4922c4175
+<                           const newOpts = [...(newQuiz.options || ["", "", "", ""])];
+---
+>                           const newOpts = [...newQuiz.options];
+4940,4950c4193,4196
+<                   if (editingQuizId) {
+<                     const payload = { ...newQuiz, id: editingQuizId };
+<                     if (onUpdateState) {
+<                       await onUpdateState('lmsQuizzes', 'update', payload);
+<                     }
+<                   } else {
+<                     const id = "QZ-" + Math.floor(Math.random() * 10000);
+<                     const payload = { ...newQuiz, id };
+<                     if (onUpdateState) {
+<                       await onUpdateState('lmsQuizzes', 'add', payload);
+<                     }
+---
+>                   const id = "QZ-" + Math.floor(Math.random() * 10000);
+>                   const payload = { ...newQuiz, id };
+>                   if (onUpdateState) {
+>                     await onUpdateState('lmsQuizzes', 'add', payload);
+4953d4198
+<                   setEditingQuizId(null);
+4964c4209
+<                 {editingQuizId ? "Perbarui Soal Kuis" : "Simpan Soal Kuis"}
+---
+>                 Simpan Soal Kuis
+4971,4972c4216,4217
+<       {isLessonFormOpen && createPortal(
+<         <div className="fixed inset-0 z-[999] bg-slate-950/65 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto animate-fade-in">
+---
+>       {isLessonFormOpen && (
+>         <div className="fixed inset-0 z-50 bg-slate-950/65 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto animate-fade-in">
+4983,4985c4228
+<                     {selectedLessonToEdit 
+<                       ? `Ubah ${lessonContentType === "quiz" ? "Quiz" : lessonContentType === "soal_mandiri" ? "Tugas" : "Materi"}: ${selectedLessonToEdit.id}` 
+<                       : `Tambah ${lessonContentType === "quiz" ? "Quiz" : lessonContentType === "soal_mandiri" ? "Tugas" : "Materi"} Baru`}
+---
+>                     {selectedLessonToEdit ? `Ubah Materi: ${selectedLessonToEdit.id}` : `Tambah Materi Baru`}
+5050c4293
+<                   <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">{lessonContentType === "quiz" ? "Judul Quiz" : lessonContentType === "soal_mandiri" ? "Judul Tugas" : "Nama / Judul Materi"}</label>
+---
+>                   <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Nama / Judul Materi</label>
+5077d4319
+<               {lessonContentType !== "quiz" && lessonContentType !== "soal_mandiri" && (
+5080c4322
+<                 <div className="grid grid-cols-4 md:grid-cols-5 gap-2">
+---
+>                 <div className="grid grid-cols-5 gap-2">
+5103d4344
+<               )}
+5194c4435
+<                         <span className="text-[9px] text-amber-600 font-bold block mt-1 animate-pulse">⚡ Mengunggah berkas PDF... Mohon tunggu...</span>
+---
+>                         <span className="text-[9px] text-amber-600 font-bold block mt-1 animate-pulse">⚡ Mengunggah & mengompres dokumen PDF... Mohon tunggu...</span>
+5196c4437
+<                         <span className="text-[9px] text-slate-500 block mt-1">Pilih file PDF dari perangkat Anda (Maksimal ~800KB). Untuk file yang lebih besar, harap gunakan opsi "Tautan URL Eksternal" dan masukkan link Google Drive publik Anda.</span>
+---
+>                         <span className="text-[9px] text-slate-400 block mt-1">Pilih file PDF dari perangkat Anda. File berukuran besar mungkin tidak didukung.</span>
+5269,5665c4510,4521
+<               {lessonContentType === "quiz" && (
+<                 <div className="animate-fade-in space-y-4">
+<                   {/* Waktu Mulai & Selesai dengan Keterangan Tenggang Waktu */}
+<                   <div className="grid grid-cols-2 gap-3.5">
+<                     <div>
+<                       <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+<                         <Calendar className="w-3 h-3 text-slate-400" /> Waktu Mulai
+<                       </label>
+<                       <input
+<                         type="datetime-local"
+<                         value={lessonQuizStartTime}
+<                         onChange={(e) => setLessonQuizStartTime(e.target.value)}
+<                         className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 transition-all cursor-pointer hover:border-slate-300"
+<                       />
+<                     </div>
+<                     <div>
+<                       <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+<                         <Clock className="w-3 h-3 text-slate-400" /> Waktu Selesai
+<                       </label>
+<                       <input
+<                         type="datetime-local"
+<                         value={lessonQuizEndTime}
+<                         onChange={(e) => setLessonQuizEndTime(e.target.value)}
+<                         className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 transition-all cursor-pointer hover:border-slate-300"
+<                       />
+<                     </div>
+<                   </div>
+< 
+<                   {/* Keterangan Tenggang Waktu */}
+<                   {(() => {
+<                     if (!lessonQuizStartTime && !lessonQuizEndTime) return null;
+<                     const start = lessonQuizStartTime;
+<                     const end = lessonQuizEndTime;
+<                     if (start && end) {
+<                       const startTime = new Date(start).getTime();
+<                       const endTime = new Date(end).getTime();
+<                       if (isNaN(startTime) || isNaN(endTime)) return null;
+<                       if (endTime < startTime) {
+<                         return (
+<                           <div className="p-3 bg-rose-50 border border-rose-100 text-rose-700 text-[11px] font-bold rounded-xl flex items-center gap-2 animate-fade-in shadow-3xs">
+<                             <AlertCircle className="w-4 h-4 text-rose-500 shrink-0" />
+<                             <span>Waktu Selesai tidak boleh sebelum Waktu Mulai</span>
+<                           </div>
+<                         );
+<                       }
+<                       const diffMs = endTime - startTime;
+<                       const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+<                       const diffHours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+<                       const diffMins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+<                       
+<                       let durationStr = "";
+<                       if (diffDays > 0) durationStr += `${diffDays} Hari `;
+<                       if (diffHours > 0) durationStr += `${diffHours} Jam `;
+<                       if (diffMins > 0) durationStr += `${diffMins} Menit`;
+<                       if (!durationStr) durationStr = "0 Menit";
+< 
+<                       return (
+<                         <div className="p-3 bg-emerald-50 border border-emerald-100 text-emerald-800 text-[11px] font-bold rounded-xl flex items-center gap-2 animate-fade-in shadow-3xs">
+<                           <Clock className="w-4 h-4 text-emerald-600 shrink-0" />
+<                           <span>Tenggang Waktu Pengerjaan: {durationStr}</span>
+<                         </div>
+<                       );
+<                     }
+<                     if (end) {
+<                       const endTime = new Date(end).getTime();
+<                       const now = Date.now();
+<                       if (isNaN(endTime)) return null;
+<                       const diffMs = endTime - now;
+<                       if (diffMs < 0) {
+<                         return (
+<                           <div className="p-3 bg-amber-50 border border-amber-100 text-amber-700 text-[11px] font-bold rounded-xl flex items-center gap-2 animate-fade-in shadow-3xs">
+<                             <AlertCircle className="w-4 h-4 text-amber-500 shrink-0" />
+<                             <span>Batas waktu pengerjaan telah lewat</span>
+<                           </div>
+<                         );
+<                       }
+<                       const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+<                       const diffHours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+<                       const diffMins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+< 
+<                       let durationStr = "";
+<                       if (diffDays > 0) durationStr += `${diffDays} Hari `;
+<                       if (diffHours > 0) durationStr += `${diffHours} Jam `;
+<                       if (diffMins > 0) durationStr += `${diffMins} Menit`;
+< 
+<                       return (
+<                         <div className="p-3 bg-indigo-50 border border-indigo-100 text-indigo-800 text-[11px] font-bold rounded-xl flex items-center gap-2 animate-fade-in shadow-3xs">
+<                           <Info className="w-4 h-4 text-indigo-600 shrink-0" />
+<                           <span>Sisa waktu pengerjaan dari sekarang: {durationStr}</span>
+<                         </div>
+<                       );
+<                     }
+<                     return null;
+<                   })()}
+<                 
+<                   <div className="flex items-center justify-between">
+<                     <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">Daftar Pertanyaan Quiz</label>
+<                     <div className="flex gap-2">
+<                       <button 
+<                         type="button"
+<                         onClick={() => setLessonQuizQuestions([...lessonQuizQuestions, { id: Date.now().toString(), type: "multiple_choice", question: "", options: ["", "", "", ""], correctAnswerIndex: 0 }])}
+<                         className="bg-emerald-100 text-emerald-700 hover:bg-emerald-200 px-2 py-1 rounded text-[10px] font-bold flex items-center gap-1 transition cursor-pointer"
+<                       >
+<                         <Plus className="w-3 h-3" /> Pilihan Ganda
+<                       </button>
+<                       <button 
+<                         type="button"
+<                         onClick={() => setLessonQuizQuestions([...lessonQuizQuestions, { id: Date.now().toString(), type: "essay", question: "" }])}
+<                         className="bg-amber-100 text-amber-700 hover:bg-amber-200 px-2 py-1 rounded text-[10px] font-bold flex items-center gap-1 transition cursor-pointer"
+<                       >
+<                         <Plus className="w-3 h-3" /> Essay
+<                       </button>
+<                     </div>
+<                   </div>
+<                   
+<                   {lessonQuizQuestions.length === 0 ? (
+<                     <div className="bg-slate-50 border border-dashed border-slate-200 rounded-xl p-6 text-center">
+<                       <p className="text-xs text-slate-500 font-medium">Belum ada pertanyaan. Klik tombol di atas untuk mulai membuat quiz.</p>
+<                     </div>
+<                   ) : (
+<                     <div className="space-y-4 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+<                       {lessonQuizQuestions.map((q, qIndex) => (
+<                         <div key={q.id} className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3 relative group">
+<                           <button 
+<                             type="button"
+<                             onClick={() => {
+<                               const updated = [...lessonQuizQuestions];
+<                               updated.splice(qIndex, 1);
+<                               setLessonQuizQuestions(updated);
+<                             }}
+<                             className="absolute top-3 right-3 text-rose-500 hover:text-rose-700 opacity-50 hover:opacity-100 transition cursor-pointer"
+<                           >
+<                             <Trash2 className="w-4 h-4" />
+<                           </button>
+<                           <div>
+<                             <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1 flex items-center gap-2">
+<                               <span>Pertanyaan {qIndex + 1}</span>
+<                               <span className="px-1.5 py-0.5 bg-slate-200 text-slate-600 rounded text-[8px]">{q.type === 'essay' ? 'Essay' : 'Pilihan Ganda'}</span>
+<                             </label>
+<                             <textarea
+<                               rows={2}
+<                               value={q.question}
+<                               onChange={(e) => {
+<                                 const updated = [...lessonQuizQuestions];
+<                                 updated[qIndex].question = e.target.value;
+<                                 setLessonQuizQuestions(updated);
+<                               }}
+<                               className="w-full bg-white border border-slate-200 rounded-lg p-2 text-xs focus:outline-emerald-600"
+<                               placeholder="Masukkan pertanyaan di sini..."
+<                             />
+<                             
+<                             <div className="mt-2 flex flex-col items-start gap-2">
+<                               <button
+<                                 type="button"
+<                                 onClick={() => setActiveQuestionMediaModal(qIndex)}
+<                                 className="text-[10px] text-indigo-600 font-bold flex items-center gap-1 hover:text-indigo-800 transition"
+<                               >
+<                                 <Paperclip className="w-3 h-3" /> 
+<                                 {q.mediaUrl ? "Ubah Media/Lampiran" : "Sematkan Media/Lampiran"}
+<                               </button>
+<                               
+<                               {q.mediaUrl && (
+<                                 <div className="mt-1.5 w-full space-y-2 animate-fade-in">
+<                                   <div className="text-[10px] text-slate-500 flex items-center gap-2 bg-slate-100 px-2 py-1 rounded-md border border-slate-200 w-full">
+<                                     {q.mediaType === 'video' ? <Video className="w-3 h-3 shrink-0" /> : q.mediaType === 'pdf' ? <FileText className="w-3 h-3 shrink-0" /> : <Image className="w-3 h-3 shrink-0" />}
+<                                     <span className="truncate flex-1 max-w-[200px]" title={q.mediaUrl}>{q.mediaUrl}</span>
+<                                     <button type="button" onClick={() => {
+<                                       const updated = [...lessonQuizQuestions];
+<                                       delete updated[qIndex].mediaUrl;
+<                                       delete updated[qIndex].mediaType;
+<                                       setLessonQuizQuestions(updated);
+<                                     }} className="text-rose-500 hover:text-rose-700 shrink-0 font-bold">Hapus</button>
+<                                   </div>
+<                                   <div className="bg-white border border-slate-200 rounded-lg p-2 flex justify-center max-h-40 overflow-hidden w-full">
+<                                     {q.mediaType === 'video' ? (
+<                                       <video src={q.mediaUrl} controls className="max-h-36 rounded object-contain w-full" />
+<                                     ) : q.mediaType === 'pdf' ? (
+<                                       <div className="flex flex-col items-center justify-center p-3 text-slate-500 gap-1 w-full">
+<                                         <FileText className="w-6 h-6 text-rose-500 animate-pulse" />
+<                                         <span className="text-[9px] font-bold">PDF Tersemat</span>
+<                                         <a href={q.mediaUrl} target="_blank" rel="noopener noreferrer" className="text-[8px] text-indigo-600 underline font-semibold">Buka PDF</a>
+<                                       </div>
+<                                     ) : (
+<                                       <img src={q.mediaUrl} alt="Pratinjau" className="max-h-36 rounded object-contain" referrerPolicy="no-referrer" />
+<                                     )}
+<                                   </div>
+<                                 </div>
+<                               )}
+<                             </div>
+<                           </div>
+<                           
+<                           {q.type !== 'essay' && (
+<                           <div className="space-y-2">
+<                             <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider flex justify-between items-center">
+<                               <span>Pilihan Jawaban</span>
+<                               <span className="text-[8px] text-emerald-600 normal-case bg-emerald-50 px-1.5 py-0.5 rounded">*Pilih bulatan untuk menentukan jawaban benar</span>
+<                             </label>
+<                             {(q.options || ["","","",""]).map((opt, oIndex) => (
+<                               <div key={oIndex} className="flex items-center gap-2">
+<                                 <input
+<                                   type="radio"
+<                                   name={`correct-${q.id}`}
+<                                   checked={q.correctAnswerIndex === oIndex}
+<                                   onChange={() => {
+<                                     const updated = [...lessonQuizQuestions];
+<                                     updated[qIndex].correctAnswerIndex = oIndex;
+<                                     setLessonQuizQuestions(updated);
+<                                   }}
+<                                   className="text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+<                                 />
+<                                 <span className="text-[10px] font-bold text-slate-500">{String.fromCharCode(65 + oIndex)}.</span>
+<                                 <input
+<                                   type="text"
+<                                   value={opt}
+<                                   onChange={(e) => {
+<                                     const updated = [...lessonQuizQuestions];
+<                                     if (!updated[qIndex].options) updated[qIndex].options = ["","","",""];
+<                                     updated[qIndex].options[oIndex] = e.target.value;
+<                                     setLessonQuizQuestions(updated);
+<                                   }}
+<                                   className={`w-full bg-white border rounded-lg p-1.5 text-xs focus:outline-emerald-600 ${q.correctAnswerIndex === oIndex ? 'border-emerald-500 ring-1 ring-emerald-500' : 'border-slate-200'}`}
+<                                   placeholder={`Pilihan ${String.fromCharCode(65 + oIndex)}`}
+<                                 />
+<                               </div>
+<                             ))}
+<                           </div>
+<                           )}
+<                         </div>
+<                       ))}
+<                     </div>
+<                   )}
+<                 </div>
+<               )}
+<               {lessonContentType === "soal_mandiri" && (
+<                 <div className="animate-fade-in space-y-4">
+<                   {/* Waktu Mulai & Selesai dengan Keterangan Tenggang Waktu */}
+<                   <div className="grid grid-cols-2 gap-3.5">
+<                     <div>
+<                       <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+<                         <Calendar className="w-3 h-3 text-slate-400" /> Waktu Mulai
+<                       </label>
+<                       <input
+<                         type="datetime-local"
+<                         value={lessonQuizStartTime}
+<                         onChange={(e) => setLessonQuizStartTime(e.target.value)}
+<                         className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 transition-all cursor-pointer hover:border-slate-300"
+<                       />
+<                     </div>
+<                     <div>
+<                       <label className="block text-[10px] font-extrabold text-slate-500 uppercase tracking-wider mb-1.5 flex items-center gap-1.5">
+<                         <Clock className="w-3 h-3 text-slate-400" /> Waktu Selesai
+<                       </label>
+<                       <input
+<                         type="datetime-local"
+<                         value={lessonQuizEndTime}
+<                         onChange={(e) => setLessonQuizEndTime(e.target.value)}
+<                         className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-600 transition-all cursor-pointer hover:border-slate-300"
+<                       />
+<                     </div>
+<                   </div>
+< 
+<                   {/* Keterangan Tenggang Waktu */}
+<                   {(() => {
+<                     if (!lessonQuizStartTime && !lessonQuizEndTime) return null;
+<                     const start = lessonQuizStartTime;
+<                     const end = lessonQuizEndTime;
+<                     if (start && end) {
+<                       const startTime = new Date(start).getTime();
+<                       const endTime = new Date(end).getTime();
+<                       if (isNaN(startTime) || isNaN(endTime)) return null;
+<                       if (endTime < startTime) {
+<                         return (
+<                           <div className="p-3 bg-rose-50 border border-rose-100 text-rose-700 text-[11px] font-bold rounded-xl flex items-center gap-2 animate-fade-in shadow-3xs">
+<                             <AlertCircle className="w-4 h-4 text-rose-500 shrink-0" />
+<                             <span>Waktu Selesai tidak boleh sebelum Waktu Mulai</span>
+<                           </div>
+<                         );
+<                       }
+<                       const diffMs = endTime - startTime;
+<                       const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+<                       const diffHours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+<                       const diffMins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+<                       
+<                       let durationStr = "";
+<                       if (diffDays > 0) durationStr += `${diffDays} Hari `;
+<                       if (diffHours > 0) durationStr += `${diffHours} Jam `;
+<                       if (diffMins > 0) durationStr += `${diffMins} Menit`;
+<                       if (!durationStr) durationStr = "0 Menit";
+< 
+<                       return (
+<                         <div className="p-3 bg-emerald-50 border border-emerald-100 text-emerald-800 text-[11px] font-bold rounded-xl flex items-center gap-2 animate-fade-in shadow-3xs">
+<                           <Clock className="w-4 h-4 text-emerald-600 shrink-0" />
+<                           <span>Tenggang Waktu Pengerjaan: {durationStr}</span>
+<                         </div>
+<                       );
+<                     }
+<                     if (end) {
+<                       const endTime = new Date(end).getTime();
+<                       const now = Date.now();
+<                       if (isNaN(endTime)) return null;
+<                       const diffMs = endTime - now;
+<                       if (diffMs < 0) {
+<                         return (
+<                           <div className="p-3 bg-amber-50 border border-amber-100 text-amber-700 text-[11px] font-bold rounded-xl flex items-center gap-2 animate-fade-in shadow-3xs">
+<                             <AlertCircle className="w-4 h-4 text-amber-500 shrink-0" />
+<                             <span>Batas waktu pengerjaan telah lewat</span>
+<                           </div>
+<                         );
+<                       }
+<                       const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+<                       const diffHours = Math.floor((diffMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+<                       const diffMins = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60));
+< 
+<                       let durationStr = "";
+<                       if (diffDays > 0) durationStr += `${diffDays} Hari `;
+<                       if (diffHours > 0) durationStr += `${diffHours} Jam `;
+<                       if (diffMins > 0) durationStr += `${diffMins} Menit`;
+< 
+<                       return (
+<                         <div className="p-3 bg-indigo-50 border border-indigo-100 text-indigo-800 text-[11px] font-bold rounded-xl flex items-center gap-2 animate-fade-in shadow-3xs">
+<                           <Info className="w-4 h-4 text-indigo-600 shrink-0" />
+<                           <span>Sisa waktu pengerjaan dari sekarang: {durationStr}</span>
+<                         </div>
+<                       );
+<                     }
+<                     return null;
+<                   })()}
+<                   <div>
+<                     <div className="flex items-center justify-between mb-1.5">
+<                       <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">File/Semat Penugasan (Image/PDF)</label>
+<                     </div>
+<                   <div className="space-y-2">
+<                     <div className="flex flex-col gap-2 relative">
+<                       <input
+<                         type="file"
+<                         accept="image/*,.pdf"
+<                         onChange={async (e) => {
+<                           const file = e.target.files?.[0];
+<                           if (file) {
+<                             try {
+<                               const btn = document.getElementById("soal-upload-btn");
+<                               if (btn) btn.innerHTML = '<span class="animate-spin inline-block mr-2">⏳</span> Mengunggah...';
+<                               const url = await uploadFileToFirebase(file, "lms_soal_mandiri");
+<                               setLessonSoalUrl(url);
+<                               if (btn) btn.innerHTML = 'File Berhasil Diunggah ✅';
+<                             } catch (err) {
+<                               console.error("Upload error", err);
+<                               alert("Gagal mengunggah file.");
+<                               const btn = document.getElementById("soal-upload-btn");
+<                               if (btn) btn.innerHTML = 'Unggah File Tugas (PDF/Image)';
+<                             }
+<                           }
+<                         }}
+<                         className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+<                         title="Upload file tugas (PDF atau Gambar)"
+<                       />
+<                       <button type="button" id="soal-upload-btn" className="w-full bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs py-3 px-4 rounded-xl border border-slate-300 border-dashed transition flex items-center justify-center gap-2 cursor-pointer">
+<                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
+<                         Unggah File Tugas (PDF/Image)
+<                       </button>
+<                     </div>
+<                     <div className="text-center text-[10px] text-slate-400 font-bold">ATAU</div>
+<                     <input
+<                       type="url"
+<                       placeholder="Contoh: https://docs.google.com/... (Semat Link)"
+<                       value={lessonSoalUrl}
+<                       onChange={(e) => setLessonSoalUrl(e.target.value)}
+<                       className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-normal text-slate-700 focus:outline-emerald-600"
+<                     />
+<                     
+<                     {lessonSoalUrl && (
+<                       <div className="mt-3 bg-white border border-slate-200 rounded-xl p-3 flex flex-col items-center justify-center min-h-[100px] max-h-60 overflow-hidden relative group">
+<                         <button
+<                           type="button"
+<                           onClick={() => setLessonSoalUrl("")}
+<                           className="absolute top-2 right-2 p-1 bg-rose-50 hover:bg-rose-100 text-rose-500 rounded-lg transition"
+<                           title="Hapus Lampiran"
+<                         >
+<                           <Trash2 className="w-4 h-4" />
+<                         </button>
+<                         
+<                         {(lessonSoalUrl.toLowerCase().includes(".pdf") || lessonSoalUrl.includes("pdf") || lessonSoalUrl.startsWith("data:application/pdf")) ? (
+<                           <div className="flex flex-col items-center justify-center text-slate-500 gap-1 py-4">
+<                             <FileText className="w-10 h-10 text-rose-500 animate-pulse" />
+<                             <span className="text-xs font-bold">File PDF Tugas Tersemat</span>
+<                             <a href={lessonSoalUrl} target="_blank" rel="noopener noreferrer" className="text-[10px] text-emerald-600 underline font-semibold mt-1">Buka PDF di Tab Baru</a>
+<                           </div>
+<                         ) : (
+<                           <img src={lessonSoalUrl} alt="Pratinjau Soal Tugas" className="max-h-48 rounded-lg object-contain" referrerPolicy="no-referrer" />
+<                         )}
+<                       </div>
+<                     )}
+<                   </div>
+<                 </div>
+<                 </div>
+<               )}
+< 
+---
+>               <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
+>                 <input
+>                   type="checkbox"
+>                   id="lessonIsLockedCheckbox"
+>                   checked={lessonIsLocked}
+>                   onChange={(e) => setLessonIsLocked(e.target.checked)}
+>                   className="rounded text-emerald-600 focus:ring-emerald-500"
+>                 />
+>                 <label htmlFor="lessonIsLockedCheckbox" className="text-xs text-slate-700 font-bold flex items-center gap-1.5 cursor-pointer">
+>                   Kunci Materi Ini (Hanya dapat dibuka oleh Sensei/Admin/VIP)
+>                 </label>
+>               </div>
+5701c4557
+<                       <span>Simpan {lessonContentType === "quiz" ? "Quiz" : lessonContentType === "soal_mandiri" ? "Tugas" : "Materi"}</span>
+---
+>                       <span>Simpan Materi</span>
+5707,5801d4562
+<           </div>
+<         </div>
+<       , document.body)}
+<       {/* Question Media Modal */}
+<       {activeQuestionMediaModal !== null && createPortal(
+<         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
+<           <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl border border-slate-100 overflow-hidden animate-fade-in">
+<             <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+<               <h4 className="font-bold text-slate-800 text-sm">Sematkan Media/Lampiran</h4>
+<               <button 
+<                 onClick={() => setActiveQuestionMediaModal(null)}
+<                 className="text-slate-400 hover:text-slate-600 transition"
+<               >
+<                 <X className="w-5 h-5" />
+<               </button>
+<             </div>
+<             <div className="p-5 space-y-4">
+<               <div>
+<                 <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Jenis Media</label>
+<                 <div className="flex gap-2">
+<                   <button
+<                     type="button"
+<                     onClick={() => {
+<                       const updated = [...lessonQuizQuestions];
+<                       updated[activeQuestionMediaModal].mediaType = 'image';
+<                       setLessonQuizQuestions(updated);
+<                     }}
+<                     className={`flex-1 py-2 px-3 text-[10px] font-bold rounded-lg border flex flex-col items-center justify-center gap-1 transition ${lessonQuizQuestions[activeQuestionMediaModal]?.mediaType === 'image' || !lessonQuizQuestions[activeQuestionMediaModal]?.mediaType ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-slate-50 border-slate-200 text-slate-600'}`}
+<                   >
+<                     <Image className="w-4 h-4" />
+<                     Gambar
+<                   </button>
+<                   <button
+<                     type="button"
+<                     onClick={() => {
+<                       const updated = [...lessonQuizQuestions];
+<                       updated[activeQuestionMediaModal].mediaType = 'video';
+<                       setLessonQuizQuestions(updated);
+<                     }}
+<                     className={`flex-1 py-2 px-3 text-[10px] font-bold rounded-lg border flex flex-col items-center justify-center gap-1 transition ${lessonQuizQuestions[activeQuestionMediaModal]?.mediaType === 'video' ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-slate-50 border-slate-200 text-slate-600'}`}
+<                   >
+<                     <Video className="w-4 h-4" />
+<                     Video
+<                   </button>
+<                   <button
+<                     type="button"
+<                     onClick={() => {
+<                       const updated = [...lessonQuizQuestions];
+<                       updated[activeQuestionMediaModal].mediaType = 'pdf';
+<                       setLessonQuizQuestions(updated);
+<                     }}
+<                     className={`flex-1 py-2 px-3 text-[10px] font-bold rounded-lg border flex flex-col items-center justify-center gap-1 transition ${lessonQuizQuestions[activeQuestionMediaModal]?.mediaType === 'pdf' ? 'bg-indigo-50 border-indigo-200 text-indigo-700' : 'bg-slate-50 border-slate-200 text-slate-600'}`}
+<                   >
+<                     <FileText className="w-4 h-4" />
+<                     PDF
+<                   </button>
+<                 </div>
+<               </div>
+<               
+<               <div>
+<                 <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Upload File</label>
+<                 <div className="relative">
+<                   <input
+<                     type="file"
+<                     accept={lessonQuizQuestions[activeQuestionMediaModal]?.mediaType === 'video' ? 'video/*' : lessonQuizQuestions[activeQuestionMediaModal]?.mediaType === 'pdf' ? '.pdf' : 'image/*'}
+<                     onChange={async (e) => {
+<                       const file = e.target.files?.[0];
+<                       if (file) {
+<                         try {
+<                           const btn = document.getElementById("qm-upload-btn");
+<                           if (btn) btn.innerHTML = '<span class="animate-spin inline-block mr-2">⏳</span> Mengunggah...';
+<                           const url = await uploadFileToFirebase(file, "lms_quiz_media");
+<                           const updated = [...lessonQuizQuestions];
+<                           updated[activeQuestionMediaModal].mediaUrl = url;
+<                           setLessonQuizQuestions(updated);
+<                           if (btn) btn.innerHTML = 'Unggah File ' + (lessonQuizQuestions[activeQuestionMediaModal]?.mediaType === 'video' ? 'Video' : lessonQuizQuestions[activeQuestionMediaModal]?.mediaType === 'pdf' ? 'PDF' : 'Gambar');
+<                         } catch (err) {
+<                           console.error("Upload error", err);
+<                           alert("Gagal mengunggah file.");
+<                           const btn = document.getElementById("qm-upload-btn");
+<                           if (btn) btn.innerHTML = 'Unggah File ' + (lessonQuizQuestions[activeQuestionMediaModal]?.mediaType === 'video' ? 'Video' : lessonQuizQuestions[activeQuestionMediaModal]?.mediaType === 'pdf' ? 'PDF' : 'Gambar');
+<                         }
+<                       }
+<                     }}
+<                     className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+<                     title="Upload file"
+<                   />
+<                   <button type="button" id="qm-upload-btn" className="w-full bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold text-[10px] py-3 px-4 rounded-xl border border-slate-300 border-dashed transition flex items-center justify-center gap-2 cursor-pointer">
+<                     <Upload className="w-3 h-3" />
+<                     Unggah File {lessonQuizQuestions[activeQuestionMediaModal]?.mediaType === 'video' ? 'Video' : lessonQuizQuestions[activeQuestionMediaModal]?.mediaType === 'pdf' ? 'PDF' : 'Gambar'}
+<                   </button>
+<                 </div>
+<               </div>
+< 
+<               <div className="text-center text-[10px] font-bold text-slate-400">ATAU</div>
+5803,5844d4563
+<               <div>
+<                 <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Tautan URL (Link Semat)</label>
+<                 <input
+<                   type="url"
+<                   placeholder="https://..."
+<                   value={lessonQuizQuestions[activeQuestionMediaModal]?.mediaUrl || ""}
+<                   onChange={(e) => {
+<                     const updated = [...lessonQuizQuestions];
+<                     updated[activeQuestionMediaModal].mediaUrl = e.target.value;
+<                     setLessonQuizQuestions(updated);
+<                   }}
+<                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-normal text-slate-700 focus:outline-indigo-500"
+<                 />
+<               </div>
+< 
+<               {lessonQuizQuestions[activeQuestionMediaModal]?.mediaUrl && (
+<                 <div className="space-y-1.5 pt-2 border-t border-slate-100 animate-fade-in">
+<                   <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">Pratinjau Media</label>
+<                   <div className="bg-slate-50 border border-slate-200 rounded-xl p-2 flex justify-center max-h-48 overflow-hidden w-full">
+<                     {lessonQuizQuestions[activeQuestionMediaModal]?.mediaType === 'video' ? (
+<                       <video src={lessonQuizQuestions[activeQuestionMediaModal]?.mediaUrl} controls className="max-h-44 rounded-lg object-contain w-full" />
+<                     ) : lessonQuizQuestions[activeQuestionMediaModal]?.mediaType === 'pdf' ? (
+<                       <div className="flex flex-col items-center justify-center p-3 text-slate-500 gap-1 w-full">
+<                         <FileText className="w-8 h-8 text-rose-500 animate-pulse" />
+<                         <span className="text-[10px] font-bold">PDF Tersemat</span>
+<                         <a href={lessonQuizQuestions[activeQuestionMediaModal]?.mediaUrl} target="_blank" rel="noopener noreferrer" className="text-[9px] text-indigo-600 underline font-semibold">Buka PDF di Tab Baru</a>
+<                       </div>
+<                     ) : (
+<                       <img src={lessonQuizQuestions[activeQuestionMediaModal]?.mediaUrl} alt="Pratinjau" className="max-h-44 rounded-lg object-contain" referrerPolicy="no-referrer" />
+<                     )}
+<                   </div>
+<                 </div>
+<               )}
+<             </div>
+<             <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end">
+<               <button 
+<                 onClick={() => setActiveQuestionMediaModal(null)}
+<                 className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs px-4 py-2 rounded-lg transition"
+<               >
+<                 Selesai
+<               </button>
+<             </div>
+5847c4566
+<       , document.body)}
+---
+>       )}
+5947,5959d4665
+<       )}
+< 
+<       {deleteConfirmation.isOpen && createPortal(
+<         <ConfirmModal
+<           isOpen={deleteConfirmation.isOpen}
+<           onClose={() => setDeleteConfirmation(prev => ({ ...prev, isOpen: false }))}
+<           onConfirm={deleteConfirmation.onConfirm}
+<           title={deleteConfirmation.title}
+<           message={deleteConfirmation.message}
+<           confirmLabel="Ya, Hapus"
+<           cancelLabel="Batal"
+<         />,
+<         document.body

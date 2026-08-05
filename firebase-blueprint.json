@@ -1,0 +1,283 @@
+{
+  "entities": {
+    "RegisteredStudent": {
+      "title": "Registered Student",
+      "description": "Student who has registered but hasn't been approved yet.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "phone": { "type": "string" },
+        "birthDate": { "type": "string" },
+        "education": { "type": "string" },
+        "program": { "type": "string" },
+        "japaneseLevel": { "type": "string" },
+        "date": { "type": "string" },
+        "status": { "type": "string", "enum": ["Pending", "Disetujui", "Ditolak"] },
+        "paymentStatus": { "type": "string" },
+        "paymentMethod": { "type": "string" },
+        "proofOfPayment": { "type": "string" },
+        "docAkta": { "type": "string" },
+        "docFoto": { "type": "string" },
+        "docIjazahSD": { "type": "string" },
+        "docIjazahSMP": { "type": "string" },
+        "docIjazahSMA": { "type": "string" },
+        "docKK": { "type": "string" },
+        "docKTP": { "type": "string" },
+        "docTranskip": { "type": "string" }
+      },
+      "required": ["id", "name", "email", "phone"]
+    },
+    "ActiveStudent": {
+      "title": "Active Student",
+      "description": "Student actively studying or in Japan.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "batch": { "type": "string" },
+        "class": { "type": "string" },
+        "status": { "type": "string" },
+        "prefecture": { "type": "string" },
+        "city": { "type": "string" },
+        "company": { "type": "string" },
+        "latitude": { "type": "number" },
+        "longitude": { "type": "number" }
+      },
+      "required": ["id", "name", "status"]
+    },
+    "Attendance": {
+      "title": "Attendance",
+      "description": "Attendance record for a student.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "studentId": { "type": "string" },
+        "studentName": { "type": "string" },
+        "date": { "type": "string" },
+        "status": { "type": "string" },
+        "subject": { "type": "string" },
+        "notes": { "type": "string" }
+      },
+      "required": ["id", "studentId", "date", "status"]
+    },
+    "Payment": {
+      "title": "Payment",
+      "description": "Payment records.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "studentName": { "type": "string" },
+        "category": { "type": "string" },
+        "amount": { "type": "number" },
+        "date": { "type": "string" },
+        "status": { "type": "string" },
+        "paymentMethod": { "type": "string" },
+        "proofOfPayment": { "type": "string" }
+      },
+      "required": ["id", "studentName", "amount", "status"]
+    },
+    "Inventory": {
+      "title": "Inventory",
+      "description": "Inventory records.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "itemName": { "type": "string" },
+        "code": { "type": "string" },
+        "amount": { "type": "number" },
+        "condition": { "type": "string" },
+        "location": { "type": "string" }
+      },
+      "required": ["id", "itemName", "amount"]
+    },
+    "Taxes": {
+      "title": "Taxes",
+      "description": "Tax records.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "monthString": { "type": "string" },
+        "totalRevenue": { "type": "number" },
+        "totalExpenses": { "type": "number" },
+        "taxRate": { "type": "number" },
+        "taxAmount": { "type": "number" },
+        "status": { "type": "string" },
+        "sptFile": { "type": "string" },
+        "financialReportFile": { "type": "string" },
+        "notes": { "type": "string" }
+      },
+      "required": ["id", "monthString", "totalRevenue"]
+    },
+    "LMSLesson": {
+      "title": "LMS Lesson",
+      "description": "Lessons available in the LMS.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "subject": { "type": "string" },
+        "title": { "type": "string" },
+        "japaneseTitle": { "type": "string" },
+        "difficulty": { "type": "string" },
+        "contentType": { "type": "string" },
+        "content": { "type": "string" },
+        "videoUrl": { "type": "string" },
+        "slidesUrl": { "type": "string" },
+        "bookUrl": { "type": "string" },
+        "targetClass": { "type": "string" }
+      },
+      "required": ["id", "title"]
+    },
+    "ChapterAssessment": {
+      "title": "Chapter Assessment",
+      "description": "Student assessment records.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "studentId": { "type": "string" },
+        "studentName": { "type": "string" },
+        "chapterNumber": { "type": "number" },
+        "title": { "type": "string" },
+        "status": { "type": "string" },
+        "score": { "type": "number" },
+        "grade": { "type": "string" },
+        "notes": { "type": "string" },
+        "assessedBy": { "type": "string" },
+        "assessedDate": { "type": "string" }
+      },
+      "required": ["id", "studentId", "chapterNumber"]
+    },
+    "JobOrder": {
+      "title": "Job Order",
+      "description": "Job opportunities in Japan.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "noReg": { "type": "string" },
+        "partnerName": { "type": "string" },
+        "occupation": { "type": "string" },
+        "location": { "type": "string" },
+        "salary": { "type": "string" },
+        "overtime": { "type": "string" },
+        "allowance": { "type": "string" },
+        "contractDuration": { "type": "string" },
+        "status": { "type": "string" },
+        "recommendations": { "type": "array" }
+      },
+      "required": ["id", "partnerName", "occupation"]
+    },
+    "SystemUser": {
+      "title": "System User",
+      "description": "System admin or teacher.",
+      "type": "object",
+      "properties": {
+        "username": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "role": { "type": "string" },
+        "studentId": { "type": "string" }
+      },
+      "required": ["username", "email", "role"]
+    },
+    "Event": {
+      "title": "Event",
+      "description": "Upcoming events.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "date": { "type": "string" },
+        "desc": { "type": "string" },
+        "targets": { "type": "array" }
+      },
+      "required": ["id", "title"]
+    },
+    "Customization": {
+      "title": "Customization",
+      "description": "Global config options.",
+      "type": "object",
+      "properties": {
+        "logoText": { "type": "string" },
+        "logoIcon": { "type": "string" },
+        "themeColor": { "type": "string" },
+        "logoUrl": { "type": "string" },
+        "faviconUrl": { "type": "string" },
+        "paymentAccounts": { "type": "array" },
+        "slides": { "type": "array" },
+        "landingConfig": { "type": "object" }
+      }
+    },
+    "LMSComment": {
+      "title": "LMS Comment",
+      "description": "Comments and discussions on LMS lessons.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "lessonId": { "type": "string" },
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "userRole": { "type": "string" },
+        "userAvatar": { "type": "string" },
+        "content": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "parentId": { "type": "string" }
+      },
+      "required": ["id", "lessonId", "userId", "userName", "content", "createdAt"]
+    }
+  },
+  "firestore": {
+    "registeredStudents": {
+      "schema": { "$ref": "#/entities/RegisteredStudent" },
+      "description": "Store all registered students."
+    },
+    "activeStudents": {
+      "schema": { "$ref": "#/entities/ActiveStudent" },
+      "description": "Store studying or deployed students."
+    },
+    "attendance": {
+      "schema": { "$ref": "#/entities/Attendance" },
+      "description": "Store attendance lists."
+    },
+    "payments": {
+      "schema": { "$ref": "#/entities/Payment" },
+      "description": "Store business payments."
+    },
+    "inventory": {
+      "schema": { "$ref": "#/entities/Inventory" },
+      "description": "Store inventory assets."
+    },
+    "taxes": {
+      "schema": { "$ref": "#/entities/Taxes" },
+      "description": "Store tax filings."
+    },
+    "lmsLessons": {
+      "schema": { "$ref": "#/entities/LMSLesson" },
+      "description": "LMS Lessons available to students."
+    },
+    "chapterAssessments": {
+      "schema": { "$ref": "#/entities/ChapterAssessment" },
+      "description": "Assessments per chapter."
+    },
+    "jobOrders": {
+      "schema": { "$ref": "#/entities/JobOrder" },
+      "description": "Job openings."
+    },
+    "users": {
+        "schema": { "$ref": "#/entities/SystemUser" },
+        "description": "Platform users."
+    },
+    "events": {
+        "schema": { "$ref": "#/entities/Event" },
+        "description": "Platform events."
+    },
+    "customization": {
+        "schema": { "$ref": "#/entities/Customization" },
+        "description": "Customizable UI components."
+    },
+    "lmsComments": {
+        "schema": { "$ref": "#/entities/LMSComment" },
+        "description": "LMS lesson comment/discussion threads."
+    }
+  }
+}
