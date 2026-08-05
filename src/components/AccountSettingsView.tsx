@@ -1736,7 +1736,7 @@ export default function AccountSettingsView({
                           {/* Indikator Status Akun & Diferensiasi Sumber Data */}
                           {(() => {
                             const hasNoEmail = !user.email || user.email.trim() === "" || user.email.includes("no-email") || user.email.includes("dummy") || user.email.includes("placeholder");
-                            const hasNoPassword = !user.password || user.password.trim() === "" || user.password === "adminadmin" || user.password === "123456" || user.password === "••••••••";
+                            const hasNoPassword = !user.hasPassword;
                             const isProfileInput = hasNoEmail || hasNoPassword || user.username.startsWith("temp_") || user.username.startsWith("placeholder_") || (user.role === "Alumni" && hasNoEmail);
                             
                             return (

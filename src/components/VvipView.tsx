@@ -173,6 +173,7 @@ export default function VvipView({
   const [expandedLessonId, setExpandedLessonId] = useState<string | null>(null);
   const [selectedClassTab, setSelectedClassTab] = useState<string>("Semua");
   const [selectedSenseiDetail, setSelectedSenseiDetail] = useState<any | null>(null);
+  const [selectedHrAttendanceStaff, setSelectedHrAttendanceStaff] = useState<any | null>(null);
   const [selectedStudentDetail, setSelectedStudentDetail] = useState<
     any | null
   >(null);
@@ -4308,18 +4309,23 @@ export default function VvipView({
             <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200"> 
               <h4 className="font-bold text-slate-800 text-sm mb-3">Kehadiran (Absensi) Pengajar & Staf</h4> 
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"> 
-                {(systemState.users || []).filter(u => ["Pengajar", "Admin", "Admin Biasa", "Admin Super", "Staf"].includes(u.role)).map(u => { 
-                  const hadir = (systemState.logs || []).filter(l => l.type === "PRESENSI_PENGAJAR" && (l.user === u.name || l.user === u.username)).length; 
-                  return ( 
-                    <div key={u.username} className="p-4 bg-slate-50 border border-slate-100 rounded-xl flex items-center justify-between"> 
-                      <div> 
-                        <p className="font-bold text-xs text-slate-800">{u.name}</p> 
-                        <p className="text-[10px] text-slate-500 mt-1">Kehadiran Bulan Ini</p> 
-                      </div> 
-                      <span className="font-black text-emerald-600 text-xl">{hadir} Hari</span> 
-                    </div> 
-                  ); 
-                })} 
+                {(systemState.users || []).filter(u => ["Pengajar", "Admin", "Admin Biasa", "Admin Super", "Staf"].includes(u.role)).map(u => {
+                  const hadir = (systemState.logs || []).filter(l => l.type === "PRESENSI_PENGAJAR" && (l.user === u.name || l.user === u.username)).length;
+                  return (
+                    <button
+                      type="button"
+                      key={u.username}
+                      onClick={() => setSelectedHrAttendanceStaff(u)}
+                      className="p-4 bg-slate-50 hover:bg-slate-100 border border-slate-100 rounded-xl flex items-center justify-between text-left transition cursor-pointer"
+                    >
+                      <div>
+                        <p className="font-bold text-xs text-slate-800">{u.name}</p>
+                        <p className="text-[10px] text-slate-500 mt-1">Kehadiran Bulan Ini · <span className="text-indigo-500 font-bold">Lihat Detail</span></p>
+                      </div>
+                      <span className="font-black text-emerald-600 text-xl">{hadir} Hari</span>
+                    </button>
+                  );
+                })}
               </div> 
             </div> 
             <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200"> 
@@ -4369,6 +4375,108 @@ export default function VvipView({
         )}
       </section>
       )}
+
+      {/* HR ATTENDANCE DETAIL MODAL */}
+      {selectedHrAttendanceStaff && (() => {
+        const staff = selectedHrAttendanceStaff;
+        const staffLogs = (systemState.logs || [])
+          .filter(l => l.type === "PRESENSI_PENGAJAR" && (l.user === staff.name || l.user === staff.username))
+          .sort((a, b) => new Date(b.timestamp || b.time || 0).getTime() - new Date(a.timestamp || a.time || 0).getTime());
+
+        const getPunctuality = (log: any): string | null => {
+          if (!(log.description || "").includes("MASUK")) return null;
+          const match = (log.description || "").match(/MASUK\s*-\s*(\d{2}):(\d{2}):(\d{2})/i);
+          let hrVal: number;
+          let minVal: number;
+          if (match) {
+            hrVal = parseInt(match[1]);
+            minVal = parseInt(match[2]);
+          } else {
+            const d = new Date(log.timestamp || log.time);
+            hrVal = d.getHours();
+            minVal = d.getMinutes();
+          }
+          return hrVal > 8 || (hrVal === 8 && minVal > 0) ? "Terlambat" : "Tepat Waktu";
+        };
+
+        return createPortal(
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto overflow-x-hidden bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+            <div className="bg-white rounded-3xl max-w-2xl w-full max-h-[90vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden text-left animate-in zoom-in-95 duration-150">
+              <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
+                <div>
+                  <h3 className="font-bold text-slate-800 flex items-center gap-2">
+                    <span className="bg-emerald-100 text-emerald-700 p-1.5 rounded-lg">
+                      <Clock className="h-4 w-4" />
+                    </span>
+                    Detail Kehadiran: {staff.name}
+                  </h3>
+                  <p className="text-[10px] text-slate-500 font-mono mt-1 ml-9">
+                    @{staff.username} · {staffLogs.length} Log Presensi Tercatat
+                  </p>
+                </div>
+                <button
+                  onClick={() => setSelectedHrAttendanceStaff(null)}
+                  className="p-2 hover:bg-slate-200 rounded-full transition cursor-pointer text-slate-400 hover:text-slate-600"
+                >
+                  <span className="text-xl font-bold">×</span>
+                </button>
+              </div>
+              <div className="p-6 overflow-y-auto space-y-3">
+                {staffLogs.length === 0 && (
+                  <p className="text-xs text-slate-500 italic text-center py-8">Belum ada riwayat presensi tercatat untuk staf ini.</p>
+                )}
+                {staffLogs.map((log, idx) => {
+                  const status = getPunctuality(log);
+                  const ts = log.timestamp || log.time;
+                  const dateObj = ts ? new Date(ts) : null;
+                  return (
+                    <div key={log.id || idx} className="p-3.5 bg-slate-50 border border-slate-100 rounded-xl">
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-[10px] font-black text-slate-700 bg-white border border-slate-200 px-2 py-1 rounded-lg font-mono">
+                            {dateObj ? dateObj.toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" }) : "-"}
+                          </span>
+                          <span className="text-[10px] font-bold text-slate-500 font-mono">
+                            🕐 {dateObj ? dateObj.toLocaleTimeString("id-ID") : "-"}
+                          </span>
+                          {log.clockType && (
+                            <span className="text-[9px] font-bold uppercase bg-indigo-50 text-indigo-700 border border-indigo-100 px-2 py-0.5 rounded-full">
+                              {log.clockType}
+                            </span>
+                          )}
+                          {log.workMode && (
+                            <span className="text-[9px] font-bold uppercase bg-purple-50 text-purple-700 border border-purple-100 px-2 py-0.5 rounded-full">
+                              {log.workMode === "ZOOM" ? "E-Learning Zoom" : "Regular Luring"}
+                            </span>
+                          )}
+                        </div>
+                        {status && (
+                          <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${status === "Tepat Waktu" ? "bg-emerald-100 text-emerald-800 border border-emerald-200" : "bg-amber-100 text-amber-800 border border-amber-200"}`}>
+                            {status}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[10.5px] text-slate-600 mt-2">{log.description || "Hadir"}</p>
+                      {log.location && (
+                        <p className="text-[9.5px] text-slate-400 mt-1 font-mono">📍 {log.location}</p>
+                      )}
+                      {log.notes && (
+                        <p className="text-[9.5px] text-slate-500 mt-1 italic">Catatan: {log.notes}</p>
+                      )}
+                      {log.photoUrl && (
+                        <a href={log.photoUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 mt-2 text-[9.5px] font-bold text-indigo-600 hover:text-indigo-800">
+                          📸 Lihat Foto Bukti Presensi
+                        </a>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>,
+          document.body
+        );
+      })()}
 
       {/* STUDENT PROFILE & DETAILED RAPOR MODAL (VVIP ACCESS ENGINE) */}
 
