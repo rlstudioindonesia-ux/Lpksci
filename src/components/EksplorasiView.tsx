@@ -56,33 +56,7 @@ export default function EksplorasiView({
     }
   };
 
-  const defaultGallery = [
-    {
-      title: "Kegiatan LPK SCI",
-      image: "https://images.unsplash.com/photo-1490730141103-6cac27aaab94?auto=format&fit=crop&w=800&q=80",
-      tag: "PELATIHAN",
-    },
-    {
-      title: "PRA - MCU",
-      image: "https://images.unsplash.com/photo-1516549655169-df83a0774514?auto=format&fit=crop&w=800&q=80",
-      tag: "KESEHATAN",
-    },
-    {
-      title: "GIAT BIMTEK - DISNAKER KAB.PATI",
-      image: "https://images.unsplash.com/photo-1531482615713-2afd69097998?auto=format&fit=crop&w=800&q=80",
-      tag: "BIMTEK",
-    },
-    {
-      title: "PEMBERANGKATAN SISWA MAGANG",
-      image: "https://images.unsplash.com/photo-1436491865332-7a61a109cc05?auto=format&fit=crop&w=800&q=80",
-      tag: "KEBERANGKATAN",
-    },
-  ];
-
-  const galleryItems =
-    (systemState?.customization?.gallery && systemState.customization.gallery.length > 0)
-      ? systemState.customization.gallery
-      : defaultGallery;
+  const galleryItems = systemState?.galleries || [];
 
   return (
     <div className="space-y-8 animate-fade-in text-left">

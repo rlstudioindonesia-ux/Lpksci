@@ -2061,42 +2061,13 @@ export default function MobileDashboardView({
                 Mengabadikan momen-momen penting dari asrama LPK Pati hingga touchdown di berbagai kota besar Jepang.
               </p>
 
+              {(systemState.galleries || []).length === 0 && (
+                <div className="text-center py-10 text-slate-400 text-xs italic border border-dashed rounded-2xl">
+                  Belum ada foto galeri.
+                </div>
+              )}
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                {((systemState.customization?.gallery && systemState.customization.gallery.length > 0)
-                  ? systemState.customization.gallery
-                  : ((systemState.galleries && systemState.galleries.length > 0) ? systemState.galleries : [
-                      {
-                        title: "Kegiatan LPK SCI",
-                        image: "https://images.unsplash.com/photo-1490730141103-6cac27aaab94?auto=format&fit=crop&w=800&q=80",
-                        tag: "PELATIHAN",
-                      },
-                      {
-                        title: "PRA - MCU",
-                        image: "https://images.unsplash.com/photo-1516549655169-df83a0774514?auto=format&fit=crop&w=800&q=80",
-                        tag: "KESEHATAN",
-                      },
-                      {
-                        title: "GIAT BIMTEK - DISNAKER KAB.PATI",
-                        image: "https://images.unsplash.com/photo-1531482615713-2afd69097998?auto=format&fit=crop&w=800&q=80",
-                        tag: "BIMTEK",
-                      },
-                      {
-                        title: "PEMBERANGKATAN SISWA MAGANG",
-                        image: "https://images.unsplash.com/photo-1436491865332-7a61a109cc05?auto=format&fit=crop&w=800&q=80",
-                        tag: "KEBERANGKATAN",
-                      },
-                      {
-                        title: "TEST BAHASA JEPANG",
-                        image: "https://images.unsplash.com/photo-1434030216411-0b793f4b4173?auto=format&fit=crop&w=800&q=80",
-                        tag: "UJIAN",
-                      },
-                      {
-                        title: "Touchdown Tokyo",
-                        image: "https://images.unsplash.com/photo-1542051841857-5f90071e7989?auto=format&fit=crop&w=800&q=80",
-                        tag: "JEPANG",
-                      },
-                    ]
-                )).map((item: any, idx) => (
+                {(systemState.galleries || []).map((item: any, idx) => (
                   <div
                     key={idx}
                     onClick={() => setSelectedGalleryImage({

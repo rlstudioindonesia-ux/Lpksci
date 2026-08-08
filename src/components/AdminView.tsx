@@ -632,9 +632,7 @@ export default function AdminView({
       });
       setCustGallery((prev) => {
         if (prev.length > 0) return prev;
-        if (systemState.galleries && systemState.galleries.length > 0) return systemState.galleries;
-        if (systemState.customization?.gallery && systemState.customization.gallery.length > 0) return systemState.customization.gallery;
-        return [];
+        return systemState.galleries || [];
       });
       setCustRunningText(
         (prev) => prev || systemState.customization?.runningText || "",
