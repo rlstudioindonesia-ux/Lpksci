@@ -159,9 +159,9 @@ export default function Navbar({
             </div>
           </div>
 
-          {/* Desktop Navigation Tabs - Beautiful Compact Pills */}
+          {/* Desktop Navigation Tabs - Beautiful Compact Pills (public marketing nav only) */}
+          {activeTab === "frontend" && (
           <nav className={`hidden md:flex items-center gap-1 p-1 rounded-2xl flex-nowrap max-w-[50%] lg:max-w-[65%] xl:max-w-none ${isOverlay ? 'bg-transparent border-none' : 'bg-slate-50 border border-slate-200/60'}`}>
-            {activeTab === "frontend" ? (
               <>
                 <button
                   onClick={() => scrollToSection("hero")}
@@ -262,11 +262,17 @@ export default function Navbar({
                   </button>
                 )}
               </>
-            ) : (
+          </nav>
+          )}
+
+          {/* Right cluster: in-app portal menu + VVIP room + account, grouped together (not floating center) */}
+          <div className="flex items-center gap-2.5">
+            {activeTab !== "frontend" && currentUser && (
+            <div className="hidden md:flex items-center gap-2">
               <>
                 {currentUser && (
-                  <div 
-                    className="relative group" 
+                  <div
+                    className="relative group"
                     onMouseEnter={() => setIsPortalMenuOpen(true)}
                     onMouseLeave={() => setIsPortalMenuOpen(false)}
                   >
@@ -421,11 +427,10 @@ export default function Navbar({
                   </button>
                 )}
               </>
+            </div>
             )}
-          </nav>
 
-          {/* User Account / Auth trigger */}
-          <div className="flex items-center gap-2.5">
+            {/* User Account / Auth trigger */}
             {currentUser ? (
               <div className={`flex items-center gap-2 border p-1 rounded-2xl ${isOverlay ? 'bg-black/20 backdrop-blur-sm border-white/10' : 'bg-slate-50 border-slate-200'}`}>
                 <div className="hidden sm:flex flex-col text-right pl-2">

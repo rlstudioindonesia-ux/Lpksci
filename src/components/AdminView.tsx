@@ -1815,8 +1815,8 @@ export default function AdminView({
               </div>
             </div>
 
-            {/* Flip Card Container: Filter Kelas & Status Switcher */}
-            <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-950 p-5 sm:p-8 rounded-[2rem] sm:rounded-[2.5rem] text-white flex flex-col xl:flex-row xl:items-center justify-between gap-6 sm:gap-8 shadow-2xl relative overflow-hidden border border-white/10 group">
+            {/* Statistik & Filter Kelas: full-width scrollable table */}
+            <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-950 p-5 sm:p-8 rounded-[2rem] sm:rounded-[2.5rem] text-white shadow-2xl relative overflow-hidden border border-white/10 group">
               <div className="absolute top-0 right-0 w-48 h-48 bg-indigo-500/10 rounded-full blur-3xl -mr-20 -mt-20 pointer-events-none" />
               <div className="absolute bottom-0 left-0 w-48 h-48 bg-blue-500/10 rounded-full blur-3xl -ml-20 -mb-20 pointer-events-none" />
 
@@ -1834,8 +1834,8 @@ export default function AdminView({
                     </h4>
                     <p className="text-slate-400 text-[10px] sm:text-[11px] font-medium leading-relaxed max-w-lg">
                       {statCardMode === "kelas"
-                        ? "Klik kartu kelas di bawah untuk memfilter siswa. Rincian status progres tiap kelas ditampilkan langsung pada kartu."
-                        : `Menampilkan jumlah siswa per tahap status progres ${filterClass !== "All" ? `khusus untuk Kelas ${filterClass}` : "seluruh kelas"}. Klik kartu status untuk memfilter.`}
+                        ? "Geser tabel ke samping di layar kecil. Klik baris kelas untuk memfilter siswa di tabel bawah."
+                        : `Menampilkan jumlah siswa per tahap status progres ${filterClass !== "All" ? `khusus untuk Kelas ${filterClass}` : "seluruh kelas"}. Klik baris status untuk memfilter.`}
                     </p>
                   </div>
 
@@ -1886,9 +1886,43 @@ export default function AdminView({
                   </div>
                 </div>
 
-                {/* Page Content View - Page 1: Kelas Grid */}
+                {/* Insight Sektor Sukses - compact full-width banner (moved out of the side rail) */}
+                <div className="flex flex-col sm:flex-row sm:items-center gap-3 bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl px-4 py-3.5">
+                  <div className="flex items-center gap-2.5 shrink-0">
+                    <div className="h-8 w-8 rounded-xl bg-emerald-500/15 text-emerald-400 flex items-center justify-center shrink-0">
+                      <Award className="h-4 w-4" />
+                    </div>
+                    <span className="font-black uppercase tracking-widest text-[10px] text-emerald-400 whitespace-nowrap">
+                      Insight Sektor Sukses
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-300 leading-relaxed font-medium flex-1">
+                    Trend data menunjukkan peningkatan serapan alumni pada sektor <strong>Caregiver</strong> dan <strong>Manufaktur</strong> di wilayah Kanto & Kansai.
+                  </p>
+                  <div className="w-full sm:w-28 shrink-0">
+                    <div className="h-1.5 w-full bg-white/10 rounded-full overflow-hidden">
+                      <div className="h-full bg-emerald-400 w-3/4 rounded-full shadow-[0_0_10px_rgba(52,211,153,0.5)]" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Page Content View - Page 1: Kelas Table (horizontally scrollable) */}
                 {statCardMode === "kelas" && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 animate-fade-in">
+                  <div className="overflow-x-auto rounded-2xl border border-white/10 animate-fade-in -mx-1 px-1 sm:mx-0 sm:px-0">
+                  <table className="w-full min-w-[720px] text-left border-collapse">
+                    <thead>
+                      <tr className="bg-white/5 text-[9px] sm:text-[10px] uppercase tracking-wider text-slate-400 font-black">
+                        <th className="px-3 sm:px-4 py-3">Kelas</th>
+                        <th className="px-3 py-3 text-center">Siswa</th>
+                        <th className="px-3 py-3">🇮🇩 Belajar</th>
+                        <th className="px-3 py-3">💼 Job</th>
+                        <th className="px-3 py-3">📋 JFT/JLPT</th>
+                        <th className="px-3 py-3">📘 Diklat SO</th>
+                        <th className="px-3 py-3">🇯🇵 Jepang</th>
+                        <th className="px-3 py-3 text-right">Aksi</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5">
                     {Array.from<string>(
                       new Set(
                         systemState.activeStudents
@@ -1926,8 +1960,17 @@ export default function AdminView({
                         ];
                         const colorClass = colors[idx % colors.length];
 
+                        const Badge = ({ count, label, cls }: { count: number; label: string; cls: string }) =>
+                          count > 0 ? (
+                            <span className={`inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded-md ${cls}`}>
+                              {count}
+                            </span>
+                          ) : (
+                            <span className="text-slate-600 text-[10px]">-</span>
+                          );
+
                         return (
-                          <div
+                          <tr
                             key={className}
                             onClick={() => {
                               if (siswaTab === "aktif" && filterClass === className) {
@@ -1942,67 +1985,36 @@ export default function AdminView({
                                 tableElem.scrollIntoView({ behavior: "smooth" });
                               }
                             }}
-                            className={`cursor-pointer transition-all duration-300 p-3.5 rounded-2xl flex flex-col justify-between gap-2 shadow-lg group relative overflow-hidden ${
-                              isSelected
-                                ? "bg-indigo-600/40 border-2 border-indigo-400 ring-4 ring-indigo-500/30 scale-102 shadow-indigo-500/30"
-                                : "bg-white/5 backdrop-blur-md border border-white/10 hover:bg-white/15 hover:border-white/30 hover:scale-101"
-                            }`}
                             title={`Klik untuk memfilter daftar siswa Kelas ${className}`}
+                            className={`cursor-pointer transition-colors group ${
+                              isSelected ? "bg-indigo-600/30" : "hover:bg-white/5"
+                            }`}
                           >
-                            <div className="flex items-center justify-between gap-1">
-                              <span className={`${colorClass} font-black uppercase tracking-[0.1em] text-[10px] truncate`}>
+                            <td className="px-3 sm:px-4 py-3 whitespace-nowrap">
+                              <span className={`${colorClass} font-black uppercase tracking-wide text-[11px]`}>
                                 Kelas {className}
                               </span>
                               {isSelected && (
-                                <span className="text-[8px] font-black bg-indigo-500 text-white px-1.5 py-0.5 rounded-full flex items-center gap-0.5 shadow-xs shrink-0">
+                                <span className="ml-2 text-[8px] font-black bg-indigo-500 text-white px-1.5 py-0.5 rounded-full">
                                   ✓ Filter
                                 </span>
                               )}
-                            </div>
-
-                            <div className="flex items-baseline gap-1.5">
-                              <span className="text-2xl font-black text-white">
-                                {classStudents.length}
+                            </td>
+                            <td className="px-3 py-3 text-center font-black text-white text-sm">
+                              {classStudents.length}
+                            </td>
+                            <td className="px-3 py-3"><Badge count={belajarCount} label="Belajar" cls="bg-blue-500/20 text-blue-300" /></td>
+                            <td className="px-3 py-3"><Badge count={jobCount} label="Job" cls="bg-amber-500/20 text-amber-300" /></td>
+                            <td className="px-3 py-3"><Badge count={jftCount} label="JFT" cls="bg-sky-500/20 text-sky-300" /></td>
+                            <td className="px-3 py-3"><Badge count={diklatCount} label="Diklat" cls="bg-indigo-500/20 text-indigo-300" /></td>
+                            <td className="px-3 py-3"><Badge count={jepangCount} label="Jepang" cls="bg-emerald-500/20 text-emerald-300" /></td>
+                            <td className="px-3 py-3 text-right">
+                              <span className="inline-flex items-center gap-1 text-[9px] font-bold text-slate-400 group-hover:text-indigo-300 transition-colors whitespace-nowrap">
+                                {isSelected ? "Reset" : "Lihat"}
+                                <ChevronRight className="h-3 w-3 group-hover:translate-x-0.5 transition-transform" />
                               </span>
-                              <span className="text-[10px] text-slate-400 font-bold">
-                                Siswa
-                              </span>
-                            </div>
-
-                            {/* Detailed Status Breakdown Badges Inside Card */}
-                            <div className="flex flex-wrap gap-1 pt-2 border-t border-white/10">
-                              {belajarCount > 0 && (
-                                <span className="bg-blue-500/20 text-blue-300 text-[9px] font-bold px-1.5 py-0.5 rounded-md flex items-center gap-1" title="Belajar">
-                                  🇮🇩 {belajarCount} Belajar
-                                </span>
-                              )}
-                              {jobCount > 0 && (
-                                <span className="bg-amber-500/20 text-amber-300 text-[9px] font-bold px-1.5 py-0.5 rounded-md flex items-center gap-1" title="On Proges Job">
-                                  💼 {jobCount} Job
-                                </span>
-                              )}
-                              {jftCount > 0 && (
-                                <span className="bg-sky-500/20 text-sky-300 text-[9px] font-bold px-1.5 py-0.5 rounded-md flex items-center gap-1" title="On Progres JFT/JLPT/SSW">
-                                  📋 {jftCount} JFT
-                                </span>
-                              )}
-                              {diklatCount > 0 && (
-                                <span className="bg-indigo-500/20 text-indigo-300 text-[9px] font-bold px-1.5 py-0.5 rounded-md flex items-center gap-1" title="Diklat SO">
-                                  📘 {diklatCount} Diklat
-                                </span>
-                              )}
-                              {jepangCount > 0 && (
-                                <span className="bg-emerald-500/20 text-emerald-300 text-[9px] font-bold px-1.5 py-0.5 rounded-md flex items-center gap-1" title="Lulus / Di Jepang">
-                                  🇯🇵 {jepangCount} Jepang
-                                </span>
-                              )}
-                            </div>
-
-                            <div className="text-[9px] font-bold text-slate-400 group-hover:text-indigo-300 flex items-center justify-between transition-colors pt-1">
-                              <span>{isSelected ? "Reset Filter" : "Tampilkan Siswa"}</span>
-                              <ChevronRight className="h-3 w-3 group-hover:translate-x-0.5 transition-transform" />
-                            </div>
-                          </div>
+                            </td>
+                          </tr>
                         );
                       })}
 
@@ -2012,7 +2024,7 @@ export default function AdminView({
                       const isSelected = siswaTab === "alumni";
                       const alumniStudents = systemState.activeStudents.filter((o: any) => o.status === "Di Jepang" && isStudentRoleOnly(o));
                       return (
-                        <div
+                        <tr
                           onClick={() => {
                             if (siswaTab === "alumni") {
                               setSiswaTab("aktif");
@@ -2027,51 +2039,53 @@ export default function AdminView({
                               tableElem.scrollIntoView({ behavior: "smooth" });
                             }
                           }}
-                          className={`cursor-pointer transition-all duration-300 p-3.5 rounded-2xl flex flex-col justify-between gap-2 shadow-lg group relative overflow-hidden ${
-                            isSelected
-                              ? "bg-emerald-600/40 border-2 border-emerald-400 ring-4 ring-emerald-500/30 scale-102 shadow-emerald-500/30"
-                              : "bg-emerald-400/10 border border-emerald-400/20 hover:bg-emerald-400/20 hover:border-emerald-400/40 hover:scale-101"
-                          }`}
                           title="Klik untuk memfilter daftar alumni di Jepang"
+                          className={`cursor-pointer transition-colors group ${
+                            isSelected ? "bg-emerald-600/30" : "bg-emerald-400/5 hover:bg-emerald-400/15"
+                          }`}
                         >
-                          <div className="flex items-center justify-between gap-1">
-                            <span className="text-emerald-400 font-black uppercase tracking-[0.1em] text-[10px]">
+                          <td className="px-3 sm:px-4 py-3 whitespace-nowrap">
+                            <span className="text-emerald-400 font-black uppercase tracking-wide text-[11px]">
                               Alumni (Di Jepang)
                             </span>
                             {isSelected && (
-                              <span className="text-[8px] font-black bg-emerald-500 text-white px-1.5 py-0.5 rounded-full flex items-center gap-0.5 shadow-xs shrink-0">
+                              <span className="ml-2 text-[8px] font-black bg-emerald-500 text-white px-1.5 py-0.5 rounded-full">
                                 ✓ Filter
                               </span>
                             )}
-                          </div>
-                          <div className="flex items-baseline gap-1.5">
-                            <span className="text-2xl font-black text-emerald-400">
-                              {alumniStudents.length}
+                          </td>
+                          <td className="px-3 py-3 text-center font-black text-emerald-400 text-sm">
+                            {alumniStudents.length}
+                          </td>
+                          <td className="px-3 py-3 text-emerald-300 text-[9px] font-bold" colSpan={5}>
+                            🇯🇵 {alumniStudents.length} Bekerja di Jepang
+                          </td>
+                          <td className="px-3 py-3 text-right">
+                            <span className="inline-flex items-center gap-1 text-[9px] font-bold text-emerald-400/80 group-hover:text-emerald-300 transition-colors whitespace-nowrap">
+                              {isSelected ? "Reset" : "Lihat"}
+                              <ChevronRight className="h-3 w-3 group-hover:translate-x-0.5 transition-transform" />
                             </span>
-                            <span className="text-[10px] text-emerald-600 font-bold">
-                              Siswa
-                            </span>
-                          </div>
-
-                          <div className="flex flex-wrap gap-1 pt-2 border-t border-emerald-500/20">
-                            <span className="bg-emerald-500/20 text-emerald-300 text-[9px] font-bold px-1.5 py-0.5 rounded-md flex items-center gap-1">
-                              🇯🇵 {alumniStudents.length} Bekerja di Jepang
-                            </span>
-                          </div>
-
-                          <div className="text-[9px] font-bold text-emerald-400/80 group-hover:text-emerald-300 flex items-center justify-between transition-colors pt-1">
-                            <span>{isSelected ? "Reset Filter" : "Tampilkan Alumni"}</span>
-                            <ChevronRight className="h-3 w-3 group-hover:translate-x-0.5 transition-transform" />
-                          </div>
-                        </div>
+                          </td>
+                        </tr>
                       );
                     })()}
+                    </tbody>
+                  </table>
                   </div>
                 )}
 
-                {/* Page Content View - Page 2: Status & Lokasi Grid */}
+                {/* Page Content View - Page 2: Status & Lokasi Table */}
                 {statCardMode === "status" && (
-                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 sm:gap-3 animate-fade-in">
+                  <div className="overflow-x-auto rounded-2xl border border-white/10 animate-fade-in -mx-1 px-1 sm:mx-0 sm:px-0">
+                  <table className="w-full min-w-[420px] text-left border-collapse">
+                    <thead>
+                      <tr className="bg-white/5 text-[9px] sm:text-[10px] uppercase tracking-wider text-slate-400 font-black">
+                        <th className="px-3 sm:px-4 py-3">Status Progres</th>
+                        <th className="px-3 py-3 text-center">Siswa</th>
+                        <th className="px-3 py-3 text-right">Aksi</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5">
                     {[
                       { id: "Belajar", label: "1. Belajar", icon: "🇮🇩", color: "text-blue-400", border: "border-blue-400/30", bg: "bg-blue-500/10" },
                       { id: "On Proges Job", label: "2. On Proges Job", icon: "💼", color: "text-amber-400", border: "border-amber-400/30", bg: "bg-amber-500/10" },
@@ -2091,7 +2105,7 @@ export default function AdminView({
                       }).length;
 
                       return (
-                        <div
+                        <tr
                           key={st.id}
                           onClick={() => {
                             if (filterStatus === st.id) {
@@ -2105,58 +2119,38 @@ export default function AdminView({
                               tableElem.scrollIntoView({ behavior: "smooth" });
                             }
                           }}
-                          className={`cursor-pointer transition-all duration-300 p-3.5 rounded-2xl flex flex-col justify-between gap-1.5 shadow-lg group relative overflow-hidden ${
-                            isSelected
-                              ? "bg-indigo-600/40 border-2 border-indigo-400 ring-4 ring-indigo-500/30 scale-105 shadow-indigo-500/30"
-                              : `${st.bg} border ${st.border} hover:bg-white/15 hover:border-white/30 hover:scale-102`
-                          }`}
                           title={`Klik untuk memfilter status ${st.label}`}
+                          className={`cursor-pointer transition-colors group ${
+                            isSelected ? "bg-indigo-600/30" : "hover:bg-white/5"
+                          }`}
                         >
-                          <div className="flex items-center justify-between gap-1">
-                            <span className={`${st.color} font-black uppercase tracking-wider text-[9px] flex items-center gap-1 truncate`}>
+                          <td className="px-3 sm:px-4 py-3 whitespace-nowrap">
+                            <span className={`${st.color} font-black uppercase tracking-wide text-[11px] flex items-center gap-1.5`}>
                               <span>{st.icon}</span>
-                              <span className="truncate">{st.label}</span>
+                              <span>{st.label}</span>
+                              {isSelected && (
+                                <span className="text-[8px] font-black bg-indigo-500 text-white px-1.5 py-0.5 rounded-full">
+                                  ✓ Filter
+                                </span>
+                              )}
                             </span>
-                            {isSelected && (
-                              <span className="text-[8px] font-black bg-indigo-500 text-white px-1.5 py-0.5 rounded-full shadow-xs shrink-0">
-                                ✓
-                              </span>
-                            )}
-                          </div>
-
-                          <div className="flex items-baseline gap-1.5 my-1">
-                            <span className={`text-2xl font-black ${isSelected ? "text-white" : st.color}`}>
-                              {count}
+                          </td>
+                          <td className="px-3 py-3 text-center font-black text-sm text-white">
+                            {count}
+                          </td>
+                          <td className="px-3 py-3 text-right">
+                            <span className="inline-flex items-center gap-1 text-[9px] font-bold text-slate-400 group-hover:text-indigo-300 transition-colors whitespace-nowrap">
+                              {isSelected ? "Reset" : "Filter"}
+                              <ChevronRight className="h-3 w-3 group-hover:translate-x-0.5 transition-transform" />
                             </span>
-                            <span className="text-[9px] text-slate-400 font-bold">
-                              Siswa
-                            </span>
-                          </div>
-
-                          <div className="text-[8px] font-bold text-slate-400 group-hover:text-indigo-300 flex items-center justify-between transition-colors">
-                            <span>{isSelected ? "Reset" : "Filter Status"}</span>
-                            <ChevronRight className="h-2.5 w-2.5 group-hover:translate-x-0.5 transition-transform" />
-                          </div>
-                        </div>
+                          </td>
+                        </tr>
                       );
                     })}
+                    </tbody>
+                  </table>
                   </div>
                 )}
-              </div>
-
-              <div className="bg-white/5 backdrop-blur-xl border border-white/10 p-5 sm:p-6 rounded-[1.5rem] sm:rounded-[2rem] text-xs space-y-3 w-full xl:max-w-sm shrink-0 shadow-2xl relative z-10">
-                <div className="flex items-center gap-2 text-emerald-400">
-                  <Award className="h-5 w-5" />
-                  <span className="font-black uppercase tracking-widest text-[10px]">Insight Sektor Sukses</span>
-                </div>
-                <p className="text-[11px] text-slate-300 leading-relaxed font-medium">
-                  Trend data menunjukkan peningkatan serapan alumni pada sektor <strong>Caregiver</strong> dan <strong>Manufaktur</strong> di wilayah Kanto & Kansai.
-                </p>
-                <div className="pt-2">
-                  <div className="h-1.5 w-full bg-white/5 rounded-full overflow-hidden">
-                    <div className="h-full bg-emerald-400 w-3/4 rounded-full shadow-[0_0_10px_rgba(52,211,153,0.5)]" />
-                  </div>
-                </div>
               </div>
             </div>
 

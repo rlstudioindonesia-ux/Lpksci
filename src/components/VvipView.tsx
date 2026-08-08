@@ -2563,60 +2563,69 @@ export default function VvipView({
                         </span>
                       </div>
 
-                      <div className="space-y-2 max-h-[420px] overflow-y-auto pr-1 font-sans">
+                      <div className="border border-slate-200 rounded-2xl overflow-hidden bg-white">
                         {filteredReferrers.length === 0 ? (
-                          <div className="bg-slate-50 border border-slate-200 p-6 rounded-2xl text-center text-slate-455 text-xs italic">
+                          <div className="bg-slate-50 p-6 text-center text-slate-455 text-xs italic">
                             Tidak ditemukan data alumni pengundang.
                           </div>
                         ) : (
-                          filteredReferrers.map((alumnus) => {
-                            const isCurrentSelected = selectedReferrer === alumnus.username;
-                            return (
-                              <div
-                                key={alumnus.username}
-                                onClick={() => setSelectedReferrer(isCurrentSelected ? "all" : alumnus.username)}
-                                className={`p-4 rounded-2xl border transition duration-150 cursor-pointer text-left ${
-                                  isCurrentSelected
-                                    ? "bg-rose-50/75 border-rose-300 ring-2 ring-rose-100"
-                                    : "bg-white hover:bg-slate-50/50 border-slate-150"
-                                }`}
-                              >
-                                <div className="flex items-start justify-between gap-2">
-                                  <div className="space-y-1">
-                                    <p className="font-sans font-bold text-slate-800 text-xs flex items-center gap-1.5">
-                                      <span>🎓</span> {alumnus.realName}
-                                    </p>
-                                    <p className="font-mono text-[9px] text-slate-400 font-medium block bg-slate-100 border border-slate-150 px-1.5 py-0.5 rounded max-w-fit leading-none">
-                                      ID: {alumnus.username}
-                                    </p>
-                                  </div>
-                                  
-                                  <div className="text-right shrink-0">
-                                    <span className="text-xs font-black font-mono text-rose-600 bg-rose-50 px-2 py-1 rounded-lg border border-rose-100">
-                                      {alumnus.total} Siswa
-                                    </span>
-                                  </div>
-                                </div>
-
-                                <div className="mt-3 space-y-1">
-                                  <div className="flex justify-between text-[8.5px] text-slate-400 font-bold">
-                                    <span>Siswa Lokakarya: {alumnus.activeCount}</span>
-                                    <span>Pendaftaran: {alumnus.registeredCount}</span>
-                                  </div>
-                                  <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden flex">
-                                    <div 
-                                      className="bg-teal-500 h-full transition-all duration-300" 
-                                      style={{ width: `${(alumnus.activeCount / alumnus.total) * 100}%` }}
-                                    />
-                                    <div 
-                                      className="bg-amber-400 h-full transition-all duration-300" 
-                                      style={{ width: `${(alumnus.registeredCount / alumnus.total) * 100}%` }}
-                                    />
-                                  </div>
-                                </div>
-                              </div>
-                            );
-                          })
+                          <div className="overflow-x-auto max-h-[420px] overflow-y-auto font-sans">
+                            <table className="w-full min-w-[300px] text-left border-collapse">
+                              <thead className="sticky top-0 z-10">
+                                <tr className="bg-slate-50 text-[9px] uppercase tracking-wider text-slate-450 font-black border-b border-slate-150">
+                                  <th className="px-3 py-2.5">Alumni</th>
+                                  <th className="px-3 py-2.5 text-center">Total</th>
+                                  <th className="px-3 py-2.5">Rincian</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-100">
+                                {filteredReferrers.map((alumnus) => {
+                                  const isCurrentSelected = selectedReferrer === alumnus.username;
+                                  return (
+                                    <tr
+                                      key={alumnus.username}
+                                      onClick={() => setSelectedReferrer(isCurrentSelected ? "all" : alumnus.username)}
+                                      className={`cursor-pointer transition duration-150 ${
+                                        isCurrentSelected
+                                          ? "bg-rose-50/75"
+                                          : "hover:bg-slate-50/50"
+                                      }`}
+                                    >
+                                      <td className="px-3 py-2.5 align-top">
+                                        <p className="font-sans font-bold text-slate-800 text-xs flex items-center gap-1.5">
+                                          <span>🎓</span> {alumnus.realName}
+                                        </p>
+                                        <p className="font-mono text-[8.5px] text-slate-400 font-medium block bg-slate-100 border border-slate-150 px-1.5 py-0.5 rounded max-w-fit leading-none mt-1">
+                                          ID: {alumnus.username}
+                                        </p>
+                                      </td>
+                                      <td className="px-3 py-2.5 text-center align-top">
+                                        <span className="text-xs font-black font-mono text-rose-600 bg-rose-50 px-2 py-1 rounded-lg border border-rose-100 whitespace-nowrap">
+                                          {alumnus.total}
+                                        </span>
+                                      </td>
+                                      <td className="px-3 py-2.5 align-top min-w-[110px]">
+                                        <div className="flex justify-between text-[8px] text-slate-400 font-bold whitespace-nowrap gap-1.5">
+                                          <span>Aktif {alumnus.activeCount}</span>
+                                          <span>Daftar {alumnus.registeredCount}</span>
+                                        </div>
+                                        <div className="w-full h-1.5 bg-slate-100 rounded-full overflow-hidden flex mt-1">
+                                          <div
+                                            className="bg-teal-500 h-full transition-all duration-300"
+                                            style={{ width: `${(alumnus.activeCount / alumnus.total) * 100}%` }}
+                                          />
+                                          <div
+                                            className="bg-amber-400 h-full transition-all duration-300"
+                                            style={{ width: `${(alumnus.registeredCount / alumnus.total) * 100}%` }}
+                                          />
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </div>
                         )}
                       </div>
                     </div>
@@ -2864,7 +2873,18 @@ export default function VvipView({
                     ))}
                   </select>
                 </div>
-                <div className="space-y-4 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
+                <div className="overflow-x-auto rounded-2xl border border-slate-150 max-h-[500px] overflow-y-auto custom-scrollbar">
+                  <table className="w-full min-w-[560px] text-left border-collapse">
+                    <thead className="sticky top-0 z-10">
+                      <tr className="bg-slate-50 text-[9px] uppercase tracking-wider text-slate-500 font-black border-b border-slate-150">
+                        <th className="px-3 sm:px-4 py-3">Kelas</th>
+                        <th className="px-3 py-3 text-center">Siswa</th>
+                        <th className="px-3 py-3 text-center">Sensei</th>
+                        <th className="px-3 py-3">Materi Terakhir</th>
+                        <th className="px-3 py-3 text-right">Progres Rata-rata</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
                   {(systemState.customization?.lmsClasses || [])
                   .filter(c => c.isActive !== false)
                   .map(c => c.name)
@@ -2873,7 +2893,7 @@ export default function VvipView({
                     const classUsers = (systemState.users || []).filter(u => u.assignedClass === className);
                     const classStudents = (systemState.activeStudents || []).filter(s => (s.class === className || s.assignedClass === className) && !["Lulus", "Di Jepang"].includes(s.status || ""));
                     const classSensei = classUsers.filter(u => ["Pengajar", "Admin", "Admin Biasa", "Admin Super", "Staf"].includes(u.role));
-                    
+
                     // Calculate Average Progress dynamically based on chapter assessments
                     const studentProgressList = classStudents.map(student => {
                       const studentAsss = (systemState.chapterAssessments || []).filter((c: any) => c.studentId === student.id);
@@ -2884,47 +2904,46 @@ export default function VvipView({
                       }
                       return student.progress || (((student.currentChapter || 1) / (getClassMaxBab(student.class || "") || 25)) * 100) || 0;
                     });
-                    
-                    const avgProgress = studentProgressList.length > 0 
+
+                    const avgProgress = studentProgressList.length > 0
                       ? Math.round(studentProgressList.reduce((acc, p) => acc + p, 0) / studentProgressList.length)
                       : 0;
 
+                    const displayBab = (() => {
+                      const classObj = (systemState.customization?.lmsClasses || []).find((c: any) => c.name.toLowerCase() === className.toLowerCase() || c.id === className);
+                      const activeBab = classObj?.activeChapterNum || 1;
+                      const maxGraded = Math.max(...classStudents.map(s => s.currentChapter || 0), 0);
+                      return Math.min(maxGraded || activeBab, activeBab);
+                    })();
+
                     return (
-                      <div key={i} className="p-4 bg-slate-50 border border-slate-150 rounded-2xl space-y-3 hover:bg-white transition cursor-pointer group">
-                        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
+                      <tr key={i} className="hover:bg-slate-50/70 transition-colors group">
+                        <td className="px-3 sm:px-4 py-3 whitespace-nowrap">
                           <div className="flex items-center gap-2">
-                            <div className="h-8 w-8 shrink-0 bg-sky-500 text-white rounded-lg flex items-center justify-center text-[10px] font-black">
+                            <div className="h-7 w-7 shrink-0 bg-sky-500 text-white rounded-lg flex items-center justify-center text-[10px] font-black">
                               {className.charAt(0)}
                             </div>
-                            <div>
-                              <p className="text-xs font-black text-slate-800">Kelas {className}</p>
-                              <p className="text-[10px] text-slate-400 font-medium">
-                                {classStudents.length} Siswa • {classSensei.length} Sensei
-                              </p>
-                            </div>
+                            <span className="text-xs font-black text-slate-800">Kelas {className}</span>
                           </div>
-                          <div className="text-left sm:text-right mt-1 sm:mt-0">
-                            <p className="text-[10px] font-black text-slate-800 uppercase tracking-tighter">{avgProgress}% Avg. Selesai</p>
-                            <div className="w-full sm:w-24 h-1.5 bg-slate-200 rounded-full mt-1 overflow-hidden">
+                        </td>
+                        <td className="px-3 py-3 text-center font-bold text-slate-700 text-xs">{classStudents.length}</td>
+                        <td className="px-3 py-3 text-center font-bold text-slate-700 text-xs">{classSensei.length}</td>
+                        <td className="px-3 py-3 text-[10px] text-slate-500 whitespace-nowrap">
+                          Chapter <span className="font-bold text-slate-700">{displayBab}</span>
+                        </td>
+                        <td className="px-3 py-3">
+                          <div className="flex items-center justify-end gap-2">
+                            <span className="text-[10px] font-black text-slate-800">{avgProgress}%</span>
+                            <div className="w-16 sm:w-20 h-1.5 bg-slate-200 rounded-full overflow-hidden shrink-0">
                               <div className="h-full bg-sky-500 rounded-full group-hover:animate-pulse" style={{ width: `${avgProgress}%` }} />
                             </div>
                           </div>
-                        </div>
-                        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between text-[10px] border-t border-slate-100 pt-2 gap-2">
-                          {(() => {
-                            const classObj = (systemState.customization?.lmsClasses || []).find((c: any) => c.name.toLowerCase() === className.toLowerCase() || c.id === className);
-                            const activeBab = classObj?.activeChapterNum || 1;
-                            const maxGraded = Math.max(...classStudents.map(s => s.currentChapter || 0), 0);
-                            const displayBab = Math.min(maxGraded || activeBab, activeBab);
-                            return (
-                              <span className="text-slate-500">Materi Terakhir: <span className="font-bold text-slate-700">Chapter {displayBab}</span></span>
-                            );
-                          })()}
-                          <span className="text-slate-400">Aktif</span>
-                        </div>
-                      </div>
+                        </td>
+                      </tr>
                     );
                   })}
+                    </tbody>
+                  </table>
                 </div>
               </div>
 
@@ -4254,85 +4273,78 @@ export default function VvipView({
                 </div>
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+              <div className="overflow-x-auto rounded-2xl border border-slate-200">
+                <table className="w-full min-w-[700px] text-left border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 text-[9px] uppercase tracking-wider text-slate-500 font-black border-b border-slate-150">
+                      <th className="px-4 py-3">Nama & Role</th>
+                      <th className="px-3 py-3">Kelas yang Diampu</th>
+                      <th className="px-3 py-3 text-center">Koreksi</th>
+                      <th className="px-3 py-3 text-center">Presensi</th>
+                      <th className="px-3 py-3 text-right">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
                 {(systemState.users || []).filter(u => ["Pengajar", "Admin", "Admin Biasa", "Admin Super", "Staf"].includes(u.role)).map(teacher => {
                     const assignedClasses = (systemState.customization?.lmsClasses || []).filter(c => c.isActive && (c.name === teacher.assignedClass || teacher.assignedClass?.includes(c.name)));
+                    const koreksiCount = (systemState.chapterAssessments || []).filter(a => a.assessedBy === teacher.name && a.status === "Telah Dinilai").length;
+                    const presensiCount = (systemState.logs || []).filter(l => l.user === teacher.name && l.type === "PRESENSI_PENGAJAR").length;
                     return (
-                      <div key={teacher.username} className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-3xs hover:border-emerald-500/30 transition-all group">
-                        <div className="p-4 bg-slate-50/50 border-b border-slate-100 flex items-center gap-3">
-                          <div className="h-10 w-10 bg-white border border-slate-200 rounded-xl overflow-hidden flex items-center justify-center shadow-3xs">
+                      <tr key={teacher.username} className="hover:bg-emerald-50/20 transition-colors group">
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2.5">
+                            <div className="h-8 w-8 shrink-0 bg-white border border-slate-200 rounded-lg overflow-hidden flex items-center justify-center shadow-3xs">
                               {teacher.profilePicture ? (
                                 <img src={getSafePhotoUrl(teacher.profilePicture, teacher.name)} className="h-full w-full object-cover" alt={teacher.name} referrerPolicy="no-referrer"></img>
                               ) : (
-                              <span className="text-xl">👤</span>
-                            )}
-                          </div>
-                          <div>
-                            <h5 className="font-black text-slate-900 text-[11px] leading-tight">{teacher.name}</h5>
-                            <p className="text-[9px] text-slate-500 font-bold uppercase tracking-tighter mt-0.5">
-                              {teacher.role !== "Pengajar" ? (teacher.role === "Admin Super" ? "Kepala Administrasi" : "Staf Administrasi") : ((teacher.japaneseLevel || "N3-N2") + " Specialist")}
-                            </p>
-                          </div>
-                        </div>
-                        
-                        <div className="p-4 space-y-3">
-                          <div>
-                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-1.5">Kelas yang Diampu:</span>
-                            {assignedClasses.length > 0 ? (
-                              <div className="flex flex-wrap gap-1">
-                                {assignedClasses.map(c => (
-                                  <span key={c.id} className="text-[9.5px] font-bold bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-lg border border-emerald-100">
-                                    {c.name}
-                                  </span>
-                                ))}
-                              </div>
-                            ) : (
-                              <span className="text-[10px] text-slate-400 italic font-medium">Belum ada kelas aktif</span>
-                            )}
-                          </div>
-
-                          <div className="grid grid-cols-2 gap-2 pt-1">
-                            <div className="bg-indigo-50/30 border border-indigo-100/50 p-2 rounded-xl">
-                              <span className="text-[8px] text-indigo-500 font-black uppercase block">Koreksi</span>
-                              <span className="text-xs font-black text-indigo-700 font-mono">{(systemState.chapterAssessments || []).filter(a => a.assessedBy === teacher.name && a.status === "Telah Dinilai").length}</span>
+                                <span className="text-base">👤</span>
+                              )}
                             </div>
-                            <div className="bg-amber-50/30 border border-amber-100/50 p-2 rounded-xl">
-                              <span className="text-[8px] text-amber-500 font-black uppercase block">Presensi</span>
-                              <span className="text-xs font-black text-amber-700 font-mono">{(systemState.logs || []).filter(l => l.user === teacher.name && l.type === "PRESENSI_PENGAJAR").length}d</span>
+                            <div className="min-w-0">
+                              <h5 className="font-black text-slate-900 text-[11px] leading-tight truncate">{teacher.name}</h5>
+                              <p className="text-[9px] text-slate-500 font-bold uppercase tracking-tighter mt-0.5 whitespace-nowrap">
+                                {teacher.role !== "Pengajar" ? (teacher.role === "Admin Super" ? "Kepala Administrasi" : "Staf Administrasi") : ((teacher.japaneseLevel || "N3-N2") + " Specialist")}
+                              </p>
                             </div>
                           </div>
-
-
-                          <div className="pt-3 mt-3 border-t border-slate-100">
-                            <button
-                              type="button"
-                              onClick={() => setSelectedSenseiDetail(teacher)}
-                              className="w-full bg-slate-50 hover:bg-slate-100 text-slate-800 font-extrabold text-[10.5px] py-2.5 rounded-xl transition border border-slate-150 flex items-center justify-center gap-1.5 cursor-pointer shadow-3xs active:scale-95 duration-150"
-                            >
-                              <span>🔍</span>
-                              <span>Periksa Dokumen Sensei</span>
-                            </button>
-                          </div>
-                          {(systemState.logs || []).filter(l => l.user === teacher.name && l.type === "PRESENSI_PENGAJAR").length > 0 && (
-                            <div className="pt-2 border-t border-slate-100">
-                              <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest block mb-1">Log Terakhir:</span>
-                              <div className="space-y-1">
-                                {(systemState.logs || []).filter(l => l.user === teacher.name && l.type === "PRESENSI_PENGAJAR").slice(0, 3).map((log, idx) => (
-                                  <div key={idx} className="flex items-center gap-1.5 text-[9px] text-slate-600 font-medium">
-                                    <Clock className="h-2.5 w-2.5 text-slate-400" />
-                                    <span>{new Date(log.timestamp).toLocaleDateString()} - {log.details || "Hadir"}</span>
-                                  </div>
-                                ))}
-                              </div>
+                        </td>
+                        <td className="px-3 py-3 max-w-[220px]">
+                          {assignedClasses.length > 0 ? (
+                            <div className="flex flex-wrap gap-1">
+                              {assignedClasses.map(c => (
+                                <span key={c.id} className="text-[9.5px] font-bold bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-lg border border-emerald-100 whitespace-nowrap">
+                                  {c.name}
+                                </span>
+                              ))}
                             </div>
+                          ) : (
+                            <span className="text-[10px] text-slate-400 italic font-medium">Belum ada kelas aktif</span>
                           )}
-                        </div>
-                      </div>
+                        </td>
+                        <td className="px-3 py-3 text-center">
+                          <span className="text-xs font-black text-indigo-700 font-mono">{koreksiCount}</span>
+                        </td>
+                        <td className="px-3 py-3 text-center">
+                          <span className="text-xs font-black text-amber-700 font-mono">{presensiCount}d</span>
+                        </td>
+                        <td className="px-3 py-3 text-right">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedSenseiDetail(teacher)}
+                            className="inline-flex items-center gap-1.5 bg-slate-50 hover:bg-slate-100 text-slate-800 font-extrabold text-[10px] px-3 py-2 rounded-xl transition border border-slate-150 cursor-pointer shadow-3xs active:scale-95 duration-150 whitespace-nowrap"
+                          >
+                            <span>🔍</span>
+                            <span>Periksa</span>
+                          </button>
+                        </td>
+                      </tr>
                     );
                   })}
-                </div>
+                  </tbody>
+                </table>
               </div>
             </div>
+          </div>
         )}
 
         {monitorTab === ("hr" as any) && (
