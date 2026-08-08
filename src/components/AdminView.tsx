@@ -1198,19 +1198,7 @@ export default function AdminView({
     if (e && typeof e.preventDefault === 'function') e.preventDefault();
     if (!accBankName || !accNumber || !accHolder) return;
 
-    // Default fallback
-    const currentAccounts = systemState.customization?.paymentAccounts || [
-      {
-        bankName: "BANK MANDIRI",
-        accountNumber: "135-00-1928301-2",
-        holderName: "LPK Source Course Indonesia",
-      },
-      {
-        bankName: "BSI (BANK SYARIAH INDONESIA)",
-        accountNumber: "712-345-678-9",
-        holderName: "LPK Source Course Indo",
-      },
-    ];
+    const currentAccounts = systemState.customization?.paymentAccounts || [];
 
     const newAccounts = [
       ...currentAccounts,
