@@ -6,6 +6,7 @@
 import React, { useState, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { ConfirmButton } from "./ConfirmButton";
+import { getSafePhotoUrl } from "../lib/storageHelper";
 import {
   ResponsiveContainer,
   AreaChart,
@@ -2150,7 +2151,7 @@ export default function VvipView({
                         <div className="flex items-center gap-3 min-w-0">
                           <div className="h-10 w-10 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-400 font-bold overflow-hidden shadow-xs shrink-0">
                             <img
-                              src={user.profilePicture || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=e2e8f0&color=334155`}
+                              src={getSafePhotoUrl(user.profilePicture, user.name)}
                               className="h-full w-full object-cover"
                               alt={user.name || "Avatar"}
                               referrerPolicy="no-referrer"
@@ -3618,7 +3619,7 @@ export default function VvipView({
                               <td className="px-6 py-4">
                                 <div className="flex items-center gap-3.5">
                                   <img
-                                    src={student.profilePicture || ((student as any).docFoto ? ((student as any).docFoto.includes('|') ? (student as any).docFoto.split('|')[1] : (student as any).docFoto) : '') || `https://ui-avatars.com/api/?name=${encodeURIComponent(student.name || 'Siswa')}&background=e0e7ff&color=3730a3`}
+                                    src={getSafePhotoUrl(student.profilePicture || (student as any).docFoto, student.name)}
                                     alt={student.name}
                                     className="h-9 w-9 rounded-full object-cover border border-slate-200 shrink-0 shadow-3xs"
                                     referrerPolicy="no-referrer"
@@ -4261,7 +4262,7 @@ export default function VvipView({
                         <div className="p-4 bg-slate-50/50 border-b border-slate-100 flex items-center gap-3">
                           <div className="h-10 w-10 bg-white border border-slate-200 rounded-xl overflow-hidden flex items-center justify-center shadow-3xs">
                               {teacher.profilePicture ? (
-                                <img src={teacher.profilePicture} className="h-full w-full object-cover" alt={teacher.name} referrerPolicy="no-referrer"></img>
+                                <img src={getSafePhotoUrl(teacher.profilePicture, teacher.name)} className="h-full w-full object-cover" alt={teacher.name} referrerPolicy="no-referrer"></img>
                               ) : (
                               <span className="text-xl">👤</span>
                             )}
@@ -4607,7 +4608,7 @@ export default function VvipView({
                 <div className="bg-slate-50 p-4 border border-slate-200 rounded-2xl flex items-start sm:items-center gap-4 flex-col sm:flex-row">
                    <div className="h-16 w-16 bg-white border border-slate-200 rounded-xl overflow-hidden shadow-3xs flex-shrink-0 flex items-center justify-center">
                       {teacher.profilePicture ? (
-                        <img src={teacher.profilePicture} className="h-full w-full object-cover" alt="Profile" referrerPolicy="no-referrer" />
+                        <img src={getSafePhotoUrl(teacher.profilePicture, teacher.name)} className="h-full w-full object-cover" alt="Profile" referrerPolicy="no-referrer" />
                       ) : (
                         <div className="h-full w-full flex items-center justify-center text-3xl">👤</div>
                       )}
@@ -6002,7 +6003,7 @@ export default function VvipView({
                         <div className="flex items-center gap-3">
                           <div className="h-10 w-10 rounded-full bg-slate-100 overflow-hidden border border-slate-200 shrink-0">
                             <img
-                              src={user.profilePicture || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=e2e8f0&color=334155`}
+                              src={getSafePhotoUrl(user.profilePicture, user.name)}
                               alt={user.name || "Avatar"}
                               referrerPolicy="no-referrer"
                               className="h-full w-full object-cover"

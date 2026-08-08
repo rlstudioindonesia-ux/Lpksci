@@ -76,7 +76,7 @@ import {
   Area,
   CartesianGrid
 } from "recharts";
-import { uploadFileToFirebase, getEmbeddablePdfUrl } from "../lib/storageHelper";
+import { uploadFileToFirebase, getEmbeddablePdfUrl, getSafePhotoUrl } from "../lib/storageHelper";
 import {
   SystemState,
   RegisteredStudent,
@@ -2487,7 +2487,7 @@ export default function AdminView({
                             <td className="md:p-4 p-1.5 py-2">
                               <div className="flex items-center gap-3">
                                 <img
-                                  src={s.profilePicture || (s as any).docFoto || systemState.registeredStudents?.find(r => r.id === s.id || (r.email && r.email === (s as any).email))?.docFoto || `https://ui-avatars.com/api/?name=${encodeURIComponent(s.name || 'Siswa')}&background=e2e8f0&color=334155`}
+                                  src={getSafePhotoUrl(s.profilePicture || (s as any).docFoto || systemState.registeredStudents?.find(r => r.id === s.id || (r.email && r.email === (s as any).email))?.docFoto, s.name)}
                                   className="h-10 w-10 shrink-0 rounded-xl object-cover border border-slate-200"
                                   alt={s.name || "Avatar"}
                                   referrerPolicy="no-referrer"
@@ -3003,7 +3003,7 @@ export default function AdminView({
                           </div>
                           <div className="flex items-start gap-3">
                             <img
-                              src={s.profilePicture || (s as any).docFoto || systemState.registeredStudents?.find(r => r.id === s.id || (r.email && r.email === (s as any).email))?.docFoto || `https://ui-avatars.com/api/?name=${encodeURIComponent(s.name || 'Siswa')}&background=e2e8f0&color=334155`}
+                              src={getSafePhotoUrl(s.profilePicture || (s as any).docFoto || systemState.registeredStudents?.find(r => r.id === s.id || (r.email && r.email === (s as any).email))?.docFoto, s.name)}
                               className="h-10 w-10 shrink-0 rounded-xl object-cover border border-slate-200"
                               alt={s.name || "Avatar"}
                               referrerPolicy="no-referrer"
@@ -3305,7 +3305,7 @@ export default function AdminView({
                     <div key={`${student.id}-${student.name}`} className="p-4 border border-slate-100 bg-slate-50 rounded-2xl flex items-center justify-between gap-3">
                       <div className="flex items-center gap-3">
                         <img
-                          src={student.profilePicture || (student as any).docFoto || systemState.registeredStudents?.find(r => r.id === student.id || (r.email && r.email === (student as any).email))?.docFoto || `https://ui-avatars.com/api/?name=${encodeURIComponent(student.name || 'Siswa')}&background=e2e8f0&color=334155`}
+                          src={getSafePhotoUrl(student.profilePicture || (student as any).docFoto || systemState.registeredStudents?.find(r => r.id === student.id || (r.email && r.email === (student as any).email))?.docFoto, student.name)}
                           alt={student.name}
                           referrerPolicy="no-referrer"
                           className="w-10 h-10 rounded-full object-cover border border-slate-200"
@@ -4524,7 +4524,7 @@ export default function AdminView({
                                           <div className="flex justify-between items-center font-bold">
                                             <div className="flex items-center gap-2">
                                               <img
-                                                src={stData.profilePicture || (stData as any).docFoto || `https://ui-avatars.com/api/?name=${encodeURIComponent(stData.name || 'Siswa')}&background=e2e8f0&color=334155`}
+                                                src={getSafePhotoUrl(stData.profilePicture || (stData as any).docFoto, stData.name)}
                                                 alt={stData.name}
                                                 referrerPolicy="no-referrer"
                                                 className="w-6 h-6 rounded-full object-cover border border-slate-200"

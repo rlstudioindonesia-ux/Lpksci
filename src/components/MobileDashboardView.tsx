@@ -1,4 +1,5 @@
 import { InlineLoginPanel } from "./InlineLoginPanel";
+import { getSafePhotoUrl } from "../lib/storageHelper";
 import { auth } from "../firebaseClient";
 import { signInWithPopup, GoogleAuthProvider, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth";
 import React, { useState, useEffect, useRef } from "react";
@@ -2134,6 +2135,10 @@ export default function MobileDashboardView({
                         alt={item.title}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                         referrerPolicy="no-referrer"
+                        onError={(e) => {
+                          e.currentTarget.onerror = null;
+                          e.currentTarget.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 200'%3E%3Crect width='200' height='200' fill='%231e293b'/%3E%3Ctext x='50%25' y='50%25' fill='%2364748b' font-size='14' text-anchor='middle' dy='.3em'%3EFoto tidak tersedia%3C/text%3E%3C/svg%3E";
+                        }}
                       />
                       <div className="absolute top-1.5 right-1.5 bg-black/60 text-white p-1 rounded-lg backdrop-blur-xs">
                         <Maximize2 className="w-3 h-3 text-pink-300" />
@@ -4044,7 +4049,7 @@ export default function MobileDashboardView({
                   className={`h-11 w-11 mt-0.5 rounded-full flex items-center justify-center font-black text-sm shadow-[0_8px_30px_rgb(0,0,0,0.04)] ring-2 ring-slate-50 bg-slate-100 shrink-0 overflow-hidden text-slate-600`}
                 >
                   <img
-                    src={currentUser.profilePicture || `https://ui-avatars.com/api/?name=${encodeURIComponent(currentUser.name || 'User')}&background=e2e8f0&color=334155`}
+                    src={getSafePhotoUrl(currentUser.profilePicture, currentUser.name)}
                     className="h-full w-full object-cover"
                     alt={currentUser.name || "Avatar"}
                     referrerPolicy="no-referrer"
@@ -5272,7 +5277,7 @@ export default function MobileDashboardView({
                         <div className="flex items-center gap-3">
                           <div className="h-10 w-10 rounded-full bg-slate-100 overflow-hidden border border-slate-100/80 shrink-0">
                             <img
-                              src={user.profilePicture || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=e2e8f0&color=334155`}
+                              src={getSafePhotoUrl(user.profilePicture, user.name)}
                               alt={user.name || "Avatar"}
                               referrerPolicy="no-referrer"
                               className="h-full w-full object-cover"

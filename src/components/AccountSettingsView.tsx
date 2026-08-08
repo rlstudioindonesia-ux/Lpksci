@@ -36,7 +36,7 @@ import {
   Loader2,
   Info,
 } from "lucide-react";
-import { uploadFileToFirebase, getEmbeddablePdfUrl } from "../lib/storageHelper";
+import { uploadFileToFirebase, getEmbeddablePdfUrl, getSafePhotoUrl } from "../lib/storageHelper";
 import { UserAccount, SystemState } from "../types";
 import { ConfirmForm } from "./ConfirmForm";
 import { ConfirmButton } from "./ConfirmButton";
@@ -591,7 +591,7 @@ export default function AccountSettingsView({
             <div className="relative flex flex-col md:flex-row items-start md:items-center justify-between gap-6 w-full min-w-0">
               <div className="flex items-center gap-4 w-full min-w-0">
                 <img
-                  src={currentUser?.profilePicture || (registeredStudentInfo?.docFoto ? (registeredStudentInfo.docFoto.includes('|') ? registeredStudentInfo.docFoto.split('|')[1] : registeredStudentInfo.docFoto) : '') || `https://ui-avatars.com/api/?name=${encodeURIComponent(currentUser?.name || 'User')}&background=e2e8f0&color=334155`}
+                  src={getSafePhotoUrl(currentUser?.profilePicture || registeredStudentInfo?.docFoto, currentUser?.name)}
                   alt="Profile"
                   referrerPolicy="no-referrer"
                   className="h-16 w-16 rounded-2xl object-cover border-2 border-white/20 shadow-inner shrink-0"
@@ -740,7 +740,7 @@ export default function AccountSettingsView({
                   </label>
                   <div className="flex flex-wrap items-center gap-3">
                     <img
-                      src={profilePicture || `https://ui-avatars.com/api/?name=${encodeURIComponent(name || 'User')}&background=e2e8f0&color=334155`}
+                      src={getSafePhotoUrl(profilePicture, name)}
                       className="h-10 w-10 rounded-xl object-cover border border-slate-200"
                       alt="Preview"
                       referrerPolicy="no-referrer"
@@ -1641,7 +1641,7 @@ export default function AccountSettingsView({
                             <div className="flex items-start sm:items-center gap-3.5 min-w-0 flex-1 w-full">
                               <div className="relative shrink-0">
                                 <img
-                                  src={user.profilePicture || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=e2e8f0&color=334155`}
+                                  src={getSafePhotoUrl(user.profilePicture, user.name)}
                                   className="h-10 w-10 sm:h-12 sm:w-12 rounded-2xl object-cover border-2 border-white shadow-sm ring-1 ring-slate-100"
                                   alt={user.name || "Avatar"}
                                   referrerPolicy="no-referrer"
@@ -2368,7 +2368,7 @@ export default function AccountSettingsView({
               <div className="bg-slate-50 p-4 border border-slate-200 rounded-2xl flex items-center gap-4">
                  <div className="h-16 w-16 bg-white border border-slate-200 rounded-xl overflow-hidden shadow-3xs flex-shrink-0">
                     {selectedSenseiForDocCheck.profilePicture ? (
-                      <img src={selectedSenseiForDocCheck.profilePicture} className="h-full w-full object-cover" alt="Profile" />
+                      <img src={getSafePhotoUrl(selectedSenseiForDocCheck.profilePicture, selectedSenseiForDocCheck.name)} className="h-full w-full object-cover" alt="Profile" />
                     ) : (
                       <div className="h-full w-full flex items-center justify-center text-3xl">👤</div>
                     )}

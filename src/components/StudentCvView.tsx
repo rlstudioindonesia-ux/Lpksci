@@ -1316,7 +1316,7 @@ export default function StudentCvView({
                         {formData.name || "-"}
                       </td>
                       <td className="border-2 border-black text-center align-middle w-[150px] font-bold text-slate-300 text-[10px] uppercase font-mono relative p-0" rowSpan={4}>
-                        {formData.profilePicture ? (
+                        {formData.profilePicture && formData.profilePicture !== 'pasfoto_default.jpg' ? (
                           <img
                             src={formData.profilePicture}
                             alt="Foto Kandidat"
