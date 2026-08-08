@@ -1888,7 +1888,7 @@ export default function AdminView({
 
                 {/* Page Content View - Page 1: Kelas Grid */}
                 {statCardMode === "kelas" && (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 animate-fade-in">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 animate-fade-in">
                     {Array.from<string>(
                       new Set(
                         systemState.activeStudents
@@ -1942,15 +1942,15 @@ export default function AdminView({
                                 tableElem.scrollIntoView({ behavior: "smooth" });
                               }
                             }}
-                            className={`cursor-pointer transition-all duration-300 p-3.5 rounded-2xl flex flex-col justify-between gap-2 shadow-lg group relative overflow-hidden ${
+                            className={`cursor-pointer transition-all duration-300 p-4 rounded-2xl flex flex-col justify-between gap-2.5 min-h-[168px] shadow-lg group relative overflow-hidden ${
                               isSelected
                                 ? "bg-indigo-600/40 border-2 border-indigo-400 ring-4 ring-indigo-500/30 scale-102 shadow-indigo-500/30"
                                 : "bg-white/5 backdrop-blur-md border border-white/10 hover:bg-white/15 hover:border-white/30 hover:scale-101"
                             }`}
                             title={`Klik untuk memfilter daftar siswa Kelas ${className}`}
                           >
-                            <div className="flex items-center justify-between gap-1">
-                              <span className={`${colorClass} font-black uppercase tracking-[0.1em] text-[10px] truncate`}>
+                            <div className="flex items-start justify-between gap-1.5">
+                              <span className={`${colorClass} font-black uppercase tracking-[0.06em] text-[11px] leading-tight line-clamp-2`}>
                                 Kelas {className}
                               </span>
                               {isSelected && (
