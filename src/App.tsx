@@ -45,23 +45,31 @@ import {
   LogOut,
 } from "lucide-react";
 import PrivacyPolicyModal from "./components/PrivacyPolicyModal";
-import FrontendView from "./components/FrontendView";
-import LmsView from "./components/LmsView";
-import AdminView from "./components/AdminView";
-import VvipView from "./components/VvipView";
 import LoginModal from "./components/LoginModal";
 import ResetPasswordView from "./components/ResetPasswordView";
-import AccountSettingsView from "./components/AccountSettingsView";
-import CalendarView from "./components/CalendarView";
-import ChatView from "./components/ChatView";
 import PembayaranSiswaView from "./components/PembayaranSiswaView";
 import JobsView from "./components/JobsView";
-import RegistrationView from "./components/RegistrationView";
-import MobileDashboardView from "./components/MobileDashboardView";
 import EksplorasiView from "./components/EksplorasiView";
-import PrivacyPolicyView from "./components/PrivacyPolicyView";
-import AlumniDashboardView from "./components/AlumniDashboardView";
-import SenseiDashboardView from "./components/SenseiDashboardView";
+
+// Only ever rendered on narrow viewports (isMobile) - lazy so desktop visitors
+// never pay for its ~5,300 lines.
+const MobileDashboardView = React.lazy(() => import("./components/MobileDashboardView"));
+
+// Lazily loaded so their code only downloads for the roles/tabs that actually need
+// them, instead of bloating the bundle every visitor pays for on first load. These
+// are also dynamically imported inside MobileDashboardView; a static import here
+// would force Vite to keep them in the main chunk regardless (see build warnings).
+const FrontendView = React.lazy(() => import("./components/FrontendView"));
+const LmsView = React.lazy(() => import("./components/LmsView"));
+const AdminView = React.lazy(() => import("./components/AdminView"));
+const VvipView = React.lazy(() => import("./components/VvipView"));
+const AccountSettingsView = React.lazy(() => import("./components/AccountSettingsView"));
+const CalendarView = React.lazy(() => import("./components/CalendarView"));
+const ChatView = React.lazy(() => import("./components/ChatView"));
+const RegistrationView = React.lazy(() => import("./components/RegistrationView"));
+const PrivacyPolicyView = React.lazy(() => import("./components/PrivacyPolicyView"));
+const AlumniDashboardView = React.lazy(() => import("./components/AlumniDashboardView"));
+const SenseiDashboardView = React.lazy(() => import("./components/SenseiDashboardView"));
 
 export default function App() {
   const [activeTab, setActiveTabState] = useState<string>(() => {
@@ -1130,6 +1138,11 @@ export default function App() {
           className="w-full bg-slate-50 relative flex-1 flex flex-col max-w-[414px] sm:max-h-[896px] shadow-[0_30px_60px_-15px_rgba(0,0,0,0.2)] overflow-hidden sm:rounded-[3rem] sm:border-[8px] sm:border-white ring-1 ring-slate-200/50"
         >
           <div className="w-full flex-1 overflow-y-auto overflow-x-hidden no-scrollbar flex flex-col bg-slate-50">
+            <React.Suspense fallback={
+              <div className="flex h-64 flex-col items-center justify-center space-y-3">
+                <span className="h-10 w-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></span>
+              </div>
+            }>
             <MobileDashboardView
               currentUser={currentUser}
               systemState={systemState}
@@ -1163,6 +1176,7 @@ export default function App() {
                 else if (user.role === "VVIP") setActiveTab("vvip");
               }}
             />
+            </React.Suspense>
           </div>
         </div>
       </div>

@@ -4337,28 +4337,78 @@ export default function VvipView({
         {monitorTab === ("hr" as any) && (
           <div className="space-y-6 animate-fade-in text-left"> 
             <h3 className="font-bold text-slate-800">Pemantauan Absensi & HR (Pengajar & Staf)</h3> 
-            <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200"> 
-              <h4 className="font-bold text-slate-800 text-sm mb-3">Kehadiran (Absensi) Pengajar & Staf</h4> 
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"> 
-                {(systemState.users || []).filter(u => ["Pengajar", "Admin", "Admin Biasa", "Admin Super", "Staf"].includes(u.role)).map(u => {
-                  const hadir = (systemState.logs || []).filter(l => l.type === "PRESENSI_PENGAJAR" && (l.user === u.name || l.user === u.username)).length;
-                  return (
-                    <button
-                      type="button"
-                      key={u.username}
-                      onClick={() => setSelectedHrAttendanceStaff(u)}
-                      className="p-4 bg-slate-50 hover:bg-slate-100 border border-slate-100 rounded-xl flex items-center justify-between text-left transition cursor-pointer"
-                    >
-                      <div>
-                        <p className="font-bold text-xs text-slate-800">{u.name}</p>
-                        <p className="text-[10px] text-slate-500 mt-1">Kehadiran Bulan Ini · <span className="text-indigo-500 font-bold">Lihat Detail</span></p>
-                      </div>
-                      <span className="font-black text-emerald-600 text-xl">{hadir} Hari</span>
-                    </button>
-                  );
-                })}
-              </div> 
-            </div> 
+            <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="font-bold text-slate-800 text-sm">Kehadiran (Absensi) Pengajar & Staf</h4>
+                <span className="text-[9px] text-slate-400 font-medium hidden sm:block">Klik baris untuk lihat detail log</span>
+              </div>
+              <div className="overflow-x-auto -mx-5 px-5 sm:mx-0 sm:px-0">
+                <table className="w-full text-left text-xs min-w-[560px]">
+                  <thead className="bg-slate-50 text-slate-500 text-[10px] uppercase tracking-wide">
+                    <tr>
+                      <th className="p-3 rounded-l-xl">Nama & Role</th>
+                      <th className="p-3 text-center">Hadir</th>
+                      <th className="p-3 text-center">Ketepatan Waktu</th>
+                      <th className="p-3 rounded-r-xl text-right">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {(systemState.users || []).filter(u => ["Pengajar", "Admin", "Admin Biasa", "Admin Super", "Staf"].includes(u.role)).map(u => {
+                      const staffLogs = (systemState.logs || []).filter(l => l.type === "PRESENSI_PENGAJAR" && (l.user === u.name || l.user === u.username));
+                      const hadir = staffLogs.length;
+                      let onTime = 0;
+                      let checkIns = 0;
+                      staffLogs.forEach(l => {
+                        if (!(l.description || "").includes("MASUK")) return;
+                        checkIns++;
+                        const match = (l.description || "").match(/MASUK\s*-\s*(\d{2}):(\d{2}):(\d{2})/i);
+                        let hrVal: number, minVal: number;
+                        if (match) {
+                          hrVal = parseInt(match[1]);
+                          minVal = parseInt(match[2]);
+                        } else {
+                          const d = new Date(l.timestamp || l.time);
+                          hrVal = d.getHours();
+                          minVal = d.getMinutes();
+                        }
+                        if (!(hrVal > 8 || (hrVal === 8 && minVal > 0))) onTime++;
+                      });
+                      const punctuality = checkIns > 0 ? Math.round((onTime / checkIns) * 100) : null;
+                      return (
+                        <tr
+                          key={u.username}
+                          onClick={() => setSelectedHrAttendanceStaff(u)}
+                          className="hover:bg-slate-50 transition cursor-pointer"
+                        >
+                          <td className="p-3">
+                            <p className="font-bold text-slate-800">{u.name}</p>
+                            <p className="text-[9.5px] text-slate-400 font-medium uppercase tracking-wide">{u.role}</p>
+                          </td>
+                          <td className="p-3 text-center">
+                            <span className="font-black text-emerald-600">{hadir}</span>
+                            <span className="text-slate-400 font-medium"> Hari</span>
+                          </td>
+                          <td className="p-3 text-center">
+                            {punctuality !== null ? (
+                              <span className={`text-[10.5px] font-black px-2 py-0.5 rounded-md ${punctuality >= 85 ? "text-emerald-600 bg-emerald-50" : punctuality >= 70 ? "text-indigo-600 bg-indigo-50" : "text-amber-600 bg-amber-50"}`}>
+                                {punctuality}%
+                              </span>
+                            ) : (
+                              <span className="text-slate-300 italic text-[10px]">Belum ada</span>
+                            )}
+                          </td>
+                          <td className="p-3 text-right">
+                            <span className="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 whitespace-nowrap">
+                              Lihat Detail →
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
             <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200"> 
               <h4 className="font-bold text-slate-800 text-sm mb-3">Rekening Gaji Pengajar & Staf</h4> 
               <div className="overflow-x-auto"> 
