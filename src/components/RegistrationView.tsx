@@ -142,11 +142,12 @@ useEffect(() => {
           : paymentType === "transfer"
             ? "Transfer Rekening Manual"
             : "Bayar Langsung Kantor LPK",
+      // Never fabricate a filename when nothing was actually uploaded - that
+      // creates a broken/misleading "proof of payment" link for admins reviewing it.
       proofOfPayment:
         paymentType === "va" || paymentType === "cash"
           ? ""
-          : proofOfPayment ||
-            `tf_mandiri_an_${(name || "siswa").trim().toLowerCase().replace(/\s+/g, "_")}.jpg`,
+          : proofOfPayment || "",
       docAkta: docAkta,
       docFoto: docFoto,
       docIjazahSD: docIjazahSD,
@@ -958,20 +959,12 @@ useEffect(() => {
               REKENING TERVERIFIKASI LPK SCI PATI
             </p>
             <div className="space-y-2 text-[11px]">
-              {(
-                systemState?.customization?.paymentAccounts || [
-                  {
-                    bankName: "BANK MANDIRI",
-                    accountNumber: "135-00-1928301-2",
-                    holderName: "LPK Source Course Indonesia",
-                  },
-                  {
-                    bankName: "BSI (BANK SYARIAH INDONESIA)",
-                    accountNumber: "720-3040-501",
-                    holderName: "LPK SCI Cabang Pati",
-                  },
-                ]
-              ).map((acc, idx) => (
+              {(systemState?.customization?.paymentAccounts || []).length === 0 && (
+                <p className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 rounded-xl p-2.5 italic">
+                  Rekening transfer belum tersedia. Silakan pilih metode pembayaran lain atau hubungi Admin.
+                </p>
+              )}
+              {(systemState?.customization?.paymentAccounts || []).map((acc, idx) => (
                 <div
                   key={idx}
                   className="bg-white p-2.5 rounded-xl border border-slate-150 flex items-center justify-between"

@@ -921,11 +921,12 @@ export default function MobileDashboardView({
             : regPaymentType === "transfer"
               ? "Transfer Rekening Manual"
               : "Bayar Langsung Kantor LPK",
+        // Never fabricate a filename when nothing was actually uploaded - that
+        // creates a broken/misleading "proof of payment" link for admins reviewing it.
         proofOfPayment:
           regPaymentType === "va" || regPaymentType === "cash"
             ? ""
-            : regProofOfPayment ||
-              `tf_mandiri_an_${(regName || "siswa").trim().toLowerCase().replace(/\s+/g, "_")}.jpg`,
+            : regProofOfPayment || "",
         docAkta: regDocAkta,
         docFoto: regDocFoto,
         docIjazahSD: regDocIjazahSD,
