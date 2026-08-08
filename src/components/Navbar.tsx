@@ -10,6 +10,7 @@ import {
   UserPlus, Share2, LayoutGrid, Menu
 } from "lucide-react";
 import { UserAccount, SystemState } from "../types";
+import { getSafePhotoUrl } from "../lib/storageHelper";
 
 // Dynamic Icon Lookup
 const getLogoIcon = (iconName: string) => {
@@ -444,7 +445,7 @@ export default function Navbar({
                   }}
                 >
                   <img 
-                    src={currentUser.profilePicture || `https://ui-avatars.com/api/?name=${encodeURIComponent(currentUser.name || 'User')}&background=e2e8f0&color=334155`} 
+                    src={getSafePhotoUrl(currentUser.profilePicture || (currentUser as any).docFoto, currentUser.name)} 
                     alt={currentUser.name || "Avatar"} 
                     className="h-full w-full object-cover"
                     referrerPolicy="no-referrer" 

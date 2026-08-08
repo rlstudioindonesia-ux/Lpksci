@@ -168,12 +168,14 @@ export default function VvipView({
   const [selectedReferrer, setSelectedReferrer] = useState<string>("all");
   const [affiliateSearch, setAffiliateSearch] = useState<string>("");
   const [studentSearch, setStudentSearch] = useState("");
+  const [studentListMode, setStudentListMode] = useState<"table" | "grid">("table");
   const [classFilter, setClassFilter] = useState("all");
   const [subjectFilter, setSubjectFilter] = useState("all");
   const [expandedLessonId, setExpandedLessonId] = useState<string | null>(null);
   const [selectedClassTab, setSelectedClassTab] = useState<string>("Semua");
   const [selectedSenseiDetail, setSelectedSenseiDetail] = useState<any | null>(null);
   const [selectedHrAttendanceStaff, setSelectedHrAttendanceStaff] = useState<any | null>(null);
+  const [viewingAttendancePhoto, setViewingAttendancePhoto] = useState<string | null>(null);
   const [selectedStudentDetail, setSelectedStudentDetail] = useState<
     any | null
   >(null);
@@ -3194,14 +3196,36 @@ export default function VvipView({
                 </div>
               )}
 
-              <div className="flex items-center gap-2 text-slate-500 text-[11px] font-medium sm:justify-end">
-                <span className="h-2 w-2 rounded-full bg-blue-500 animate-pulse"></span>
-                <span>Sinkronisasi Data Administrasi & Akun</span>
+              <div className="flex items-center justify-between sm:justify-end gap-3 text-slate-500 text-[11px] font-medium">
+                <div className="inline-flex p-1 bg-slate-200/80 rounded-xl border border-slate-200 gap-1 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setStudentListMode("table")}
+                    className={`px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                      studentListMode === "table"
+                        ? "bg-white text-indigo-700 shadow-xs"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    📋 Tabel List
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setStudentListMode("grid")}
+                    className={`px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                      studentListMode === "grid"
+                        ? "bg-white text-indigo-700 shadow-xs"
+                        : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    🗂️ Grid Kartu
+                  </button>
+                </div>
               </div>
             </div>
 
-            {/* Standard display layout mapped to grid/cards for targeted classes OR standard table for general */}
-            {selectedClassTab !== "Semua" && !isReadOnly ? (
+            {/* Standard display layout mapped to grid/cards if explicitly requested, otherwise standard clean table list */}
+            {studentListMode === "grid" ? (
               // CARD GRID for target class to highlight individual details (Private data, Skills, assessments summaries)
               <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 text-left">
                 {(() => {
@@ -3593,9 +3617,16 @@ export default function VvipView({
                             >
                               <td className="px-6 py-4">
                                 <div className="flex items-center gap-3.5">
-                                  <span className="h-9 w-9 rounded-full bg-blue-50 border border-blue-100 text-blue-700 flex items-center justify-center font-black text-xs uppercase shrink-0 shadow-3xs">
-                                    {student.name.slice(0, 2)}
-                                  </span>
+                                  <img
+                                    src={student.profilePicture || ((student as any).docFoto ? ((student as any).docFoto.includes('|') ? (student as any).docFoto.split('|')[1] : (student as any).docFoto) : '') || `https://ui-avatars.com/api/?name=${encodeURIComponent(student.name || 'Siswa')}&background=e0e7ff&color=3730a3`}
+                                    alt={student.name}
+                                    className="h-9 w-9 rounded-full object-cover border border-slate-200 shrink-0 shadow-3xs"
+                                    referrerPolicy="no-referrer"
+                                    onError={(e) => {
+                                      e.currentTarget.onerror = null;
+                                      e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(student.name || 'Siswa')}&background=e0e7ff&color=3730a3`;
+                                    }}
+                                  />
                                   <div>
                                     <div className="flex items-center gap-2">
                                       <p className="font-extrabold text-sm text-slate-900 leading-none">
@@ -4464,9 +4495,13 @@ export default function VvipView({
                         <p className="text-[9.5px] text-slate-500 mt-1 italic">Catatan: {log.notes}</p>
                       )}
                       {log.photoUrl && (
-                        <a href={log.photoUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 mt-2 text-[9.5px] font-bold text-indigo-600 hover:text-indigo-800">
+                        <button
+                          type="button"
+                          onClick={() => setViewingAttendancePhoto(log.photoUrl)}
+                          className="inline-flex items-center gap-1.5 mt-2 text-[10px] font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-xl border border-indigo-200/80 transition cursor-pointer shadow-3xs active:scale-95"
+                        >
                           📸 Lihat Foto Bukti Presensi
-                        </a>
+                        </button>
                       )}
                     </div>
                   );
@@ -4586,14 +4621,13 @@ export default function VvipView({
                           <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
                             {doc.docUrl ? (
                               <>
-                                <a
-                                  href={doc.docUrl}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="text-[10px] font-bold bg-white text-indigo-600 px-3 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 hover:text-indigo-800 transition shadow-3xs flex items-center gap-1"
+                                <button
+                                  type="button"
+                                  onClick={() => setViewingAttendancePhoto(doc.docUrl)}
+                                  className="text-[10px] font-bold bg-white text-indigo-600 px-3 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 hover:text-indigo-800 transition shadow-3xs flex items-center gap-1 cursor-pointer"
                                 >
                                   <span>👁️</span> Lihat
-                                </a>
+                                </button>
                                 <button
                                   type="button"
                                   onClick={() => toggleDocVerify(doc.key)}
@@ -5950,6 +5984,71 @@ export default function VvipView({
                     ));
                 })()}
               </div>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* PHOTO PREVIEW MODAL */}
+      {viewingAttendancePhoto && createPortal(
+        <div
+          className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200"
+          onClick={() => setViewingAttendancePhoto(null)}
+        >
+          <div
+            className="bg-white rounded-3xl max-w-3xl w-full max-h-[90vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden text-left animate-in zoom-in-95 duration-150"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+              <div className="flex items-center gap-2">
+                <span className="text-lg">📷</span>
+                <h3 className="text-sm font-bold text-slate-800">Foto Bukti Presensi / Dokumen</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setViewingAttendancePhoto(null)}
+                className="p-1.5 hover:bg-slate-200 rounded-full transition cursor-pointer text-slate-500 font-bold"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="p-6 overflow-y-auto flex flex-col items-center justify-center bg-slate-900/5 min-h-[300px]">
+              <img
+                src={viewingAttendancePhoto}
+                alt="Bukti Foto"
+                className="max-h-[70vh] w-auto max-w-full rounded-2xl object-contain shadow-md border border-slate-200"
+                referrerPolicy="no-referrer"
+                onError={(e) => {
+                  e.currentTarget.onerror = null;
+                  e.currentTarget.src = "https://images.unsplash.com/photo-1584697964400-2ae6a2f620aa?auto=format&fit=crop&w=800&q=80";
+                }}
+              />
+            </div>
+            <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-between items-center">
+              <button
+                type="button"
+                onClick={() => {
+                  if (viewingAttendancePhoto.startsWith("data:")) {
+                    const a = document.createElement("a");
+                    a.href = viewingAttendancePhoto;
+                    a.download = "bukti_presensi.jpg";
+                    a.click();
+                  } else {
+                    window.open(viewingAttendancePhoto, "_blank");
+                  }
+                }}
+                className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
+              >
+                ⬇️ Unduh / Buka Foto
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewingAttendancePhoto(null)}
+                className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition shadow-sm cursor-pointer"
+              >
+                Tutup
+              </button>
             </div>
           </div>
         </div>,

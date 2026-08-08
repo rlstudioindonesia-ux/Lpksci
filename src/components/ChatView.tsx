@@ -12,6 +12,30 @@ interface ChatViewProps {
   onClose: () => void;
 }
 
+function openMediaSafe(url: string) {
+  if (!url) return;
+  if (url.startsWith("data:")) {
+    try {
+      const arr = url.split(",");
+      const mimeMatch = arr[0].match(/:(.*?);/);
+      const mime = mimeMatch ? mimeMatch[1] : "image/jpeg";
+      const bstr = atob(arr[1]);
+      let n = bstr.length;
+      const u8arr = new Uint8Array(n);
+      while (n--) {
+        u8arr[n] = bstr.charCodeAt(n);
+      }
+      const blob = new Blob([u8arr], { type: mime });
+      const blobUrl = URL.createObjectURL(blob);
+      window.open(blobUrl, "_blank");
+      return;
+    } catch (e) {
+      console.warn("Blob conversion failed:", e);
+    }
+  }
+  window.open(url, "_blank");
+}
+
 export default function ChatView({ currentUser, systemState, onUpdateState, onClose }: ChatViewProps) {
   const [activeChatUser, setActiveChatUser] = useState<UserAccount | (UserAccount & { isGroup?: boolean }) | null>(null);
   const [newMessage, setNewMessage] = useState("");
@@ -580,7 +604,7 @@ export default function ChatView({ currentUser, systemState, onUpdateState, onCl
                             <>
                               {msg.fileType === "image" ? (
                                 <div className="relative group">
-                                  <img src={displayUrl} className="max-w-full rounded-lg cursor-pointer border border-slate-200 shadow-sm" alt="attachment" onClick={() => window.open(displayUrl, '_blank')}/>
+                                  <img src={displayUrl} className="max-w-full rounded-lg cursor-pointer border border-slate-200 shadow-sm" alt="attachment" onClick={() => openMediaSafe(displayUrl)}/>
                                   <div className="absolute top-2 left-2 bg-black/60 backdrop-blur-md text-white text-[7px] font-black uppercase px-2 py-0.5 rounded flex items-center gap-1">
                                     {localUrl ? <CheckCircle2 className="h-2 w-2 text-emerald-400" /> : <Clock className="h-2 w-2" />} 
                                     {localUrl ? "Tersimpan di HP" : "Hapus dlm 24h"}
@@ -616,7 +640,7 @@ export default function ChatView({ currentUser, systemState, onUpdateState, onCl
                             </p>
                             {localUrl ? (
                               <button 
-                                onClick={() => window.open(displayUrl, '_blank')}
+                                onClick={() => openMediaSafe(displayUrl)}
                                 className="text-[10px] font-black px-4 py-2 rounded-xl flex items-center gap-2 bg-emerald-600 text-white hover:bg-emerald-700 transition-all shadow-md shadow-emerald-600/20 active:scale-95"
                               >
                                 <CheckCircle2 className="h-3.5 w-3.5" /> BUKA FILE

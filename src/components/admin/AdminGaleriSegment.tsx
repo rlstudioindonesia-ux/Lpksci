@@ -93,10 +93,13 @@ export default function AdminGaleriSegment({
                       : "border-slate-200 hover:border-slate-300 bg-slate-50/20"
                   }`}
                 >
-                  <div
-                    className="relative h-28 w-full bg-slate-950 bg-cover bg-center"
-                    style={{ backgroundImage: `url(${item.image})` }}
-                  >
+                  <div className="relative h-28 w-full bg-slate-950 overflow-hidden">
+                    <img
+                      src={item.image}
+                      alt={item.title || "Galeri"}
+                      className="w-full h-full object-cover"
+                      referrerPolicy="no-referrer"
+                    />
                     <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 to-transparent"></div>
                     <div className="absolute bottom-2 left-2 right-2 text-left">
                       <span className="text-[10px] text-white font-extrabold truncate block mt-1 drop-shadow-sm leading-tight">

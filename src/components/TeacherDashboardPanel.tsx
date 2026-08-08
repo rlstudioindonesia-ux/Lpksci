@@ -733,12 +733,13 @@ export function TeacherDashboardPanel({
                                   src={log.photoUrl}
                                   alt="Bukti"
                                   className="w-8 h-8 rounded-md object-cover border border-slate-200 shadow-xs cursor-pointer hover:scale-110 transition-transform shrink-0"
-                                  onClick={() => window.open(log.photoUrl, "_blank")}
+                                  onClick={() => setSelectedLogForPreview(log)}
                                   referrerPolicy="no-referrer"
                                 />
                                 <button
-                                  onClick={() => window.open(log.photoUrl, "_blank")}
-                                  className="text-[10px] text-indigo-600 hover:underline font-bold"
+                                  type="button"
+                                  onClick={() => setSelectedLogForPreview(log)}
+                                  className="text-[10px] text-indigo-600 hover:underline font-bold cursor-pointer"
                                 >
                                   Lihat
                                 </button>

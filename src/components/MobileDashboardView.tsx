@@ -2082,9 +2082,9 @@ export default function MobileDashboardView({
               </p>
 
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                {((systemState.galleries && systemState.galleries.length > 0)
-                  ? systemState.galleries
-                  : (systemState.customization?.gallery && systemState.customization.gallery.length > 0) ? systemState.customization.gallery : [
+                {((systemState.customization?.gallery && systemState.customization.gallery.length > 0)
+                  ? systemState.customization.gallery
+                  : ((systemState.galleries && systemState.galleries.length > 0) ? systemState.galleries : [
                       {
                         title: "Kegiatan LPK SCI",
                         image: "https://images.unsplash.com/photo-1490730141103-6cac27aaab94?auto=format&fit=crop&w=800&q=80",
@@ -2116,7 +2116,7 @@ export default function MobileDashboardView({
                         tag: "JEPANG",
                       },
                     ]
-                ).map((item: any, idx) => (
+                )).map((item: any, idx) => (
                   <div
                     key={idx}
                     onClick={() => setSelectedGalleryImage({

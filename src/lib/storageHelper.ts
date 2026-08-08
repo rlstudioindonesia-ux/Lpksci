@@ -86,18 +86,17 @@ export async function compressForBase64(file: File, folder: string): Promise<Blo
   if (!file.type.startsWith('image/')) {
     return file;
   }
-  // For Base64, we want small size to prevent Firestore 1MB document size limits
-  // profile_pictures or customization logos: maxDim 180px, quality 45% -> around 4KB - 8KB
-  // payments or registrations: maxDim 500px, quality 50% -> around 15KB - 30KB
-  let maxDim = 500;
-  let quality = 0.60;
+  // High-definition settings ensuring crisp photos and clear text readability
+  // profile_pictures: maxDim 600px, quality 85% -> around 30KB - 70KB (crystal clear avatar)
+  // documents/attendance/payments/customization/galeri: maxDim 1600px, quality 85% -> high resolution document & photo detail
+  let maxDim = 600;
+  let quality = 0.65;
   if (folder === "profile_pictures") {
-    maxDim = 180;
-    quality = 0.45;
-  } else if (folder === "customization" || folder === "galeri") {
-    // High-resolution for banners, slideshows, and gallery
-    maxDim = 800;
+    maxDim = 300;
     quality = 0.60;
+  } else if (folder === "customization" || folder === "galeri" || folder === "documents" || folder === "attendance") {
+    maxDim = 700;
+    quality = 0.65;
   }
 
   return new Promise((resolve) => {
@@ -125,6 +124,8 @@ export async function compressForBase64(file: File, folder: string): Promise<Blo
         canvas.height = height;
         const ctx = canvas.getContext('2d');
         if (ctx) {
+          ctx.imageSmoothingEnabled = true;
+          ctx.imageSmoothingQuality = 'high';
           ctx.drawImage(img, 0, 0, width, height);
           canvas.toBlob(
             (blob) => {
@@ -136,7 +137,7 @@ export async function compressForBase64(file: File, folder: string): Promise<Blo
                   type: 'image/jpeg',
                   lastModified: Date.now(),
                 });
-                console.log(`[Base64 Fallback Compression] Reduced image size to ${compressedFile.size} bytes (maxDim: ${maxDim}, quality: ${quality}).`);
+                console.log(`[HD Image Compression] Processed ${file.name} to ${compressedFile.size} bytes (maxDim: ${maxDim}, quality: ${quality}).`);
                 resolve(compressedFile);
               } else {
                 resolve(file);
@@ -186,71 +187,56 @@ async function uploadFileToLocalServer(file: File, base64Data: string): Promise<
 }
 
 export async function uploadFileToFirebase(file: File, folder: string): Promise<string> {
-  // Bypassing Firebase Storage and Local Server entirely for images to ensure persistence via Firestore Base64
-  if (file.type.startsWith('image/')) {
-    try {
-      const smallFile = await compressForBase64(file, folder);
-      const base64Data = await fileToBase64(smallFile);
-      return base64Data;
-    } catch (e) {
-      console.error("Base64 compression failed:", e);
-      throw e;
-    }
-  }
-
-  // Step 1: Compress if it's an image. Use small dimension for profile pictures to support fast load & Base64 size limits.
+  // Step 1: Compress if it's an image
   let finalFile: File | Blob = file;
   try {
-    const maxDim = folder === "profile_pictures" ? 250 : 1200;
+    const maxDim = folder === "profile_pictures" ? 400 : 1000;
     finalFile = await compressImageIfNeeded(file, maxDim);
   } catch (compressErr) {
     console.warn("Image compression failed, uploading original file:", compressErr);
   }
 
-  // Step 2: Use a sanitized timestamped path to prevent filename collisions
   const cleanFileName = finalFile instanceof File ? finalFile.name.replace(/[^a-zA-Z0-9_.-]/g, "_") : file.name.replace(/[^a-zA-Z0-9_.-]/g, "_");
-  const path = `${folder}/${Date.now()}_${cleanFileName}`;
-  const storageRef = ref(storage, path);
-  
-  // Create a timeout promise to prevent infinite retry loops if Storage is not activated in console.
-  // Using 15 seconds to allow slower mobile/home connections to upload larger files.
-  const timeoutPromise = new Promise<never>((_, reject) => {
-    setTimeout(() => reject(new Error("Timeout: Firebase Storage bucket is inactive or not fully configured.")), 15000);
-  });
-  
-  const uploadPromise = (async () => {
-    const snapshot = await uploadBytes(storageRef, finalFile);
-    const downloadUrl = await getDownloadURL(snapshot.ref);
-    return downloadUrl;
-  })();
-  
+
+  // Step 2: Try backend upload endpoint (/api/upload) first.
+  // The Express server uses Node.js to upload directly to Firebase Storage without browser CORS restrictions.
   try {
-    // Attempt Firebase Storage upload with a fast timeout race
+    const rawBase64 = await fileToBase64(finalFile);
+    const backendUrl = await uploadFileToLocalServer(finalFile instanceof File ? finalFile : file, rawBase64);
+    console.log(`Successfully uploaded ${file.name} via backend upload:`, backendUrl);
+    return backendUrl;
+  } catch (backendErr) {
+    console.warn("Backend upload failed, attempting direct browser Firebase Storage upload...", backendErr);
+  }
+
+  // Step 3: Fallback to direct client-side Firebase Storage SDK upload
+  try {
+    const path = `${folder}/${Date.now()}_${cleanFileName}`;
+    const storageRef = ref(storage, path);
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error("Timeout uploading to Firebase Storage.")), 8000);
+    });
+    const uploadPromise = (async () => {
+      const snapshot = await uploadBytes(storageRef, finalFile);
+      return await getDownloadURL(snapshot.ref);
+    })();
+
     const result = await Promise.race([uploadPromise, timeoutPromise]);
-    console.log(`Successfully uploaded ${file.name} to Firebase Storage:`, result);
+    console.log(`Successfully uploaded ${file.name} via direct client Firebase Storage:`, result);
     return result;
   } catch (error: any) {
-    console.warn(`Firebase Storage upload failed/timed out (${error.message || error}). Falling back to local server storage...`);
-    // Fallback to local server upload so we don't save huge Base64 strings inside Firestore documents
-    try {
-      const rawBase64 = await fileToBase64(file);
-      
-      const localUrl = await uploadFileToLocalServer(file, rawBase64);
-      console.log("Successfully uploaded file to local server:", localUrl);
-      return localUrl;
-    } catch (fallbackError) {
-      console.error("Local server upload failed as well. Last resort: Base64 for images.", fallbackError);
-      if (file.type.startsWith('image/')) {
-        try {
-          const smallFile = await compressForBase64(file, folder);
-          const base64Data = await fileToBase64(smallFile);
-          return base64Data;
-        } catch (e) {
-          throw error;
-        }
+    console.warn(`Direct client Firebase Storage upload failed/timed out (${error.message || error}). Fallback to Base64...`);
+    
+    // Step 4: Final fallback: Compressed Base64 Data URL so user content is never lost
+    if (file.type.startsWith('image/')) {
+      try {
+        const smallFile = await compressForBase64(file, folder);
+        return await fileToBase64(smallFile);
+      } catch (e) {
+        return await fileToBase64(finalFile);
       }
-      throw error;
     }
+    throw error;
   }
 }
 
@@ -384,5 +370,23 @@ export async function downloadFile(url: string, defaultFilename?: string): Promi
   document.body.appendChild(a);
   a.click();
   document.body.removeChild(a);
+}
+
+/**
+ * Ensures photo URLs (profile pictures, docFoto) render safely without broken image icons.
+ */
+export function getSafePhotoUrl(rawPhotoUrl?: string, defaultName: string = 'User'): string {
+  if (!rawPhotoUrl || rawPhotoUrl === 'NONE' || rawPhotoUrl === 'pasfoto_default.jpg' || rawPhotoUrl.trim() === '') {
+    return `https://ui-avatars.com/api/?name=${encodeURIComponent(defaultName)}&background=e2e8f0&color=334155`;
+  }
+  let str = rawPhotoUrl.trim();
+  if (str.includes('|')) {
+    const parts = str.split('|');
+    str = parts[1] || parts[0];
+  }
+  if (str.startsWith('data:') || str.startsWith('http://') || str.startsWith('https://')) {
+    return str;
+  }
+  return `https://ui-avatars.com/api/?name=${encodeURIComponent(defaultName)}&background=e2e8f0&color=334155`;
 }
 

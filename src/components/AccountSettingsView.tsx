@@ -591,7 +591,7 @@ export default function AccountSettingsView({
             <div className="relative flex flex-col md:flex-row items-start md:items-center justify-between gap-6 w-full min-w-0">
               <div className="flex items-center gap-4 w-full min-w-0">
                 <img
-                  src={currentUser?.profilePicture || `https://ui-avatars.com/api/?name=${encodeURIComponent(currentUser?.name || 'User')}&background=e2e8f0&color=334155`}
+                  src={currentUser?.profilePicture || (registeredStudentInfo?.docFoto ? (registeredStudentInfo.docFoto.includes('|') ? registeredStudentInfo.docFoto.split('|')[1] : registeredStudentInfo.docFoto) : '') || `https://ui-avatars.com/api/?name=${encodeURIComponent(currentUser?.name || 'User')}&background=e2e8f0&color=334155`}
                   alt="Profile"
                   referrerPolicy="no-referrer"
                   className="h-16 w-16 rounded-2xl object-cover border-2 border-white/20 shadow-inner shrink-0"
@@ -1230,6 +1230,17 @@ export default function AccountSettingsView({
                                       ...registeredStudentInfo,
                                       [doc.field]: `${file.name}|${url}`,
                                     };
+                                    if (doc.field === "docFoto") {
+                                      updated.profilePicture = url;
+                                      setProfilePicture(url);
+                                      if ((currentUser as any)?.id || currentUser?.username) {
+                                        await onUpdateState("users", "edit", {
+                                          ...currentUser,
+                                          profilePicture: url,
+                                          docFoto: `${file.name}|${url}`
+                                        });
+                                      }
+                                    }
                                     await onUpdateState(
                                       isFromActiveStudents ? "activeStudents" : "registeredStudents",
                                       "update",

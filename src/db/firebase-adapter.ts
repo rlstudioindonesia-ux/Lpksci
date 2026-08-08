@@ -81,7 +81,9 @@ export const db = hasConfig && app
   : null;
 
 export const storage = hasConfig && app
-  ? getStorage(app)
+  ? (firebaseConfig.storageBucket 
+      ? getStorage(app, firebaseConfig.storageBucket.startsWith("gs://") ? firebaseConfig.storageBucket : `gs://${firebaseConfig.storageBucket}`)
+      : getStorage(app))
   : null;
 
 function sanitizeFirestoreData(data: any): any {

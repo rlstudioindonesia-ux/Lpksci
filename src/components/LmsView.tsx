@@ -52,6 +52,7 @@ export function StudentAttendanceManager({
   const [historySearch, setHistorySearch] = React.useState("");
   const [editingRecord, setEditingRecord] = React.useState<any>(null);
   const [expandedSessions, setExpandedSessions] = React.useState<string[]>([]);
+  const [viewingAttendancePhoto, setViewingAttendancePhoto] = React.useState<string | null>(null);
   
   // Group records by session
   const sessionGroups = React.useMemo(() => {
@@ -550,6 +551,7 @@ export function StudentAttendanceManager({
                                 <tr>
                                   <th className="px-4 py-3">Siswa</th>
                                   <th className="px-4 py-3">Status</th>
+                                  <th className="px-4 py-3">Foto Bukti</th>
                                   <th className="px-4 py-3">Catatan Khusus</th>
                                   <th className="px-4 py-3 text-right">Aksi</th>
                                 </tr>
@@ -564,6 +566,25 @@ export function StudentAttendanceManager({
                                         r.status === 'Izin' || r.status === 'Sakit' ? 'bg-amber-100 text-amber-700' :
                                         'bg-rose-100 text-rose-700'
                                       }`}>{r.status}</span>
+                                    </td>
+                                    <td className="px-4 py-3">
+                                      {(r.photo || r.photoUrl || r.proof) ? (
+                                        <button
+                                          type="button"
+                                          onClick={() => setViewingAttendancePhoto(r.photo || r.photoUrl || r.proof)}
+                                          className="inline-flex items-center gap-1.5 px-2 py-1 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-lg text-[10px] font-extrabold border border-blue-200/80 transition cursor-pointer"
+                                        >
+                                          <img
+                                            src={r.photo || r.photoUrl || r.proof}
+                                            className="w-5 h-5 rounded object-cover border border-blue-300"
+                                            alt="Foto"
+                                            referrerPolicy="no-referrer"
+                                          />
+                                          <span>Lihat Foto</span>
+                                        </button>
+                                      ) : (
+                                        <span className="text-[10px] text-slate-400 italic">Tanpa Foto</span>
+                                      )}
                                     </td>
                                     <td className="px-4 py-3 text-slate-500 max-w-[200px] truncate" title={r.notes}>{r.notes || "-"}</td>
                                     <td className="px-4 py-3 text-right">
@@ -658,6 +679,40 @@ export function StudentAttendanceManager({
                         className="px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl flex items-center gap-1.5"
                       >
                         <Save className="w-3.5 h-3.5" /> Simpan Perubahan
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {viewingAttendancePhoto && (
+                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in" onClick={() => setViewingAttendancePhoto(null)}>
+                  <div className="bg-white rounded-3xl p-4 max-w-md w-full shadow-2xl relative space-y-3" onClick={e => e.stopPropagation()}>
+                    <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                      <h4 className="font-extrabold text-xs text-slate-800 flex items-center gap-2">
+                        <span>📷</span> Foto Bukti Presensi
+                      </h4>
+                      <button
+                        onClick={() => setViewingAttendancePhoto(null)}
+                        className="p-1 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                    <div className="rounded-2xl overflow-hidden bg-slate-950 flex items-center justify-center min-h-[220px] max-h-[65vh]">
+                      <img
+                        src={viewingAttendancePhoto}
+                        alt="Foto Absen"
+                        className="max-h-[63vh] w-auto object-contain rounded-xl"
+                        referrerPolicy="no-referrer"
+                      />
+                    </div>
+                    <div className="text-center pt-1">
+                      <button
+                        onClick={() => setViewingAttendancePhoto(null)}
+                        className="px-5 py-2 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-slate-800 transition cursor-pointer"
+                      >
+                        Tutup
                       </button>
                     </div>
                   </div>
@@ -956,6 +1011,7 @@ export default function LmsView({
   }, [initialSubTab]);
   const [progressSubject, setProgressSubject] = React.useState("Bahasa Jepang");
   const [viewingDoc, setViewingDoc] = React.useState<{ title: string; url: string } | null>(null);
+  const [viewingAttendancePhoto, setViewingAttendancePhoto] = React.useState<string | null>(null);
   
   const [scoreKanji, setScoreKanji] = React.useState<number | "">("");
   const [scoreKotoba, setScoreKotoba] = React.useState<number | "">("");
@@ -3017,6 +3073,23 @@ export default function LmsView({
                                     <p className="text-[10px] text-slate-400 mt-1 flex gap-1">
                                       <span className="font-bold">Catatan:</span> {record.notes}
                                     </p>
+                                  )}
+                                  {(record.photo || record.photoUrl || record.proof) && (
+                                    <div className="mt-2">
+                                      <button
+                                        type="button"
+                                        onClick={() => setViewingAttendancePhoto(record.photo || record.photoUrl || record.proof)}
+                                        className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-xl text-[10px] font-extrabold border border-blue-200 transition cursor-pointer"
+                                      >
+                                        <img
+                                          src={record.photo || record.photoUrl || record.proof}
+                                          className="w-6 h-6 rounded-md object-cover border border-blue-300"
+                                          alt="Bukti Presensi"
+                                          referrerPolicy="no-referrer"
+                                        />
+                                        <span>🔍 Lihat Foto Absen</span>
+                                      </button>
+                                    </div>
                                   )}
                                 </div>
                               </div>
@@ -6606,6 +6679,39 @@ export default function LmsView({
                   )}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {viewingAttendancePhoto && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in" onClick={() => setViewingAttendancePhoto(null)}>
+          <div className="bg-white rounded-3xl p-4 max-w-md w-full shadow-2xl relative space-y-3" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+              <h4 className="font-extrabold text-xs text-slate-800 flex items-center gap-2">
+                <span>📷</span> Foto Bukti Presensi
+              </h4>
+              <button
+                onClick={() => setViewingAttendancePhoto(null)}
+                className="p-1 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="rounded-2xl overflow-hidden bg-slate-950 flex items-center justify-center min-h-[220px] max-h-[65vh]">
+              <img
+                src={viewingAttendancePhoto}
+                alt="Foto Absen"
+                className="max-h-[63vh] w-auto object-contain rounded-xl"
+              />
+            </div>
+            <div className="text-center pt-1">
+              <button
+                onClick={() => setViewingAttendancePhoto(null)}
+                className="px-5 py-2 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-slate-800 transition cursor-pointer"
+              >
+                Tutup
+              </button>
             </div>
           </div>
         </div>

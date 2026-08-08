@@ -124,7 +124,7 @@ export default function StudentCvView({
         lpkEntryDate: student.lpkEntryDate || "",
         studyDuration: student.studyDuration || "",
         email: student.email || "",
-        profilePicture: student.profilePicture || ""
+        profilePicture: student.profilePicture || ((student as any).docFoto ? ((student as any).docFoto.includes('|') ? (student as any).docFoto.split('|')[1] : (student as any).docFoto) : "")
       });
     }
   }, [student]);

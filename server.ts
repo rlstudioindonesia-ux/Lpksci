@@ -222,7 +222,7 @@ app.post("/api/upload", async (req, res) => {
   try {
     const matches = fileData.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
     let base64Image = fileData;
-    let mimeType = "application/octet-stream";
+    let mimeType = "image/jpeg";
     if (matches && matches.length === 3) {
       mimeType = matches[1];
       base64Image = matches[2];
@@ -236,17 +236,12 @@ app.post("/api/upload", async (req, res) => {
       console.log(`Successfully uploaded ${fileName} to Firebase Storage: ${firebaseStorageUrl}`);
       return res.json({ url: firebaseStorageUrl });
     } catch (firebaseErr: any) {
-      console.warn("Firebase Storage upload failed on backend. Falling back to local file system:", firebaseErr.message || firebaseErr);
+      console.warn("Firebase Storage upload failed on backend. Returning persistent base64 data URL fallback:", firebaseErr.message || firebaseErr);
     }
 
-    // Fallback: Local Server Disk Storage
-    const uploadsDir = path.join(process.cwd(), "uploads");
-    if (!fs.existsSync(uploadsDir)) {
-      fs.mkdirSync(uploadsDir, { recursive: true });
-    }
-    const uniqueName = `${Date.now()}_${fileName.replace(/[^a-zA-Z0-9_.-]/g, "_")}`;
-    fs.writeFileSync(path.join(uploadsDir, uniqueName), buffer);
-    res.json({ url: `/uploads/${uniqueName}` });
+    // Persistent Fallback: Return persistent base64 Data URL so photos are never lost when container restarts
+    const persistentUrl = fileData.startsWith("data:") ? fileData : `data:${mimeType};base64,${base64Image}`;
+    res.json({ url: persistentUrl });
   } catch (error: any) {
     console.error("Upload API error:", error);
     res.status(500).json({ error: error.message });
@@ -2394,6 +2389,10 @@ app.post("/api/state/update", (req, res) => {
     }
     if (dataType === "galleries" && action === "update") {
       state.galleries = payload;
+      if (state.customization) {
+        state.customization.gallery = payload;
+        syncCustomizationToFirestore(state.customization);
+      }
       syncEntityToFirestore("system", "galleries", { data: state.galleries });
       return res.json({ success: true, item: { id: "galleries", data: state.galleries } });
     }
