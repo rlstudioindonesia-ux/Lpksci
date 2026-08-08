@@ -751,11 +751,13 @@ export default function AdminView({
         return config;
       });
 
-      const loc = systemState.customization?.officeLocation || { latitude: -7.79558, longitude: 110.36949, radius: 200, enforce: true };
-      setOfficeLat(prev => prev || String(loc.latitude ?? -7.79558));
-      setOfficeLon(prev => prev || String(loc.longitude ?? 110.36949));
+      // No hardcoded coordinate default: an unconfigured office location must fail
+      // safe (geofencing off) rather than silently enforcing an arbitrary city.
+      const loc = systemState.customization?.officeLocation || { latitude: "", longitude: "", radius: 200, enforce: false };
+      setOfficeLat(prev => prev || String(loc.latitude ?? ""));
+      setOfficeLon(prev => prev || String(loc.longitude ?? ""));
       setOfficeRadius(prev => prev || String(loc.radius ?? 200));
-      setOfficeEnforce(prev => prev !== null ? prev : (loc.enforce !== false));
+      setOfficeEnforce(prev => prev !== null ? prev : (loc.enforce === true));
     }
   }, [systemState?.customization]);
 
@@ -6859,7 +6861,7 @@ export default function AdminView({
                         value={officeLat || ""}
                         onChange={(e) => setOfficeLat(e.target.value)}
                         className="w-full text-xs font-mono font-bold rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 outline-none focus:border-indigo-500 focus:bg-white transition"
-                        placeholder="Contoh: -7.79558"
+                        placeholder="Gunakan tombol Deteksi Koordinat di bawah"
                       />
                     </div>
 
@@ -6875,7 +6877,7 @@ export default function AdminView({
                         value={officeLon || ""}
                         onChange={(e) => setOfficeLon(e.target.value)}
                         className="w-full text-xs font-mono font-bold rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 outline-none focus:border-indigo-500 focus:bg-white transition"
-                        placeholder="Contoh: 110.36949"
+                        placeholder="Gunakan tombol Deteksi Koordinat di bawah"
                       />
                     </div>
                   </div>
@@ -6946,18 +6948,6 @@ export default function AdminView({
                     >
                       📍 Deteksi Koordinat Saya Saat Ini
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setOfficeLat("-7.79558");
-                        setOfficeLon("110.36949");
-                        setOfficeRadius("200");
-                        setOfficeEnforce(true);
-                      }}
-                      className="px-4 py-2 bg-white hover:bg-slate-50 text-slate-500 border border-slate-100 rounded-xl text-xs font-bold cursor-pointer transition"
-                    >
-                      Reset Default (Yogyakarta)
-                    </button>
                   </div>
                 </div>
 
@@ -6967,8 +6957,8 @@ export default function AdminView({
                       📍 Status Koordinat Saat Ini
                     </span>
                     <div className="space-y-1 font-mono text-xs text-slate-700 font-bold">
-                      <div>Lat: <span className="text-indigo-700">{officeLat || "-7.79558"}</span></div>
-                      <div>Lon: <span className="text-indigo-700">{officeLon || "110.36949"}</span></div>
+                      <div>Lat: <span className="text-indigo-700">{officeLat || "Belum diatur"}</span></div>
+                      <div>Lon: <span className="text-indigo-700">{officeLon || "Belum diatur"}</span></div>
                       <div>Radius: <span className="text-indigo-700">{officeRadius || "200"} m</span></div>
                       <div>Enforce: <span className="text-indigo-700">{officeEnforce ? "Aktif (Wajib)" : "Nonaktif"}</span></div>
                     </div>

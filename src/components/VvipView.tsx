@@ -211,8 +211,8 @@ export default function VvipView({
   React.useEffect(() => {
     if (systemState?.customization?.officeLocation) {
       const loc = systemState.customization.officeLocation;
-      setOfficeLat(String(loc.latitude ?? -7.79558));
-      setOfficeLon(String(loc.longitude ?? 110.36949));
+      setOfficeLat(String(loc.latitude ?? ""));
+      setOfficeLon(String(loc.longitude ?? ""));
       setOfficeRadius(String(loc.radius ?? 200));
       setOfficeEnforce(loc.enforce !== false);
     }
