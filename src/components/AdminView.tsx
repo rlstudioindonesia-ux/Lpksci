@@ -76,7 +76,7 @@ import {
   Area,
   CartesianGrid
 } from "recharts";
-import { uploadFileToFirebase, getEmbeddablePdfUrl } from "../lib/storageHelper";
+import { uploadFileToFirebase, getEmbeddablePdfUrl, getSafePhotoUrl } from "../lib/storageHelper";
 import {
   SystemState,
   RegisteredStudent,
@@ -632,9 +632,7 @@ export default function AdminView({
       });
       setCustGallery((prev) => {
         if (prev.length > 0) return prev;
-        if (systemState.galleries && systemState.galleries.length > 0) return systemState.galleries;
-        if (systemState.customization?.gallery && systemState.customization.gallery.length > 0) return systemState.customization.gallery;
-        return [];
+        return systemState.galleries || [];
       });
       setCustRunningText(
         (prev) => prev || systemState.customization?.runningText || "",
@@ -751,11 +749,13 @@ export default function AdminView({
         return config;
       });
 
-      const loc = systemState.customization?.officeLocation || { latitude: -7.79558, longitude: 110.36949, radius: 200, enforce: true };
-      setOfficeLat(prev => prev || String(loc.latitude ?? -7.79558));
-      setOfficeLon(prev => prev || String(loc.longitude ?? 110.36949));
+      // No hardcoded coordinate default: an unconfigured office location must fail
+      // safe (geofencing off) rather than silently enforcing an arbitrary city.
+      const loc = systemState.customization?.officeLocation || { latitude: "", longitude: "", radius: 200, enforce: false };
+      setOfficeLat(prev => prev || String(loc.latitude ?? ""));
+      setOfficeLon(prev => prev || String(loc.longitude ?? ""));
       setOfficeRadius(prev => prev || String(loc.radius ?? 200));
-      setOfficeEnforce(prev => prev !== null ? prev : (loc.enforce !== false));
+      setOfficeEnforce(prev => prev !== null ? prev : (loc.enforce === true));
     }
   }, [systemState?.customization]);
 
@@ -1198,19 +1198,7 @@ export default function AdminView({
     if (e && typeof e.preventDefault === 'function') e.preventDefault();
     if (!accBankName || !accNumber || !accHolder) return;
 
-    // Default fallback
-    const currentAccounts = systemState.customization?.paymentAccounts || [
-      {
-        bankName: "BANK MANDIRI",
-        accountNumber: "135-00-1928301-2",
-        holderName: "LPK Source Course Indonesia",
-      },
-      {
-        bankName: "BSI (BANK SYARIAH INDONESIA)",
-        accountNumber: "712-345-678-9",
-        holderName: "LPK Source Course Indo",
-      },
-    ];
+    const currentAccounts = systemState.customization?.paymentAccounts || [];
 
     const newAccounts = [
       ...currentAccounts,
@@ -2497,7 +2485,7 @@ export default function AdminView({
                             <td className="md:p-4 p-1.5 py-2">
                               <div className="flex items-center gap-3">
                                 <img
-                                  src={s.profilePicture || (s as any).docFoto || systemState.registeredStudents?.find(r => r.id === s.id || (r.email && r.email === (s as any).email))?.docFoto || `https://ui-avatars.com/api/?name=${encodeURIComponent(s.name || 'Siswa')}&background=e2e8f0&color=334155`}
+                                  src={getSafePhotoUrl(s.profilePicture || (s as any).docFoto || systemState.registeredStudents?.find(r => r.id === s.id || (r.email && r.email === (s as any).email))?.docFoto, s.name)}
                                   className="h-10 w-10 shrink-0 rounded-xl object-cover border border-slate-200"
                                   alt={s.name || "Avatar"}
                                   referrerPolicy="no-referrer"
@@ -3013,7 +3001,7 @@ export default function AdminView({
                           </div>
                           <div className="flex items-start gap-3">
                             <img
-                              src={s.profilePicture || (s as any).docFoto || systemState.registeredStudents?.find(r => r.id === s.id || (r.email && r.email === (s as any).email))?.docFoto || `https://ui-avatars.com/api/?name=${encodeURIComponent(s.name || 'Siswa')}&background=e2e8f0&color=334155`}
+                              src={getSafePhotoUrl(s.profilePicture || (s as any).docFoto || systemState.registeredStudents?.find(r => r.id === s.id || (r.email && r.email === (s as any).email))?.docFoto, s.name)}
                               className="h-10 w-10 shrink-0 rounded-xl object-cover border border-slate-200"
                               alt={s.name || "Avatar"}
                               referrerPolicy="no-referrer"
@@ -3315,7 +3303,7 @@ export default function AdminView({
                     <div key={`${student.id}-${student.name}`} className="p-4 border border-slate-100 bg-slate-50 rounded-2xl flex items-center justify-between gap-3">
                       <div className="flex items-center gap-3">
                         <img
-                          src={student.profilePicture || (student as any).docFoto || systemState.registeredStudents?.find(r => r.id === student.id || (r.email && r.email === (student as any).email))?.docFoto || `https://ui-avatars.com/api/?name=${encodeURIComponent(student.name || 'Siswa')}&background=e2e8f0&color=334155`}
+                          src={getSafePhotoUrl(student.profilePicture || (student as any).docFoto || systemState.registeredStudents?.find(r => r.id === student.id || (r.email && r.email === (student as any).email))?.docFoto, student.name)}
                           alt={student.name}
                           referrerPolicy="no-referrer"
                           className="w-10 h-10 rounded-full object-cover border border-slate-200"
@@ -4534,7 +4522,7 @@ export default function AdminView({
                                           <div className="flex justify-between items-center font-bold">
                                             <div className="flex items-center gap-2">
                                               <img
-                                                src={stData.profilePicture || (stData as any).docFoto || `https://ui-avatars.com/api/?name=${encodeURIComponent(stData.name || 'Siswa')}&background=e2e8f0&color=334155`}
+                                                src={getSafePhotoUrl(stData.profilePicture || (stData as any).docFoto, stData.name)}
                                                 alt={stData.name}
                                                 referrerPolicy="no-referrer"
                                                 className="w-6 h-6 rounded-full object-cover border border-slate-200"
@@ -6871,7 +6859,7 @@ export default function AdminView({
                         value={officeLat || ""}
                         onChange={(e) => setOfficeLat(e.target.value)}
                         className="w-full text-xs font-mono font-bold rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 outline-none focus:border-indigo-500 focus:bg-white transition"
-                        placeholder="Contoh: -7.79558"
+                        placeholder="Gunakan tombol Deteksi Koordinat di bawah"
                       />
                     </div>
 
@@ -6887,7 +6875,7 @@ export default function AdminView({
                         value={officeLon || ""}
                         onChange={(e) => setOfficeLon(e.target.value)}
                         className="w-full text-xs font-mono font-bold rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 outline-none focus:border-indigo-500 focus:bg-white transition"
-                        placeholder="Contoh: 110.36949"
+                        placeholder="Gunakan tombol Deteksi Koordinat di bawah"
                       />
                     </div>
                   </div>
@@ -6958,18 +6946,6 @@ export default function AdminView({
                     >
                       📍 Deteksi Koordinat Saya Saat Ini
                     </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setOfficeLat("-7.79558");
-                        setOfficeLon("110.36949");
-                        setOfficeRadius("200");
-                        setOfficeEnforce(true);
-                      }}
-                      className="px-4 py-2 bg-white hover:bg-slate-50 text-slate-500 border border-slate-100 rounded-xl text-xs font-bold cursor-pointer transition"
-                    >
-                      Reset Default (Yogyakarta)
-                    </button>
                   </div>
                 </div>
 
@@ -6979,8 +6955,8 @@ export default function AdminView({
                       📍 Status Koordinat Saat Ini
                     </span>
                     <div className="space-y-1 font-mono text-xs text-slate-700 font-bold">
-                      <div>Lat: <span className="text-indigo-700">{officeLat || "-7.79558"}</span></div>
-                      <div>Lon: <span className="text-indigo-700">{officeLon || "110.36949"}</span></div>
+                      <div>Lat: <span className="text-indigo-700">{officeLat || "Belum diatur"}</span></div>
+                      <div>Lon: <span className="text-indigo-700">{officeLon || "Belum diatur"}</span></div>
                       <div>Radius: <span className="text-indigo-700">{officeRadius || "200"} m</span></div>
                       <div>Enforce: <span className="text-indigo-700">{officeEnforce ? "Aktif (Wajib)" : "Nonaktif"}</span></div>
                     </div>

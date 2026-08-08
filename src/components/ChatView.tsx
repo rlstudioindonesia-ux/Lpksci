@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { UserAccount, SystemState, ChatMessage } from "../types";
 import { ArrowLeft, Send, SendHorizontal, User, Search, Paperclip, File, Image as ImageIcon, Loader2, Users, Clock, Download, Info, AlertTriangle, CheckCircle2, MessageSquare, Trash2, Check, CheckCheck } from "lucide-react";
-import { uploadFileToFirebase } from "../lib/storageHelper";
+import { uploadFileToFirebase, getSafePhotoUrl } from "../lib/storageHelper";
 import { getLocalMedia, downloadAndSaveMedia } from "../lib/localMedia";
 import { ConfirmButton } from "./ConfirmButton";
 
@@ -444,7 +444,7 @@ export default function ChatView({ currentUser, systemState, onUpdateState, onCl
                 >
                   <div className="flex items-center gap-3 min-w-0 flex-1 mr-2">
                     <img
-                      src={contact.profilePicture || `https://ui-avatars.com/api/?name=${encodeURIComponent(contact.name || 'User')}&background=e2e8f0&color=334155`}
+                      src={getSafePhotoUrl(contact.profilePicture, contact.name)}
                       className="h-10 w-10 rounded-lg object-cover border border-slate-200 shrink-0"
                       alt={contact.name || "Avatar"}
                       referrerPolicy="no-referrer"
@@ -501,7 +501,7 @@ export default function ChatView({ currentUser, systemState, onUpdateState, onCl
               <button onClick={() => setActiveChatUser(null)} className="p-1.5 bg-white/10 hover:bg-white/20 rounded-lg text-slate-200 transition"><ArrowLeft className="h-4 w-4" /></button>
               <div className="flex items-center gap-2">
                 <img
-                  src={activeChatUser.profilePicture || `https://ui-avatars.com/api/?name=${encodeURIComponent(activeChatUser.name || 'User')}&background=e2e8f0&color=334155`}
+                  src={getSafePhotoUrl(activeChatUser.profilePicture, activeChatUser.name)}
                   className="h-8 w-8 rounded-md object-cover border border-indigo-700"
                   alt={activeChatUser.name || "Avatar"}
                   referrerPolicy="no-referrer"

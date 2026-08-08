@@ -6,6 +6,7 @@
 import React, { useState, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { ConfirmButton } from "./ConfirmButton";
+import { getSafePhotoUrl } from "../lib/storageHelper";
 import {
   ResponsiveContainer,
   AreaChart,
@@ -211,8 +212,8 @@ export default function VvipView({
   React.useEffect(() => {
     if (systemState?.customization?.officeLocation) {
       const loc = systemState.customization.officeLocation;
-      setOfficeLat(String(loc.latitude ?? -7.79558));
-      setOfficeLon(String(loc.longitude ?? 110.36949));
+      setOfficeLat(String(loc.latitude ?? ""));
+      setOfficeLon(String(loc.longitude ?? ""));
       setOfficeRadius(String(loc.radius ?? 200));
       setOfficeEnforce(loc.enforce !== false);
     }
@@ -2150,7 +2151,7 @@ export default function VvipView({
                         <div className="flex items-center gap-3 min-w-0">
                           <div className="h-10 w-10 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-400 font-bold overflow-hidden shadow-xs shrink-0">
                             <img
-                              src={user.profilePicture || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=e2e8f0&color=334155`}
+                              src={getSafePhotoUrl(user.profilePicture, user.name)}
                               className="h-full w-full object-cover"
                               alt={user.name || "Avatar"}
                               referrerPolicy="no-referrer"
@@ -3618,7 +3619,7 @@ export default function VvipView({
                               <td className="px-6 py-4">
                                 <div className="flex items-center gap-3.5">
                                   <img
-                                    src={student.profilePicture || ((student as any).docFoto ? ((student as any).docFoto.includes('|') ? (student as any).docFoto.split('|')[1] : (student as any).docFoto) : '') || `https://ui-avatars.com/api/?name=${encodeURIComponent(student.name || 'Siswa')}&background=e0e7ff&color=3730a3`}
+                                    src={getSafePhotoUrl(student.profilePicture || (student as any).docFoto, student.name)}
                                     alt={student.name}
                                     className="h-9 w-9 rounded-full object-cover border border-slate-200 shrink-0 shadow-3xs"
                                     referrerPolicy="no-referrer"
@@ -4261,7 +4262,7 @@ export default function VvipView({
                         <div className="p-4 bg-slate-50/50 border-b border-slate-100 flex items-center gap-3">
                           <div className="h-10 w-10 bg-white border border-slate-200 rounded-xl overflow-hidden flex items-center justify-center shadow-3xs">
                               {teacher.profilePicture ? (
-                                <img src={teacher.profilePicture} className="h-full w-full object-cover" alt={teacher.name} referrerPolicy="no-referrer"></img>
+                                <img src={getSafePhotoUrl(teacher.profilePicture, teacher.name)} className="h-full w-full object-cover" alt={teacher.name} referrerPolicy="no-referrer"></img>
                               ) : (
                               <span className="text-xl">👤</span>
                             )}
@@ -4337,28 +4338,78 @@ export default function VvipView({
         {monitorTab === ("hr" as any) && (
           <div className="space-y-6 animate-fade-in text-left"> 
             <h3 className="font-bold text-slate-800">Pemantauan Absensi & HR (Pengajar & Staf)</h3> 
-            <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200"> 
-              <h4 className="font-bold text-slate-800 text-sm mb-3">Kehadiran (Absensi) Pengajar & Staf</h4> 
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"> 
-                {(systemState.users || []).filter(u => ["Pengajar", "Admin", "Admin Biasa", "Admin Super", "Staf"].includes(u.role)).map(u => {
-                  const hadir = (systemState.logs || []).filter(l => l.type === "PRESENSI_PENGAJAR" && (l.user === u.name || l.user === u.username)).length;
-                  return (
-                    <button
-                      type="button"
-                      key={u.username}
-                      onClick={() => setSelectedHrAttendanceStaff(u)}
-                      className="p-4 bg-slate-50 hover:bg-slate-100 border border-slate-100 rounded-xl flex items-center justify-between text-left transition cursor-pointer"
-                    >
-                      <div>
-                        <p className="font-bold text-xs text-slate-800">{u.name}</p>
-                        <p className="text-[10px] text-slate-500 mt-1">Kehadiran Bulan Ini · <span className="text-indigo-500 font-bold">Lihat Detail</span></p>
-                      </div>
-                      <span className="font-black text-emerald-600 text-xl">{hadir} Hari</span>
-                    </button>
-                  );
-                })}
-              </div> 
-            </div> 
+            <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200">
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="font-bold text-slate-800 text-sm">Kehadiran (Absensi) Pengajar & Staf</h4>
+                <span className="text-[9px] text-slate-400 font-medium hidden sm:block">Klik baris untuk lihat detail log</span>
+              </div>
+              <div className="overflow-x-auto -mx-5 px-5 sm:mx-0 sm:px-0">
+                <table className="w-full text-left text-xs min-w-[560px]">
+                  <thead className="bg-slate-50 text-slate-500 text-[10px] uppercase tracking-wide">
+                    <tr>
+                      <th className="p-3 rounded-l-xl">Nama & Role</th>
+                      <th className="p-3 text-center">Hadir</th>
+                      <th className="p-3 text-center">Ketepatan Waktu</th>
+                      <th className="p-3 rounded-r-xl text-right">Aksi</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {(systemState.users || []).filter(u => ["Pengajar", "Admin", "Admin Biasa", "Admin Super", "Staf"].includes(u.role)).map(u => {
+                      const staffLogs = (systemState.logs || []).filter(l => l.type === "PRESENSI_PENGAJAR" && (l.user === u.name || l.user === u.username));
+                      const hadir = staffLogs.length;
+                      let onTime = 0;
+                      let checkIns = 0;
+                      staffLogs.forEach(l => {
+                        if (!(l.description || "").includes("MASUK")) return;
+                        checkIns++;
+                        const match = (l.description || "").match(/MASUK\s*-\s*(\d{2}):(\d{2}):(\d{2})/i);
+                        let hrVal: number, minVal: number;
+                        if (match) {
+                          hrVal = parseInt(match[1]);
+                          minVal = parseInt(match[2]);
+                        } else {
+                          const d = new Date(l.timestamp || l.time);
+                          hrVal = d.getHours();
+                          minVal = d.getMinutes();
+                        }
+                        if (!(hrVal > 8 || (hrVal === 8 && minVal > 0))) onTime++;
+                      });
+                      const punctuality = checkIns > 0 ? Math.round((onTime / checkIns) * 100) : null;
+                      return (
+                        <tr
+                          key={u.username}
+                          onClick={() => setSelectedHrAttendanceStaff(u)}
+                          className="hover:bg-slate-50 transition cursor-pointer"
+                        >
+                          <td className="p-3">
+                            <p className="font-bold text-slate-800">{u.name}</p>
+                            <p className="text-[9.5px] text-slate-400 font-medium uppercase tracking-wide">{u.role}</p>
+                          </td>
+                          <td className="p-3 text-center">
+                            <span className="font-black text-emerald-600">{hadir}</span>
+                            <span className="text-slate-400 font-medium"> Hari</span>
+                          </td>
+                          <td className="p-3 text-center">
+                            {punctuality !== null ? (
+                              <span className={`text-[10.5px] font-black px-2 py-0.5 rounded-md ${punctuality >= 85 ? "text-emerald-600 bg-emerald-50" : punctuality >= 70 ? "text-indigo-600 bg-indigo-50" : "text-amber-600 bg-amber-50"}`}>
+                                {punctuality}%
+                              </span>
+                            ) : (
+                              <span className="text-slate-300 italic text-[10px]">Belum ada</span>
+                            )}
+                          </td>
+                          <td className="p-3 text-right">
+                            <span className="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 whitespace-nowrap">
+                              Lihat Detail →
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
             <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200"> 
               <h4 className="font-bold text-slate-800 text-sm mb-3">Rekening Gaji Pengajar & Staf</h4> 
               <div className="overflow-x-auto"> 
@@ -4557,7 +4608,7 @@ export default function VvipView({
                 <div className="bg-slate-50 p-4 border border-slate-200 rounded-2xl flex items-start sm:items-center gap-4 flex-col sm:flex-row">
                    <div className="h-16 w-16 bg-white border border-slate-200 rounded-xl overflow-hidden shadow-3xs flex-shrink-0 flex items-center justify-center">
                       {teacher.profilePicture ? (
-                        <img src={teacher.profilePicture} className="h-full w-full object-cover" alt="Profile" referrerPolicy="no-referrer" />
+                        <img src={getSafePhotoUrl(teacher.profilePicture, teacher.name)} className="h-full w-full object-cover" alt="Profile" referrerPolicy="no-referrer" />
                       ) : (
                         <div className="h-full w-full flex items-center justify-center text-3xl">👤</div>
                       )}
@@ -5952,7 +6003,7 @@ export default function VvipView({
                         <div className="flex items-center gap-3">
                           <div className="h-10 w-10 rounded-full bg-slate-100 overflow-hidden border border-slate-200 shrink-0">
                             <img
-                              src={user.profilePicture || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=e2e8f0&color=334155`}
+                              src={getSafePhotoUrl(user.profilePicture, user.name)}
                               alt={user.name || "Avatar"}
                               referrerPolicy="no-referrer"
                               className="h-full w-full object-cover"

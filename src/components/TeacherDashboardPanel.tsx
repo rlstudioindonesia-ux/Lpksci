@@ -50,12 +50,13 @@ export function TeacherDashboardPanel({
   }, [currentUser]);
 
 
-  // Office Coordinates Configuration States
+  // Office Coordinates Configuration States. No hardcoded coordinate default:
+  // an unconfigured office location must fail safe (geofencing off).
   const savedOfficeLoc = systemState.customization?.officeLocation || {
-    latitude: -7.79558,
-    longitude: 110.36949,
+    latitude: "",
+    longitude: "",
     radius: 200,
-    enforce: true
+    enforce: false
   };
   const [officeLat, setOfficeLat] = useState(savedOfficeLoc.latitude);
   const [officeLng, setOfficeLng] = useState(savedOfficeLoc.longitude);
@@ -320,12 +321,13 @@ export function TeacherDashboardPanel({
       // 2. Presensi Wajah Rutin
       const today = new Date().toISOString().split("T")[0];
       
-      // Validation check for REGULER luring GPS radius
+      // Validation check for REGULER luring GPS radius. No hardcoded coordinate
+      // default: an unconfigured office location must fail safe (geofencing off).
       const savedOfficeConfig = systemState.customization?.officeLocation || {
-        latitude: -7.79558,
-        longitude: 110.36949,
+        latitude: 0,
+        longitude: 0,
         radius: 200,
-        enforce: true
+        enforce: false
       };
 
       if (presensiMode === "REGULER") {
@@ -469,7 +471,7 @@ export function TeacherDashboardPanel({
                 value={officeLat}
                 onChange={(e) => setOfficeLat(Number(e.target.value))}
                 className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs outline-none focus:border-indigo-500 font-mono"
-                placeholder="-7.79558"
+                placeholder="Koordinat GPS lokasi kantor Anda"
               />
             </div>
             <div className="space-y-1">
@@ -480,7 +482,7 @@ export function TeacherDashboardPanel({
                 value={officeLng}
                 onChange={(e) => setOfficeLng(Number(e.target.value))}
                 className="w-full p-2.5 bg-white border border-slate-200 rounded-xl text-xs outline-none focus:border-indigo-500 font-mono"
-                placeholder="110.36949"
+                placeholder="Koordinat GPS lokasi kantor Anda"
               />
             </div>
             <div className="space-y-1">

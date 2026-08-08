@@ -1,4 +1,5 @@
 import { InlineLoginPanel } from "./InlineLoginPanel";
+import { getSafePhotoUrl } from "../lib/storageHelper";
 import { auth } from "../firebaseClient";
 import { signInWithPopup, GoogleAuthProvider, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth";
 import React, { useState, useEffect, useRef } from "react";
@@ -921,11 +922,12 @@ export default function MobileDashboardView({
             : regPaymentType === "transfer"
               ? "Transfer Rekening Manual"
               : "Bayar Langsung Kantor LPK",
+        // Never fabricate a filename when nothing was actually uploaded - that
+        // creates a broken/misleading "proof of payment" link for admins reviewing it.
         proofOfPayment:
           regPaymentType === "va" || regPaymentType === "cash"
             ? ""
-            : regProofOfPayment ||
-              `tf_mandiri_an_${(regName || "siswa").trim().toLowerCase().replace(/\s+/g, "_")}.jpg`,
+            : regProofOfPayment || "",
         docAkta: regDocAkta,
         docFoto: regDocFoto,
         docIjazahSD: regDocIjazahSD,
@@ -952,28 +954,6 @@ export default function MobileDashboardView({
       setRegLoading(false);
     }
   };
-
-  // Notifications mock data list updated to July 2026
-  const mockNotifications = [
-    {
-      id: 1,
-      title: "Jadwal Kelas Belajar Bulan Juli 2026",
-      body: "Kelas angkatan baru akan segera dimulai. Harap kumpulkan dokumen orisinal di LPK Pati bagi siswa yang sudah terdaftar.",
-      time: "Hari ini, 08:30",
-    },
-    {
-      id: 2,
-      title: "Pembukaan Rekrutmen SSW Kaigo Kyoto",
-      body: "Dicari 12 care worker (Tokutei Ginou) untuk penempatan Kyoto Nursing Center. Gaji mulai ¥210.000 + subsidi asrama penuh.",
-      time: "Kemarin, 14:00",
-    },
-    {
-      id: 3,
-      title: "Pembaruan Materi E-Benkyou Kanji",
-      body: "Bab 17 & 18 (Kosakata Kaigo Khusus) kini telah ditambahkan di LMS. Silakan kerjakan latihan kuis kecakapan mandiri Anda.",
-      time: "2 hari lalu",
-    },
-  ];
 
   // Simple notification feed unread indicator synchronized with notifications length
   const [notifBadge, setNotifBadge] = useState<number>(3);
@@ -2081,42 +2061,13 @@ export default function MobileDashboardView({
                 Mengabadikan momen-momen penting dari asrama LPK Pati hingga touchdown di berbagai kota besar Jepang.
               </p>
 
+              {(systemState.galleries || []).length === 0 && (
+                <div className="text-center py-10 text-slate-400 text-xs italic border border-dashed rounded-2xl">
+                  Belum ada foto galeri.
+                </div>
+              )}
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                {((systemState.customization?.gallery && systemState.customization.gallery.length > 0)
-                  ? systemState.customization.gallery
-                  : ((systemState.galleries && systemState.galleries.length > 0) ? systemState.galleries : [
-                      {
-                        title: "Kegiatan LPK SCI",
-                        image: "https://images.unsplash.com/photo-1490730141103-6cac27aaab94?auto=format&fit=crop&w=800&q=80",
-                        tag: "PELATIHAN",
-                      },
-                      {
-                        title: "PRA - MCU",
-                        image: "https://images.unsplash.com/photo-1516549655169-df83a0774514?auto=format&fit=crop&w=800&q=80",
-                        tag: "KESEHATAN",
-                      },
-                      {
-                        title: "GIAT BIMTEK - DISNAKER KAB.PATI",
-                        image: "https://images.unsplash.com/photo-1531482615713-2afd69097998?auto=format&fit=crop&w=800&q=80",
-                        tag: "BIMTEK",
-                      },
-                      {
-                        title: "PEMBERANGKATAN SISWA MAGANG",
-                        image: "https://images.unsplash.com/photo-1436491865332-7a61a109cc05?auto=format&fit=crop&w=800&q=80",
-                        tag: "KEBERANGKATAN",
-                      },
-                      {
-                        title: "TEST BAHASA JEPANG",
-                        image: "https://images.unsplash.com/photo-1434030216411-0b793f4b4173?auto=format&fit=crop&w=800&q=80",
-                        tag: "UJIAN",
-                      },
-                      {
-                        title: "Touchdown Tokyo",
-                        image: "https://images.unsplash.com/photo-1542051841857-5f90071e7989?auto=format&fit=crop&w=800&q=80",
-                        tag: "JEPANG",
-                      },
-                    ]
-                )).map((item: any, idx) => (
+                {(systemState.galleries || []).map((item: any, idx) => (
                   <div
                     key={idx}
                     onClick={() => setSelectedGalleryImage({
@@ -2133,6 +2084,10 @@ export default function MobileDashboardView({
                         alt={item.title}
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                         referrerPolicy="no-referrer"
+                        onError={(e) => {
+                          e.currentTarget.onerror = null;
+                          e.currentTarget.src = "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 200'%3E%3Crect width='200' height='200' fill='%231e293b'/%3E%3Ctext x='50%25' y='50%25' fill='%2364748b' font-size='14' text-anchor='middle' dy='.3em'%3EFoto tidak tersedia%3C/text%3E%3C/svg%3E";
+                        }}
                       />
                       <div className="absolute top-1.5 right-1.5 bg-black/60 text-white p-1 rounded-lg backdrop-blur-xs">
                         <Maximize2 className="w-3 h-3 text-pink-300" />
@@ -4043,7 +3998,7 @@ export default function MobileDashboardView({
                   className={`h-11 w-11 mt-0.5 rounded-full flex items-center justify-center font-black text-sm shadow-[0_8px_30px_rgb(0,0,0,0.04)] ring-2 ring-slate-50 bg-slate-100 shrink-0 overflow-hidden text-slate-600`}
                 >
                   <img
-                    src={currentUser.profilePicture || `https://ui-avatars.com/api/?name=${encodeURIComponent(currentUser.name || 'User')}&background=e2e8f0&color=334155`}
+                    src={getSafePhotoUrl(currentUser.profilePicture, currentUser.name)}
                     className="h-full w-full object-cover"
                     alt={currentUser.name || "Avatar"}
                     referrerPolicy="no-referrer"
@@ -5271,7 +5226,7 @@ export default function MobileDashboardView({
                         <div className="flex items-center gap-3">
                           <div className="h-10 w-10 rounded-full bg-slate-100 overflow-hidden border border-slate-100/80 shrink-0">
                             <img
-                              src={user.profilePicture || `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=e2e8f0&color=334155`}
+                              src={getSafePhotoUrl(user.profilePicture, user.name)}
                               alt={user.name || "Avatar"}
                               referrerPolicy="no-referrer"
                               className="h-full w-full object-cover"

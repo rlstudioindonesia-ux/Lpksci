@@ -108,10 +108,10 @@ let state: any = {
     logoUrl: "",
     faviconUrl: "",
     officeLocation: {
-      latitude: -7.79558,
-      longitude: 110.36949,
+      latitude: 0,
+      longitude: 0,
       radius: 200,
-      enforce: true
+      enforce: false
     },
     paymentAccounts: [],
     slides: [],
