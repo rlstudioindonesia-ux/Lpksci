@@ -955,28 +955,6 @@ export default function MobileDashboardView({
     }
   };
 
-  // Notifications mock data list updated to July 2026
-  const mockNotifications = [
-    {
-      id: 1,
-      title: "Jadwal Kelas Belajar Bulan Juli 2026",
-      body: "Kelas angkatan baru akan segera dimulai. Harap kumpulkan dokumen orisinal di LPK Pati bagi siswa yang sudah terdaftar.",
-      time: "Hari ini, 08:30",
-    },
-    {
-      id: 2,
-      title: "Pembukaan Rekrutmen SSW Kaigo Kyoto",
-      body: "Dicari 12 care worker (Tokutei Ginou) untuk penempatan Kyoto Nursing Center. Gaji mulai ¥210.000 + subsidi asrama penuh.",
-      time: "Kemarin, 14:00",
-    },
-    {
-      id: 3,
-      title: "Pembaruan Materi E-Benkyou Kanji",
-      body: "Bab 17 & 18 (Kosakata Kaigo Khusus) kini telah ditambahkan di LMS. Silakan kerjakan latihan kuis kecakapan mandiri Anda.",
-      time: "2 hari lalu",
-    },
-  ];
-
   // Simple notification feed unread indicator synchronized with notifications length
   const [notifBadge, setNotifBadge] = useState<number>(3);
   const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(true);
