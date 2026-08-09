@@ -1871,6 +1871,7 @@ app.post("/api/state/update", (req, res) => {
               }
             }
 
+            syncEntityToFirestore("activeStudents", state.activeStudents[index].id, state.activeStudents[index]);
             return res.json({ success: true, item: state.activeStudents[index] });
          } else {
             return res.status(404).json({ error: "Student not found to update." });
@@ -1878,7 +1879,7 @@ app.post("/api/state/update", (req, res) => {
       }
 
       if (action === "update_status") {
-        const { id, status, class: className, prefecture, city, company, latitude, longitude, profilePicture, sensei, statusPendaftaran, graduationYear, phone, name, currentChapter, keterangan, mitraSO, jobKeterangan, job1Bidang, job1TanggalMensetsu, job1Lokasi, job2Bidang, job2TanggalMensetsu, job2Lokasi, bulanKelulusan, attitudeScore, kaiwaScore, bobotNilaiRekomendasi } = payload;
+        const { id, status, class: className, prefecture, city, company, latitude, longitude, profilePicture, sensei, statusPendaftaran, graduationYear, phone, name, batch, currentChapter, keterangan, mitraSO, jobKeterangan, job1Bidang, job1TanggalMensetsu, job1Lokasi, job2Bidang, job2TanggalMensetsu, job2Lokasi, bulanKelulusan, attitudeScore, kaiwaScore, bobotNilaiRekomendasi } = payload;
         const index = state.activeStudents.findIndex(s => s.id === id);
         if (index !== -1) {
           if (status) {
@@ -1886,6 +1887,9 @@ app.post("/api/state/update", (req, res) => {
           }
           if (name) {
             state.activeStudents[index].name = name;
+          }
+          if (batch !== undefined) {
+            state.activeStudents[index].batch = batch;
           }
           if (phone) {
             state.activeStudents[index].phone = phone;
@@ -2415,14 +2419,15 @@ app.post("/api/state/update", (req, res) => {
       }
       if (action === "clear_chat") {
         const { myChatId, otherChatId, isGroup } = payload;
-        if (isGroup) {
-          state.messages = state.messages.filter(m => m.receiverId !== otherChatId);
-        } else {
-          state.messages = state.messages.filter(m => !(
-            (m.senderId === myChatId && m.receiverId === otherChatId) ||
-            (m.senderId === otherChatId && m.receiverId === myChatId)
-          ));
-        }
+        const toRemove = isGroup
+          ? state.messages.filter(m => m.receiverId === otherChatId)
+          : state.messages.filter(m => (
+              (m.senderId === myChatId && m.receiverId === otherChatId) ||
+              (m.senderId === otherChatId && m.receiverId === myChatId)
+            ));
+        const removeIds = new Set(toRemove.map(m => m.id));
+        state.messages = state.messages.filter(m => !removeIds.has(m.id));
+        toRemove.forEach(m => deleteEntityFromFirestore("messages", m.id));
         return res.json({ success: true });
       }
     }

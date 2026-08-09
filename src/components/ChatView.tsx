@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { UserAccount, SystemState, ChatMessage } from "../types";
-import { ArrowLeft, Send, SendHorizontal, User, Search, Paperclip, File, Image as ImageIcon, Loader2, Users, Clock, Download, Info, AlertTriangle, CheckCircle2, MessageSquare, Trash2, Check, CheckCheck } from "lucide-react";
+import { ArrowLeft, SendHorizontal, User, Search, Paperclip, File, Loader2, Users, Download, CheckCircle2, MessageSquare, Trash2, Check, CheckCheck } from "lucide-react";
 import { uploadFileToFirebase, getSafePhotoUrl } from "../lib/storageHelper";
 import { getLocalMedia, downloadAndSaveMedia } from "../lib/localMedia";
 import { ConfirmButton } from "./ConfirmButton";
@@ -428,8 +428,10 @@ export default function ChatView({ currentUser, systemState, onUpdateState, onCl
                 }
               }
               
+              const hasHistory = !!(latestMessageText || latestMessageTimeStr);
+
               return (
-                <div 
+                <div
                   key={contact.username}
                   onClick={() => {
                     setActiveChatUser(contact);
@@ -440,7 +442,7 @@ export default function ChatView({ currentUser, systemState, onUpdateState, onCl
                       }
                     }
                   }}
-                  className={`p-3 rounded-xl flex items-center justify-between cursor-pointer transition drop-shadow-xs border ${unreadCount > 0 ? 'bg-indigo-100 border-indigo-300 hover:bg-indigo-200 shadow-indigo-100/50' : index === 0 && (latestMessageText || latestMessageTimeStr) ? 'bg-emerald-50 border-emerald-300 hover:bg-emerald-100 shadow-emerald-100/50' : 'bg-white border-slate-200 hover:bg-slate-50'}`}
+                  className={`group/row p-3 rounded-xl flex items-center justify-between cursor-pointer transition drop-shadow-xs border ${unreadCount > 0 ? 'bg-indigo-100 border-indigo-300 hover:bg-indigo-200 shadow-indigo-100/50' : index === 0 && (latestMessageText || latestMessageTimeStr) ? 'bg-emerald-50 border-emerald-300 hover:bg-emerald-100 shadow-emerald-100/50' : 'bg-white border-slate-200 hover:bg-slate-50'}`}
                 >
                   <div className="flex items-center gap-3 min-w-0 flex-1 mr-2">
                     <img
@@ -477,6 +479,23 @@ export default function ChatView({ currentUser, systemState, onUpdateState, onCl
                       <span className="bg-rose-500 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full min-w-[20px] text-center">
                         {unreadCount}
                       </span>
+                    )}
+                    {hasHistory && ((currentUser.role === "Admin" || currentUser.role === "Admin Super" || currentUser.role === "Admin Biasa") || !isGroup) && (
+                      <ConfirmButton
+                        confirmTitle="Hapus Chat"
+                        confirmMessage={`Hapus seluruh riwayat percakapan dengan ${contact.name}? Pesan yang dihapus tidak dapat dikembalikan.`}
+                        onConfirmClick={async () => {
+                          await onUpdateState("messages", "clear_chat", {
+                            myChatId,
+                            otherChatId: contact.username,
+                            isGroup,
+                          });
+                        }}
+                        className="opacity-0 group-hover/row:opacity-100 sm:opacity-0 max-sm:opacity-100 p-1 text-slate-300 hover:text-rose-500 hover:bg-rose-50 rounded-md transition cursor-pointer"
+                        title="Hapus Chat Ini"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </ConfirmButton>
                     )}
                   </div>
                 </div>
@@ -534,22 +553,7 @@ export default function ChatView({ currentUser, systemState, onUpdateState, onCl
               </ConfirmButton>
             )}
           </div>
-                   <div className="flex-1 overflow-y-auto bg-[#f8fafc] flex flex-col relative">
-            {/* Attachment Warning Banner - Fixed at top of chat area */}
-            <div className="sticky top-0 z-10 px-3 pt-3 bg-[#f8fafc]/80 backdrop-blur-sm">
-              <div className="bg-rose-50 border border-rose-100 p-2.5 rounded-2xl flex items-start gap-3 shadow-xs animate-fade-in shrink-0 mb-2">
-                <div className="p-1.5 bg-rose-100 text-rose-600 rounded-lg">
-                  <AlertTriangle className="h-4 w-4 shrink-0" />
-                </div>
-                <div className="space-y-0.5">
-                  <p className="text-[10px] text-rose-900 font-black uppercase tracking-tight">Penyimpanan File Terbatas</p>
-                  <p className="text-[9px] text-rose-700 font-bold leading-relaxed">
-                    Media (Gambar/Video/PDF) hanya tersedia selama <span className="text-rose-900 underline decoration-rose-400 underline-offset-2">24 Jam</span>. Klik "SIMPAN KE HP" untuk akses permanen.
-                  </p>
-                </div>
-              </div>
-            </div>
-
+                   <div className="flex-1 overflow-y-auto bg-[#efeae2] flex flex-col relative">
             <div className="p-3 space-y-4 flex flex-col">
               {/* Filter messages */}
               {(() => {
@@ -585,75 +589,43 @@ export default function ChatView({ currentUser, systemState, onUpdateState, onCl
 
 
                       <div className={`px-4 py-2.5 rounded-2xl max-w-[85%] text-[11px] leading-relaxed shadow-xs ${
-                        isMe 
-                          ? (msg.isRead ? 'bg-indigo-700 text-white rounded-tr-sm' : 'bg-slate-600 text-white rounded-tr-sm') 
+                        isMe
+                          ? 'bg-[#d9fdd3] text-slate-900 rounded-tr-sm'
                           : 'bg-white text-slate-800 rounded-tl-sm border border-slate-200'
                       }`}>
                       {msg.fileUrl ? (
-                        <div className="space-y-2">
-                          {/* Placeholder for recipient before download */}
-                          {!isMe && !localUrl ? (
-                            <div className="p-4 bg-slate-50 rounded-xl border-2 border-dashed border-slate-200 flex flex-col items-center gap-2 text-center">
-                              <div className="w-10 h-10 rounded-full bg-indigo-100 flex items-center justify-center text-indigo-600">
-                                {msg.fileType === "image" ? <ImageIcon className="h-5 w-5" /> : <File className="h-5 w-5" />}
-                              </div>
-                              <p className="text-[10px] font-bold text-slate-500 uppercase">Konten Terenkripsi/Belum Diunduh</p>
-                              <p className="text-[8px] text-slate-400 italic">Klik tombol di bawah untuk melihat file ini.</p>
+                        <div className="space-y-1.5">
+                          {msg.fileType === "image" ? (
+                            <img src={displayUrl} className="max-w-full rounded-lg cursor-pointer border border-slate-200 shadow-sm" alt="attachment" onClick={() => openMediaSafe(displayUrl!)}/>
+                          ) : msg.fileType === "video" ? (
+                            <div className="relative rounded-lg overflow-hidden border border-slate-200 shadow-sm bg-black/5">
+                              <video src={displayUrl} controls className="w-full max-h-[200px]" />
                             </div>
                           ) : (
-                            <>
-                              {msg.fileType === "image" ? (
-                                <div className="relative group">
-                                  <img src={displayUrl} className="max-w-full rounded-lg cursor-pointer border border-slate-200 shadow-sm" alt="attachment" onClick={() => openMediaSafe(displayUrl)}/>
-                                  <div className="absolute top-2 left-2 bg-black/60 backdrop-blur-md text-white text-[7px] font-black uppercase px-2 py-0.5 rounded flex items-center gap-1">
-                                    {localUrl ? <CheckCircle2 className="h-2 w-2 text-emerald-400" /> : <Clock className="h-2 w-2" />} 
-                                    {localUrl ? "Tersimpan di HP" : "Hapus dlm 24h"}
-                                  </div>
-                                </div>
-                              ) : msg.fileType === "video" ? (
-                                <div className="relative rounded-lg overflow-hidden border border-slate-200 shadow-sm bg-black/5">
-                                  <video src={displayUrl} controls className="w-full max-h-[200px]" />
-                                  <div className="absolute top-2 left-2 bg-black/60 backdrop-blur-md text-white text-[7px] font-black uppercase px-2 py-0.5 rounded flex items-center gap-1">
-                                    {localUrl ? <CheckCircle2 className="h-2 w-2 text-emerald-400" /> : <Clock className="h-2 w-2" />} 
-                                    {localUrl ? "Tersimpan di HP" : "Hapus dlm 24h"}
-                                  </div>
-                                </div>
-                              ) : (
-                                <div className="flex items-center gap-3 p-3 bg-slate-50/50 rounded-xl border border-slate-200/60 relative overflow-hidden text-left">
-                                  <div className="p-2 bg-blue-100 text-blue-600 rounded-lg">
-                                    <File className="h-4 w-4" />
-                                  </div>
-                                  <div className="flex-1 min-w-0">
-                                    <p className="truncate text-[10px] font-bold text-slate-700">{msg.fileName || "File"}</p>
-                                    <div className={`flex items-center gap-1.5 text-[7px] font-black uppercase tracking-tighter ${localUrl ? 'text-emerald-600' : 'text-rose-500'}`}>
-                                      {localUrl ? <CheckCircle2 className="h-2 w-2" /> : <Clock className="h-2 w-2" />} 
-                                      {localUrl ? "Sudah Tersimpan di HP" : "Hapus dlm 24 Jam"}
-                                    </div>
-                                  </div>
-                                </div>
-                              )}
-                            </>
+                            <button
+                              onClick={() => openMediaSafe(displayUrl!)}
+                              className="flex items-center gap-3 p-3 bg-black/[0.03] hover:bg-black/[0.06] rounded-xl border border-slate-200/60 relative overflow-hidden text-left w-full transition"
+                            >
+                              <div className="p-2 bg-blue-100 text-blue-600 rounded-lg shrink-0">
+                                <File className="h-4 w-4" />
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <p className="truncate text-[10px] font-bold text-slate-700">{msg.fileName || "File"}</p>
+                                <p className="text-[8px] font-bold text-slate-400 uppercase">Ketuk untuk membuka</p>
+                              </div>
+                            </button>
                           )}
-                          <div className="flex items-center justify-between gap-2 pt-1">
-                            <p className="text-[7.5px] font-bold text-slate-400 italic">
-                              {localUrl ? "Berkas aman di penyimpanan HP." : "Segera download berkas ini."}
-                            </p>
-                            {localUrl ? (
-                              <button 
-                                onClick={() => openMediaSafe(displayUrl)}
-                                className="text-[10px] font-black px-4 py-2 rounded-xl flex items-center gap-2 bg-emerald-600 text-white hover:bg-emerald-700 transition-all shadow-md shadow-emerald-600/20 active:scale-95"
-                              >
-                                <CheckCircle2 className="h-3.5 w-3.5" /> BUKA FILE
-                              </button>
-                            ) : (
-                              <button 
-                                onClick={() => handleSaveToDevice(msg.fileUrl!, msg.fileName || 'file')}
-                                className={`text-[10px] font-black px-4 py-2 rounded-xl flex items-center gap-2 transition-all shadow-lg active:scale-95 animate-pulse ${isMe ? 'bg-white text-indigo-700 hover:bg-slate-100' : 'bg-blue-600 text-white hover:bg-blue-700 shadow-blue-600/20'}`}
-                              >
-                                <Download className="h-3.5 w-3.5" /> SIMPAN KE HP
-                              </button>
-                            )}
-                          </div>
+                          {msg.text && msg.text !== `Mengirim file: ${msg.fileName}` && (
+                            <p className="px-0.5">{msg.text}</p>
+                          )}
+                          <button
+                            onClick={() => handleSaveToDevice(msg.fileUrl!, msg.fileName || 'file')}
+                            className="flex items-center gap-1.5 text-[8.5px] font-bold text-slate-500 hover:text-indigo-700 transition px-0.5"
+                            title="Unduh untuk akses offline di perangkat ini"
+                          >
+                            {localUrl ? <CheckCircle2 className="h-2.5 w-2.5 text-emerald-500" /> : <Download className="h-2.5 w-2.5" />}
+                            {localUrl ? "Tersimpan offline" : "Unduh ke perangkat"}
+                          </button>
                         </div>
                       ) : (
                         msg.text
@@ -696,7 +668,7 @@ export default function ChatView({ currentUser, systemState, onUpdateState, onCl
                 {isUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Paperclip className="h-4 w-4" />}
               </button>
               <div className="absolute bottom-full mb-2 left-0 w-48 bg-slate-800 text-white text-[8px] font-bold p-2 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-30 shadow-xl">
-                File (Gambar/Video/PDF) hanya disimpan selama 24 jam.
+                Kirim gambar, video, atau dokumen (PDF/DOC/XLS).
               </div>
             </div>
             <input 
