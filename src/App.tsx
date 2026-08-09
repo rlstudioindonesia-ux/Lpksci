@@ -252,7 +252,7 @@ export default function App() {
     | "manajemen"
     | null
   >("siswa");
-  const [vvipViewMode, setVvipViewMode] = useState<"full" | "gaji" | "exec" | "eval" | "pajak" | "ai" | "security" | "lms" | "kalender" | "afiliasi">("full");
+  const [vvipViewMode, setVvipViewMode] = useState<"full" | "gaji" | "exec" | "eval" | "pajak" | "ai" | "security" | "kalender" | "afiliasi">("full");
 
   // Synchronized Full-Stack State
   const [systemState, setSystemState] = useState<SystemState>({

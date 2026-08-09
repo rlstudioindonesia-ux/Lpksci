@@ -1029,19 +1029,6 @@ export default function LmsView({
   const [quizScore, setQuizScore] = React.useState(0);
   const [showQuizResults, setShowQuizResults] = React.useState(false);
   const [selectedStudentId, setSelectedStudentId] = React.useState<string>("");
-  const [absenType, setAbsenType] = React.useState<"Masuk" | "Pulang">("Masuk");
-  const [absenLocation, setAbsenLocation] = React.useState<string | null>(null);
-  const [absenPhoto, setAbsenPhoto] = React.useState<string | null>(null);
-  const [isGettingLocation, setIsGettingLocation] = React.useState(false);
-  const [showCamera, setShowCamera] = React.useState(false);
-  const videoRef = React.useRef<HTMLVideoElement>(null);
-
-  const [absenMsg, setAbsenMsg] = React.useState("");
-  const [absenSubject, setAbsenSubject] = React.useState("Bab 1");
-  const [absenYear, setAbsenYear] = React.useState(new Date().getFullYear().toString());
-  const [absenStatus, setAbsenStatus] = React.useState("Hadir");
-  const [absenNotes, setAbsenNotes] = React.useState("");
-  const [isSubmittingAbsen, setIsSubmittingAbsen] = React.useState(false);
   const [quizSubMode, setQuizSubMode] = React.useState("belajar");
   const [isQuizFormOpen, setIsQuizFormOpen] = React.useState(false);
   const [newQuiz, setNewQuiz] = React.useState<any>({
@@ -2173,97 +2160,6 @@ export default function LmsView({
       questions: packetQuestions
     });
   }
-  const handleAbsenSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSubmittingAbsen(true);
-    setAbsenMsg("");
-
-    const payload = {
-      studentId: matchingStudent?.id || currentUser?.username || "SIS-099",
-      studentName: currentUser?.name || "Siswa Luar",
-      status: absenStatus,
-      type: absenType, // Masuk / Pulang
-      subject: absenSubject,
-      year: absenYear,
-      notes: absenNotes,
-      location: absenLocation,
-      photo: absenPhoto,
-      role: currentUser?.role,
-      date: new Date().toISOString(),
-      class: matchingStudent?.class || currentUser?.assignedClass || "Umum",
-      sensei: matchingStudent?.sensei || "Tidak Terplot"
-    };
-
-    const isSuccess = await onAddAttendance(payload);
-    setIsSubmittingAbsen(false);
-
-    if (isSuccess) {
-      setAbsenMsg(`Presensi ${absenType} (${absenStatus}) berhasil terekam real-time!`);
-      setAbsenNotes("");
-      setAbsenPhoto(null);
-    } else {
-      setAbsenMsg("Gagal melakukan absensi. Coba lagi.");
-    }
-  };
-
-  const getLocation = () => {
-    setIsGettingLocation(true);
-    if ("geolocation" in navigator) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
-          setAbsenLocation(`${position.coords.latitude}, ${position.coords.longitude}`);
-          setIsGettingLocation(false);
-        },
-        (error) => {
-          console.error("Error getting location:", error);
-          setAbsenLocation("Gagal mendapatkan lokasi");
-          setIsGettingLocation(false);
-        }
-      );
-    } else {
-      setAbsenLocation("Browser tidak mendukung GPS");
-      setIsGettingLocation(false);
-    }
-  };
-
-  const startCamera = async () => {
-    setShowCamera(true);
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-      }
-    } catch (err) {
-      console.error("Error accessing camera:", err);
-      alert("Gagal mengakses kamera");
-      setShowCamera(false);
-    }
-  };
-
-  const capturePhoto = () => {
-    if (videoRef.current) {
-      const canvas = document.createElement("canvas");
-      canvas.width = videoRef.current.videoWidth;
-      canvas.height = videoRef.current.videoHeight;
-      const ctx = canvas.getContext("2d");
-      if (ctx) {
-        ctx.drawImage(videoRef.current, 0, 0);
-        const dataUrl = canvas.toDataURL("image/jpeg", 0.7);
-        setAbsenPhoto(dataUrl);
-        stopCamera();
-      }
-    }
-  };
-
-  const stopCamera = () => {
-    if (videoRef.current && videoRef.current.srcObject) {
-      const stream = videoRef.current.srcObject as MediaStream;
-      stream.getTracks().forEach(track => track.stop());
-      videoRef.current.srcObject = null;
-    }
-    setShowCamera(false);
-  };
-
   const handleOptionSelect = (index: number) => {
     if (isQuizSubmitted) return;
     setSelectedOption(index);
