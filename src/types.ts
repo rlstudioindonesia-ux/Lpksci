@@ -322,6 +322,7 @@ export interface CashLedgerRecord {
   description: string; // URAIAN
   inAmount: number; // IN
   outAmount: number; // OUT
+  createdAt?: string;
 }
 
 export interface SalaryRecord {
