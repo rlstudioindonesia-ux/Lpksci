@@ -122,7 +122,19 @@ export interface ActiveStudent {
   prefecture?: string; // If 'Di Jepang', which Japanese Prefecture (e.g., Tokyo, Osaka, Hokkaido)
   city?: string;
   company?: string;
-  keterangan?: string; // Catatan admin: nama mitra SO/TSK, lokasi kerja siswa saat proses job matching
+  keterangan?: string; // Catatan bebas admin
+  mitraSO?: string; // Nama mitra SO/TSK yang menangani job matching siswa
+  jobKeterangan?: "Lulus" | "Out" | "Interview" | "SA/Mendang" | "";
+  job1Bidang?: string;
+  job1TanggalMensetsu?: string;
+  job1Lokasi?: string;
+  job2Bidang?: string;
+  job2TanggalMensetsu?: string;
+  job2Lokasi?: string;
+  bulanKelulusan?: string;
+  attitudeScore?: number; // Nilai attitude siswa (0-100)
+  kaiwaScore?: number; // Nilai kaiwa sesuai bab terakhir (0-100)
+  bobotNilaiRekomendasi?: number; // Bobot nilai rekomendasi dari FMD/interview
   latitude?: number;
   longitude?: number;
   tb?: number; // Tinggi Badan

@@ -77,6 +77,7 @@ import {
   Laptop,
   Smartphone,
   Terminal,
+  Edit,
 } from "lucide-react";
 import { SystemState, UserAccount, RegisteredStudent } from "../types";
 import { CHAPTERS_LIST } from "../chapters";
@@ -96,6 +97,7 @@ interface VvipViewProps {
   isMobile?: boolean;
   onViewModeChange?: (viewMode: any) => void;
   onLoginAs?: (user: any) => void;
+  onNavigateToAdmin?: (studentName: string) => void;
 }
 
 export default function VvipView({
@@ -107,6 +109,7 @@ export default function VvipView({
   isMobile = false,
   onViewModeChange,
   onLoginAs,
+  onNavigateToAdmin,
 }: VvipViewProps) {
   const [currentViewMode, setCurrentViewMode] = useState<"full" | "gaji" | "exec" | "eval" | "pajak" | "ai" | "security" | "lms" | "kalender" | "afiliasi">(propViewMode as any);
   const [showLoginAsModal, setShowLoginAsModal] = useState(false);
@@ -4333,27 +4336,47 @@ export default function VvipView({
                   ) : (
                     /* TABEL LIST */
                     <div>
-                      {/* Desktop Table - Horizontal Scroll & High Readability */}
+                      {/* Desktop Table - Spreadsheet-style monitoring, matches Excel referensi PT SCI */}
                       <div className="hidden md:block overflow-x-auto rounded-[1.5rem] border border-slate-200/80 shadow-3xs bg-white">
-                        <table className="w-full min-w-[850px] text-left border-collapse text-xs bg-white">
+                        <table className="w-full min-w-[1900px] text-left border-collapse text-[11px] bg-white">
                           <thead>
-                            <tr className="bg-slate-50/90 border-b border-slate-200/80 text-[10.5px] font-black text-slate-500 uppercase tracking-wider">
-                              <th className="px-6 py-4">Nama Siswa / ID</th>
-                              <th className="px-5 py-4">Batch & Kelas</th>
-                              <th className="px-5 py-4">Status & Lokasi</th>
-                              <th className="px-5 py-4">Presensi & Progres Bab</th>
-                              <th className="px-6 py-4 text-right">Aksi</th>
+                            <tr className="bg-slate-50/90 border-b border-slate-200/80 text-[9.5px] font-black text-slate-500 uppercase tracking-wider">
+                              <th className="px-3 py-3">No</th>
+                              <th className="px-3 py-3">Angkatan</th>
+                              <th className="px-4 py-3">Nama Siswa / ID</th>
+                              <th className="px-3 py-3 text-center">Usia</th>
+                              <th className="px-3 py-3 text-center">JK</th>
+                              <th className="px-3 py-3">Bab Update</th>
+                              <th className="px-3 py-3">Mitra SO</th>
+                              <th className="px-3 py-3">Keterangan</th>
+                              <th className="px-3 py-3 bg-blue-50/60">Job 1 - Bidang</th>
+                              <th className="px-3 py-3 bg-blue-50/60">Job 1 - Tgl Mensetsu</th>
+                              <th className="px-3 py-3 bg-blue-50/60">Job 1 - Lokasi</th>
+                              <th className="px-3 py-3">Bulan Lulus</th>
+                              <th className="px-3 py-3 bg-violet-50/60">Job 2 - Bidang</th>
+                              <th className="px-3 py-3 bg-violet-50/60">Job 2 - Tgl Mensetsu</th>
+                              <th className="px-3 py-3 bg-violet-50/60">Job 2 - Lokasi</th>
+                              <th className="px-3 py-3 text-center">Tahun Lulus</th>
+                              <th className="px-3 py-3 text-center">Kehadiran</th>
+                              <th className="px-3 py-3 text-center">Attitude</th>
+                              <th className="px-3 py-3 text-center">Nilai Kaiwa</th>
+                              <th className="px-3 py-3 text-center">Eval Bab 1-8</th>
+                              <th className="px-3 py-3 text-center">Eval Bab 9-17</th>
+                              <th className="px-3 py-3 text-center">Eval Bab 18-25</th>
+                              <th className="px-3 py-3 text-center">Bobot Rekomendasi</th>
+                              <th className="px-4 py-3">Catatan</th>
+                              <th className="px-4 py-3 text-right sticky right-0 bg-slate-50/90">Aksi</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-100 font-normal">
                             {paginatedStudents.length === 0 ? (
                               <tr>
-                                <td colSpan={5} className="px-5 py-10 text-center text-slate-400 font-medium italic">
+                                <td colSpan={24} className="px-5 py-10 text-center text-slate-400 font-medium italic">
                                   Tidak ditemukan siswa bimbingan yang sesuai dengan filter kriteria.
                                 </td>
                               </tr>
                             ) : (
-                              paginatedStudents.map((student) => {
+                              paginatedStudents.map((student, idx) => {
                                 const records = systemState.attendance.filter(
                                   (r) => r.studentName === student.name || r.studentId === student.id
                                 );
@@ -4362,106 +4385,105 @@ export default function VvipView({
                                 const rate = total > 0 ? Math.round((hadir / total) * 100) : null;
 
                                 const studentAsss = (systemState.chapterAssessments || []).filter((c) => c.studentId === student.id);
-                                const completedBab = studentAsss.filter((c) => c.status === "Telah Dinilai").length;
+                                const gradedAsss = studentAsss.filter((c) => c.status === "Telah Dinilai");
+                                const lastBab = gradedAsss.length > 0 ? Math.max(...gradedAsss.map((c) => c.chapterNumber || 0)) : 0;
+
+                                const avgScoreInRange = (min: number, max: number) => {
+                                  const inRange = gradedAsss.filter((c) => (c.chapterNumber || 0) >= min && (c.chapterNumber || 0) <= max && typeof c.score === "number");
+                                  if (inRange.length === 0) return null;
+                                  return Math.round(inRange.reduce((acc, c) => acc + (c.score || 0), 0) / inRange.length);
+                                };
+                                const eval18 = avgScoreInRange(1, 8);
+                                const eval917 = avgScoreInRange(9, 17);
+                                const eval1825 = avgScoreInRange(18, 25);
+
+                                const jk = (student as any).gender === "Perempuan" ? "P" : (student as any).gender === "Laki-laki" ? "L" : "-";
+
+                                const jobKetColor =
+                                  (student as any).jobKeterangan === "Lulus" ? "bg-emerald-50 text-emerald-700 border-emerald-200" :
+                                  (student as any).jobKeterangan === "Out" ? "bg-rose-50 text-rose-700 border-rose-200" :
+                                  (student as any).jobKeterangan === "Interview" ? "bg-blue-50 text-blue-700 border-blue-200" :
+                                  (student as any).jobKeterangan === "SA/Mendang" ? "bg-amber-50 text-amber-700 border-amber-200" :
+                                  "bg-slate-50 text-slate-400 border-slate-150";
 
                                 return (
                                   <tr
                                     key={`${student.id}-${student.name}`}
                                     className="hover:bg-indigo-50/30 transition border-b border-slate-100 group"
                                   >
-                                    <td className="px-6 py-4">
-                                      <div className="flex items-center gap-3.5">
+                                    <td className="px-3 py-3 text-slate-400 font-bold font-mono">{idx + 1}</td>
+                                    <td className="px-3 py-3 whitespace-nowrap text-slate-600 font-bold">{student.batch || "-"}</td>
+                                    <td className="px-4 py-3">
+                                      <div className="flex items-center gap-2.5">
                                         <img
                                           src={getSafePhotoUrl(student.profilePicture || (student as any).docFoto, student.name)}
                                           alt={student.name}
-                                          className="h-10 w-10 rounded-full object-cover border border-slate-200 shrink-0 shadow-3xs"
+                                          className="h-8 w-8 rounded-full object-cover border border-slate-200 shrink-0 shadow-3xs"
                                           referrerPolicy="no-referrer"
                                           onError={(e) => {
                                             e.currentTarget.onerror = null;
                                             e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(student.name || 'Siswa')}&background=e0e7ff&color=3730a3`;
                                           }}
                                         />
-                                        <div>
-                                          <div className="flex items-center gap-2">
-                                            <p className="font-black text-sm text-slate-900 leading-tight group-hover:text-indigo-700 transition-colors">
-                                              {student.name}
-                                            </p>
-                                            {!isReadOnly && (
-                                              <button
-                                                onClick={() => startVvipEditReg(student.id)}
-                                                className="px-2 py-0.5 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 hover:text-indigo-800 rounded-md text-[9.5px] font-bold flex items-center gap-1 cursor-pointer transition-colors border border-indigo-100/60"
-                                              >
-                                                <FileText className="h-3 w-3" /> Edit
-                                              </button>
-                                            )}
-                                          </div>
-                                          <p className="text-[10px] text-slate-400 font-mono font-bold mt-1">
-                                            ID: {student.id}
+                                        <div className="min-w-0">
+                                          <p className="font-black text-slate-900 leading-tight group-hover:text-indigo-700 transition-colors whitespace-nowrap">
+                                            {student.name}
+                                          </p>
+                                          <p className="text-[9.5px] text-slate-400 font-mono font-bold mt-0.5">
+                                            {student.id}
                                           </p>
                                         </div>
                                       </div>
                                     </td>
-
-                                    <td className="px-5 py-4">
-                                      <div className="space-y-1 select-none">
-                                        <span className="text-[10.5px] font-extrabold bg-slate-100 text-slate-800 px-2.5 py-1 rounded-lg border border-slate-200/80 shadow-3xs inline-block">
-                                          {student.class || "Tanpa Kelas"}
-                                        </span>
-                                        <p className="text-[10px] text-slate-500 font-bold pl-0.5">
-                                          {student.batch || "Batch Standard"}
-                                        </p>
-                                      </div>
+                                    <td className="px-3 py-3 text-center font-mono text-slate-600">{(student as any).age || "-"}</td>
+                                    <td className="px-3 py-3 text-center font-bold text-slate-500">{jk}</td>
+                                    <td className="px-3 py-3 whitespace-nowrap">
+                                      <span className="font-mono font-extrabold text-indigo-700">Bab {lastBab}</span>
                                     </td>
-
-                                    <td className="px-5 py-4">
-                                      <div className="space-y-1">
-                                        <span className={`text-[10px] font-black border rounded-lg px-2.5 py-1 tracking-wider inline-block shadow-3xs ${
-                                          student.status === "Dikeluarkan"
-                                            ? "bg-rose-100 text-rose-800 border-rose-300 font-extrabold"
-                                            : student.status === "Di Jepang"
-                                            ? "bg-emerald-50 text-emerald-800 border-emerald-200"
-                                            : student.status === "Lulus"
-                                              ? "bg-indigo-50 text-indigo-800 border-indigo-200"
-                                              : student.status === "Diklat SO"
-                                                ? "bg-purple-50 text-purple-800 border-purple-200"
-                                                : student.status === "On Proges Job"
-                                                  ? "bg-amber-50 text-amber-800 border-amber-200"
-                                                  : "bg-blue-50 text-blue-800 border-blue-200"
-                                        }`}>
-                                          {student.status.toUpperCase()}
-                                        </span>
-                                        {student.status === "Di Jepang" ? (
-                                          <p className="text-[9.5px] font-bold text-emerald-700 flex items-center gap-1 mt-1 font-mono">
-                                            📍 {student.prefecture || "Tokyo"}
-                                          </p>
-                                        ) : (
-                                          <p className="text-[9.5px] font-bold text-slate-400 flex items-center gap-1 mt-1">
-                                            📍 LPK Pati, Jateng
-                                          </p>
+                                    <td className="px-3 py-3 whitespace-nowrap text-slate-700 font-bold">{(student as any).mitraSO || "-"}</td>
+                                    <td className="px-3 py-3">
+                                      <span className={`text-[9.5px] font-black border rounded-md px-2 py-0.5 whitespace-nowrap ${jobKetColor}`}>
+                                        {(student as any).jobKeterangan || "-"}
+                                      </span>
+                                    </td>
+                                    <td className="px-3 py-3 whitespace-nowrap bg-blue-50/20 text-slate-600">{(student as any).job1Bidang || "-"}</td>
+                                    <td className="px-3 py-3 whitespace-nowrap bg-blue-50/20 text-slate-500 font-mono">{(student as any).job1TanggalMensetsu || "-"}</td>
+                                    <td className="px-3 py-3 whitespace-nowrap bg-blue-50/20 text-slate-600">{(student as any).job1Lokasi || "-"}</td>
+                                    <td className="px-3 py-3 whitespace-nowrap text-slate-600 font-bold">{(student as any).bulanKelulusan || "-"}</td>
+                                    <td className="px-3 py-3 whitespace-nowrap bg-violet-50/20 text-slate-600">{(student as any).job2Bidang || "-"}</td>
+                                    <td className="px-3 py-3 whitespace-nowrap bg-violet-50/20 text-slate-500 font-mono">{(student as any).job2TanggalMensetsu || "-"}</td>
+                                    <td className="px-3 py-3 whitespace-nowrap bg-violet-50/20 text-slate-600">{(student as any).job2Lokasi || "-"}</td>
+                                    <td className="px-3 py-3 text-center font-mono text-slate-600">{student.graduationYear || "-"}</td>
+                                    <td className="px-3 py-3 text-center font-mono font-extrabold text-slate-800">{rate !== null ? `${rate}%` : "-"}</td>
+                                    <td className="px-3 py-3 text-center font-mono text-slate-600">{(student as any).attitudeScore ?? "-"}</td>
+                                    <td className="px-3 py-3 text-center font-mono text-slate-600">{(student as any).kaiwaScore ?? "-"}</td>
+                                    <td className="px-3 py-3 text-center font-mono text-slate-600">{eval18 ?? "-"}</td>
+                                    <td className="px-3 py-3 text-center font-mono text-slate-600">{eval917 ?? "-"}</td>
+                                    <td className="px-3 py-3 text-center font-mono text-slate-600">{eval1825 ?? "-"}</td>
+                                    <td className="px-3 py-3 text-center font-mono font-extrabold text-indigo-700">{(student as any).bobotNilaiRekomendasi ?? "-"}</td>
+                                    <td className="px-4 py-3 max-w-[220px] truncate text-slate-500" title={(student as any).keterangan || ""}>{(student as any).keterangan || "-"}</td>
+                                    <td className="px-4 py-3 text-right sticky right-0 bg-white group-hover:bg-indigo-50/30">
+                                      <div className="flex items-center justify-end gap-1.5">
+                                        {!isReadOnly && onNavigateToAdmin && (
+                                          <button
+                                            type="button"
+                                            onClick={() => onNavigateToAdmin(student.name)}
+                                            title="Edit data siswa di halaman Admin"
+                                            className="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-extrabold text-[10px] px-2.5 py-2 rounded-xl border border-indigo-100 transition active:scale-95 cursor-pointer inline-flex items-center gap-1 shadow-3xs duration-150"
+                                          >
+                                            <Edit className="h-3 w-3" />
+                                            <span>Edit</span>
+                                          </button>
                                         )}
+                                        <button
+                                          type="button"
+                                          onClick={() => setSelectedStudentDetail(student)}
+                                          className="bg-slate-50 hover:bg-slate-100 text-slate-800 font-extrabold text-[10px] px-2.5 py-2 rounded-xl border border-slate-200 transition active:scale-95 cursor-pointer inline-flex items-center gap-1 shadow-3xs duration-150"
+                                        >
+                                          <span>Rapor</span>
+                                          <ChevronRight className="h-3 w-3 text-slate-500" />
+                                        </button>
                                       </div>
-                                    </td>
-
-                                    <td className="px-5 py-4">
-                                      <div className="space-y-1 font-mono text-[11px]">
-                                        <p className="font-bold text-slate-800">
-                                          {rate !== null ? `${rate}% Hadir` : "Siswa Baru"}
-                                        </p>
-                                        <p className="text-[10px] text-indigo-700 font-extrabold">
-                                          {completedBab} / {getClassMaxBab(student.class || "")} Bab
-                                        </p>
-                                      </div>
-                                    </td>
-
-                                    <td className="px-6 py-4 text-right">
-                                      <button
-                                        type="button"
-                                        onClick={() => setSelectedStudentDetail(student)}
-                                        className="bg-slate-50 hover:bg-slate-100 text-slate-800 font-extrabold text-[10.5px] px-3.5 py-2 rounded-xl border border-slate-200 transition active:scale-95 cursor-pointer inline-flex items-center gap-1.5 shadow-3xs duration-150"
-                                      >
-                                        <span>Periksa Rapor</span>
-                                        <ChevronRight className="h-3 w-3 text-slate-500" />
-                                      </button>
                                     </td>
                                   </tr>
                                 );

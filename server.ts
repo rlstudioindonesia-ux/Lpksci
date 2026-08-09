@@ -1878,7 +1878,7 @@ app.post("/api/state/update", (req, res) => {
       }
 
       if (action === "update_status") {
-        const { id, status, class: className, prefecture, city, company, latitude, longitude, profilePicture, sensei, statusPendaftaran, graduationYear, phone, name, currentChapter, keterangan } = payload;
+        const { id, status, class: className, prefecture, city, company, latitude, longitude, profilePicture, sensei, statusPendaftaran, graduationYear, phone, name, currentChapter, keterangan, mitraSO, jobKeterangan, job1Bidang, job1TanggalMensetsu, job1Lokasi, job2Bidang, job2TanggalMensetsu, job2Lokasi, bulanKelulusan, attitudeScore, kaiwaScore, bobotNilaiRekomendasi } = payload;
         const index = state.activeStudents.findIndex(s => s.id === id);
         if (index !== -1) {
           if (status) {
@@ -1987,6 +1987,42 @@ app.post("/api/state/update", (req, res) => {
           }
           if (keterangan !== undefined) {
             state.activeStudents[index].keterangan = keterangan;
+          }
+          if (mitraSO !== undefined) {
+            state.activeStudents[index].mitraSO = mitraSO;
+          }
+          if (jobKeterangan !== undefined) {
+            state.activeStudents[index].jobKeterangan = jobKeterangan;
+          }
+          if (job1Bidang !== undefined) {
+            state.activeStudents[index].job1Bidang = job1Bidang;
+          }
+          if (job1TanggalMensetsu !== undefined) {
+            state.activeStudents[index].job1TanggalMensetsu = job1TanggalMensetsu;
+          }
+          if (job1Lokasi !== undefined) {
+            state.activeStudents[index].job1Lokasi = job1Lokasi;
+          }
+          if (job2Bidang !== undefined) {
+            state.activeStudents[index].job2Bidang = job2Bidang;
+          }
+          if (job2TanggalMensetsu !== undefined) {
+            state.activeStudents[index].job2TanggalMensetsu = job2TanggalMensetsu;
+          }
+          if (job2Lokasi !== undefined) {
+            state.activeStudents[index].job2Lokasi = job2Lokasi;
+          }
+          if (bulanKelulusan !== undefined) {
+            state.activeStudents[index].bulanKelulusan = bulanKelulusan;
+          }
+          if (attitudeScore !== undefined) {
+            state.activeStudents[index].attitudeScore = attitudeScore !== null && attitudeScore !== "" ? Number(attitudeScore) : undefined;
+          }
+          if (kaiwaScore !== undefined) {
+            state.activeStudents[index].kaiwaScore = kaiwaScore !== null && kaiwaScore !== "" ? Number(kaiwaScore) : undefined;
+          }
+          if (bobotNilaiRekomendasi !== undefined) {
+            state.activeStudents[index].bobotNilaiRekomendasi = bobotNilaiRekomendasi !== null && bobotNilaiRekomendasi !== "" ? Number(bobotNilaiRekomendasi) : undefined;
           }
 
           const actStudent = state.activeStudents[index];
