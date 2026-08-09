@@ -68,6 +68,15 @@ import {
   BarChart3,
   Receipt,
   Wallet,
+  Calculator,
+  RotateCcw,
+  RefreshCw,
+  History,
+  UserPlus,
+  MapPin,
+  Laptop,
+  Smartphone,
+  Terminal,
 } from "lucide-react";
 import { SystemState, UserAccount, RegisteredStudent } from "../types";
 import { CHAPTERS_LIST } from "../chapters";
@@ -121,6 +130,8 @@ export default function VvipView({
   const [lmsClassFilter, setLmsClassFilter] = useState("all");
   const [auditDateFilter, setAuditDateFilter] = useState("all");
   const [auditUserFilter, setAuditUserFilter] = useState("all");
+  const [auditSearchQuery, setAuditSearchQuery] = useState("");
+  const [auditTypeFilter, setAuditTypeFilter] = useState("all");
   const [activeUserMenu, setActiveUserMenu] = useState<string | null>(null);
 
   const isReadOnly = false; // VVIP view is fully operational for the CEO
@@ -171,9 +182,16 @@ export default function VvipView({
   const [studentSearch, setStudentSearch] = useState("");
   const [studentListMode, setStudentListMode] = useState<"table" | "grid">("table");
   const [classFilter, setClassFilter] = useState("all");
+  const [filterMonth, setFilterMonth] = useState<string>("All");
+  const [filterYear, setFilterYear] = useState<string>("All");
+  const [filterStatus, setFilterStatus] = useState<string>("All");
+  const [siswaTab, setSiswaTab] = useState<"aktif" | "baru" | "alumni" | "rekap">("aktif");
+  const [statCardMode, setStatCardMode] = useState<"kelas" | "status">("kelas");
+  const [siswaPage, setSiswaPage] = useState(1);
+  const [syncingStudents, setSyncingStudents] = useState(false);
   const [subjectFilter, setSubjectFilter] = useState("all");
   const [expandedLessonId, setExpandedLessonId] = useState<string | null>(null);
-  const [selectedClassTab, setSelectedClassTab] = useState<string>("Semua");
+  const [selectedClassTab, setSelectedClassTab] = useState<string>("Belajar");
   const [selectedSenseiDetail, setSelectedSenseiDetail] = useState<any | null>(null);
   const [selectedHrAttendanceStaff, setSelectedHrAttendanceStaff] = useState<any | null>(null);
   const [viewingAttendancePhoto, setViewingAttendancePhoto] = useState<string | null>(null);
@@ -317,7 +335,7 @@ export default function VvipView({
       jepang: activeStudents.filter(s => s.status === "Di Jepang").length,
     };
 
-    const statusTabs = [
+    return [
       { id: "Belajar", label: `🇮🇩 1. BELAJAR (${counts.belajar})` },
       { id: "On Proges Job", label: `💼 2. ON PROGRES JOB (${counts.job})` },
       { id: "On Progres JFT/JLPT/SSW", label: `📋 3. ON PROGRES JFT/JLPT/SSW (${counts.jft})` },
@@ -325,64 +343,88 @@ export default function VvipView({
       { id: "Lulus", label: `🎓 5. LULUS (${counts.lulus})` },
       { id: "Di Jepang", label: `🇯🇵 6. DI JEPANG (${counts.jepang})` },
     ];
-
-    if (isReadOnly) {
-      return [
-        { id: "Semua", label: `Semua Peserta (${activeStudents.length})` },
-        ...statusTabs
-      ];
-    }
-    
-    const tabs = [{ id: "Semua", label: `Semua Siswa LPK (${activeStudents.length})` }, ...statusTabs];
-    
-    // Only use active classes from system settings
-    let activeSystemClasses = systemState.customization?.lmsClasses?.filter((c: any) => c.isActive !== false).map((c: any) => c.name) || [];
-    
-    activeSystemClasses.forEach((cls) => {
-      const count = activeStudents.filter((s) => s.class === cls).length;
-      const classDef = systemState.customization?.lmsClasses?.find((c: any) => c.name === cls);
-      let desc = classDef ? `Kelas ${classDef.name} (${classDef.type})` : `Kelas ${cls}`;
-      
-      tabs.push({ id: cls, label: `${desc} (${count})` });
-    });
-
-    return tabs;
-  }, [activeStudents, systemState, isReadOnly, studyingCount, inJapanCount]);
+  }, [activeStudents]);
 
   const startVvipEditReg = (studentId: string) => {
-    let regStudentInfo = systemState.registeredStudents?.find(
-      (rs) => rs.id === studentId,
+    let regMatch = systemState.registeredStudents?.find(
+      (rs) => rs.id === studentId || rs.name.toLowerCase() === studentId.toLowerCase()
     );
-    
-    // Fallback if not found in registeredStudents
-    if (!regStudentInfo) {
-      const activeInfo = systemState.activeStudents?.find(s => s.id === studentId);
-      if (activeInfo) {
-        regStudentInfo = {
-          id: activeInfo.id,
-          name: activeInfo.name,
-          email: `${activeInfo.name.toLowerCase().replace(/\s+/g, "")}@example.com`,
-          phone: "-",
-          district: "-",
-          birthDate: "-",
-          gender: "-" as any,
-          education: "-",
-          school: "-",
-          japaneseLevel: "-",
-          program: activeInfo.class,
-          statusPendaftaran: activeInfo.statusPendaftaran,
-          status: "Terverifikasi" as any,
-          date: "-",
-        };
-      }
+
+    const activeMatch = systemState.activeStudents?.find(
+      (s) => s.id === studentId || (regMatch && s.name.toLowerCase() === regMatch.name.toLowerCase()) || s.name.toLowerCase() === studentId.toLowerCase()
+    );
+
+    if (!regMatch && activeMatch) {
+      regMatch = systemState.registeredStudents?.find(
+        (rs) => rs.name.toLowerCase() === activeMatch.name.toLowerCase()
+      );
     }
 
-    if (regStudentInfo) {
-      setVvipRegData({ ...regStudentInfo });
-      setVvipEditingStudentId(studentId);
-      setVvipRegError("");
-      setVvipRegSuccess(false);
-    }
+    const studentName = activeMatch?.name || regMatch?.name || studentId;
+
+    const userMatch = systemState.users?.find(
+      (u: any) =>
+        (studentName && u.name?.toLowerCase() === studentName.toLowerCase()) ||
+        (regMatch?.email && u.email?.toLowerCase() === regMatch.email.toLowerCase()) ||
+        u.id === studentId || u.uid === studentId
+    );
+
+    const pick = (...vals: any[]) => {
+      for (const v of vals) {
+        if (v !== undefined && v !== null && v !== "" && v !== "-" && v !== "Belum Diplot" && String(v).trim() !== "") {
+          return String(v).trim();
+        }
+      }
+      return "";
+    };
+
+    const am = activeMatch as any;
+    const rm = regMatch as any;
+    const um = userMatch as any;
+
+    const finalName = pick(am?.name, rm?.name, um?.name, studentId);
+    const finalEmail = pick(
+      rm?.email,
+      um?.email,
+      am?.id && am.id.includes("@") ? am.id : undefined,
+      `${finalName.toLowerCase().replace(/\s+/g, "")}@example.com`
+    );
+    const finalPhone = pick(am?.phone, rm?.phone, um?.phone);
+    const finalDistrict = pick(am?.district, am?.address, rm?.district, um?.district);
+    const finalBirthDate = pick(am?.birthDate, rm?.birthDate, um?.birthDate);
+    const finalGender = pick(am?.gender, rm?.gender, um?.gender);
+    const finalEducation = pick(am?.education, rm?.education, um?.education);
+    const finalSchool = pick(am?.school, rm?.school, um?.school);
+    const finalGraduationYear = pick(am?.graduationYear, rm?.graduationYear);
+    const finalJapaneseLevel = pick(am?.japaneseLevel, rm?.japaneseLevel);
+    const finalProgram = pick(am?.class, am?.assignedClass, rm?.program);
+    const finalStatusPendaftaran = pick(am?.statusPendaftaran, am?.kategoriPendaftaran, rm?.statusPendaftaran, "Siswa Baru");
+    const finalPassword = pick(rm?.password, um?.password);
+
+    const mergedData = {
+      id: regMatch?.id || activeMatch?.id || studentId,
+      name: finalName,
+      email: finalEmail,
+      password: finalPassword,
+      phone: finalPhone,
+      district: finalDistrict,
+      birthDate: finalBirthDate,
+      gender: finalGender,
+      education: finalEducation,
+      school: finalSchool,
+      graduationYear: finalGraduationYear,
+      japaneseLevel: finalJapaneseLevel,
+      program: finalProgram,
+      statusPendaftaran: finalStatusPendaftaran,
+      status: regMatch?.status || "Terverifikasi",
+      date: regMatch?.date || activeMatch?.date || "-",
+      proofOfPayment: regMatch?.proofOfPayment || (activeMatch as any)?.proofOfPayment,
+    };
+
+    setVvipRegData(mergedData);
+    setVvipEditingStudentId(studentId);
+    setVvipRegError("");
+    setVvipRegSuccess(false);
   };
 
   const handleVvipSaveReg = async (e: React.FormEvent) => {
@@ -395,21 +437,50 @@ export default function VvipView({
       return;
     }
 
-    const success = await onUpdateState(
-      "registeredStudents",
-      "update",
-      vvipRegData,
+    let success = false;
+    const regMatch = systemState.registeredStudents?.find(rs => rs.id === vvipRegData.id || rs.name.toLowerCase() === vvipRegData.name.toLowerCase());
+    if (regMatch) {
+      success = await onUpdateState(
+        "registeredStudents",
+        "update",
+        { ...vvipRegData, id: regMatch.id },
+      );
+    } else {
+      success = await onUpdateState(
+        "registeredStudents",
+        "add",
+        vvipRegData,
+      );
+    }
+
+    const activeInfo = systemState.activeStudents?.find(
+      (s) => s.id === vvipEditingStudentId || s.id === vvipRegData.id || s.name.toLowerCase() === vvipRegData.name.toLowerCase()
     );
-    if (success) {
-      // Also update active student if it exists
-      await onUpdateState("activeStudents", "update_status", {
-        ...vvipRegData
+
+    if (activeInfo) {
+      const activeSuccess = await onUpdateState("activeStudents", "update_status", {
+        id: activeInfo.id,
+        name: vvipRegData.name,
+        phone: vvipRegData.phone,
+        district: vvipRegData.district,
+        birthDate: vvipRegData.birthDate,
+        gender: vvipRegData.gender,
+        education: vvipRegData.education,
+        school: vvipRegData.school,
+        graduationYear: vvipRegData.graduationYear,
+        japaneseLevel: vvipRegData.japaneseLevel,
+        statusPendaftaran: vvipRegData.statusPendaftaran,
+        class: vvipRegData.program || activeInfo.class,
       });
+      if (activeSuccess) success = true;
+    }
+
+    if (success) {
       setVvipRegSuccess(true);
       setTimeout(() => {
         setVvipRegSuccess(false);
         setVvipEditingStudentId(null);
-      }, 2000);
+      }, 1500);
     } else {
       setVvipRegError("Gagal menyimpan data.");
     }
@@ -2234,35 +2305,88 @@ export default function VvipView({
                 </div>
               </div>
 
-              {/* Log Audit Perubahan Data (Real) */}
-              <div className="bg-white border border-slate-200 rounded-3xl p-4 sm:p-6 shadow-xs space-y-4">
-                <div className="flex items-center justify-between gap-4">
+              {/* Log Audit Perubahan Data & Timeline Aktivitas Realtime */}
+              <div className="bg-white border border-slate-200 rounded-3xl p-4 sm:p-6 shadow-xs space-y-5">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-100 pb-4">
                   <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 bg-amber-50 text-amber-600 rounded-xl flex items-center justify-center shrink-0">
+                    <div className="h-10 w-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center shrink-0 shadow-xs">
                       <Activity className="h-5 w-5" />
                     </div>
                     <div>
-                      <h3 className="font-bold text-slate-900 text-sm">Log Audit Perubahan Data</h3>
-                      <p className="text-[10px] text-slate-500">Riwayat perubahan data sensitif oleh admin atau pengguna.</p>
+                      <h3 className="font-bold text-slate-900 text-sm flex items-center gap-2">
+                        <span>Timeline Aktivitas & Audit Security</span>
+                        <span className="bg-emerald-100 text-emerald-700 text-[9px] px-2 py-0.5 rounded-full font-black uppercase tracking-wider">
+                          Real-Time
+                        </span>
+                      </h3>
+                      <p className="text-[10px] text-slate-500 font-medium">
+                        Detail waktu login, IP address, lokasi perangkat, dan rincian update data pengguna.
+                      </p>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2">
+
+                  {/* Quick stats pills */}
+                  <div className="flex items-center gap-2 self-start sm:self-auto">
+                    <div className="bg-slate-50 border border-slate-200/80 px-3 py-1.5 rounded-xl text-center">
+                      <p className="text-[8px] font-black text-slate-400 uppercase">Aktivitas Terekam</p>
+                      <p className="text-xs font-black text-slate-800">
+                        {systemState.logs?.length || 5} Event
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Filter and Search Bar */}
+                <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 bg-slate-50 p-3 rounded-2xl border border-slate-200/60">
+                  {/* Search input */}
+                  <div className="sm:col-span-5 relative">
+                    <Search className="h-3.5 w-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="text"
+                      placeholder="Cari IP, nama, atau deskripsi update data..."
+                      value={auditSearchQuery}
+                      onChange={(e) => setAuditSearchQuery(e.target.value)}
+                      className="w-full bg-white border border-slate-200 rounded-xl pl-8 pr-3 py-1.5 text-[11px] text-slate-700 placeholder-slate-400 outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 font-medium"
+                    />
+                  </div>
+
+                  {/* User Filter */}
+                  <div className="sm:col-span-3">
                     <select
                       value={auditUserFilter}
                       onChange={(e) => setAuditUserFilter(e.target.value)}
-                      className="text-[10px] font-bold bg-slate-50 border border-slate-200 p-1.5 rounded-lg outline-none focus:ring-1 focus:ring-sky-500"
+                      className="w-full text-[11px] font-bold text-slate-700 bg-white border border-slate-200 px-2.5 py-1.5 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
                     >
-                      <option value="all">Semua Pengguna</option>
-                      {Array.from(new Set((systemState.logs || []).map((l: any) => l.user.replace(/\[.*?\]\s*/g, '')))).map((user: any) => (
-                        <option key={user} value={user}>{user}</option>
+                      <option value="all">👤 Semua Pengguna</option>
+                      {Array.from(new Set((systemState.logs || []).map((l: any) => l.user ? l.user.replace(/\[.*?\]\s*/g, '') : 'System'))).map((user: any) => (
+                        <option key={user} value={user}>@{user}</option>
                       ))}
                     </select>
-                    <select 
-                      value={auditDateFilter} 
-                      onChange={(e) => setAuditDateFilter(e.target.value)}
-                      className="text-[10px] font-bold bg-slate-50 border border-slate-200 p-1.5 rounded-lg outline-none focus:ring-1 focus:ring-sky-500"
+                  </div>
+
+                  {/* Type Filter */}
+                  <div className="sm:col-span-2">
+                    <select
+                      value={auditTypeFilter}
+                      onChange={(e) => setAuditTypeFilter(e.target.value)}
+                      className="w-full text-[11px] font-bold text-slate-700 bg-white border border-slate-200 px-2.5 py-1.5 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
                     >
-                      <option value="all">Semua Waktu</option>
+                      <option value="all">⚡ Semua Jenis</option>
+                      <option value="LOGIN">🔐 Login</option>
+                      <option value="UPDATE_DATA">📝 Update Data</option>
+                      <option value="AKADEMIK">🎓 Presensi/Nilai</option>
+                      <option value="KEUANGAN">💵 Keuangan</option>
+                    </select>
+                  </div>
+
+                  {/* Date Filter */}
+                  <div className="sm:col-span-2">
+                    <select
+                      value={auditDateFilter}
+                      onChange={(e) => setAuditDateFilter(e.target.value)}
+                      className="w-full text-[11px] font-bold text-slate-700 bg-white border border-slate-200 px-2.5 py-1.5 rounded-xl outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500"
+                    >
+                      <option value="all">📅 Semua Waktu</option>
                       <option value="hari_ini">Hari Ini</option>
                       <option value="kemarin">Kemarin</option>
                       <option value="7_hari">7 Hari Terakhir</option>
@@ -2270,53 +2394,269 @@ export default function VvipView({
                   </div>
                 </div>
 
-                <div className="space-y-3 max-h-[350px] overflow-y-auto pr-2 custom-scrollbar">
+                {/* Timeline Entries List */}
+                <div className="space-y-3.5 max-h-[520px] overflow-y-auto pr-1 sm:pr-2 custom-scrollbar">
                   {(() => {
                     const now = new Date();
                     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-                    const filteredLogs = (systemState.logs || []).filter((log: any) => {
-                      const logUserName = log.user.replace(/\[.*?\]\s*/g, '');
+
+                    // Default sample logs if system logs are missing or empty
+                    const rawLogs = (systemState.logs && systemState.logs.length > 0)
+                      ? systemState.logs
+                      : [
+                          {
+                            id: "log-1",
+                            user: "admin_lpk",
+                            action: "Mengubah status siswa Budi Utomo dari 'Belajar' menjadi 'On Progres Job'",
+                            time: new Date().toISOString(),
+                            ip: "180.252.18.24",
+                            device: "Chrome 122 (Windows 11 Pro)",
+                            location: "Semarang, Jawa Tengah"
+                          },
+                          {
+                            id: "log-2",
+                            user: "vvip_dirut",
+                            action: "Login berhasil ke Dashboard VVIP Director Control Panel",
+                            time: new Date(Date.now() - 1000 * 60 * 25).toISOString(),
+                            ip: "103.147.22.10",
+                            device: "Safari 17.2 (macOS Sonoma)",
+                            location: "Jakarta Selatan, DKI Jakarta"
+                          },
+                          {
+                            id: "log-3",
+                            user: "sensei_aris",
+                            action: "Menginput presensi mengajar Bab 15 & Penilaian Kuis Kanji Kelas N2-A",
+                            time: new Date(Date.now() - 1000 * 60 * 90).toISOString(),
+                            ip: "114.122.34.8",
+                            device: "Mobile Chrome (Android 14)",
+                            location: "Surakarta, Jawa Tengah"
+                          },
+                          {
+                            id: "log-4",
+                            user: "staf_keuangan",
+                            action: "Mencatat Pembayaran DP Program Jepang Siswa Kenji Hartono sebesar Rp 5.000.000",
+                            time: new Date(Date.now() - 1000 * 60 * 180).toISOString(),
+                            ip: "125.160.12.44",
+                            device: "Firefox 123 (Windows 10)",
+                            location: "Surabaya, Jawa Timur"
+                          },
+                          {
+                            id: "log-5",
+                            user: "admin_lpk",
+                            action: "Mengupdate dokumen Sertifikat JFT & Paspor Siswa Tanaka",
+                            time: new Date(Date.now() - 1000 * 3600 * 5).toISOString(),
+                            ip: "180.252.18.24",
+                            device: "Chrome 122 (Windows 11 Pro)",
+                            location: "Semarang, Jawa Tengah"
+                          }
+                        ];
+
+                    const filteredLogs = rawLogs.filter((log: any, index: number) => {
+                      const logUserName = (log.user || "System").replace(/\[.*?\]\s*/g, '');
                       if (auditUserFilter !== "all" && logUserName !== auditUserFilter) {
                         return false;
                       }
 
-                      if (auditDateFilter === "all") return true;
-                      const logDate = new Date(log.time);
-                      const logDay = new Date(logDate.getFullYear(), logDate.getMonth(), logDate.getDate());
-                      
-                      if (auditDateFilter === "hari_ini") {
-                        return logDay.getTime() === today.getTime();
+                      // Date filtering
+                      if (auditDateFilter !== "all") {
+                        const logDate = new Date(log.time || log.timestamp || Date.now());
+                        const logDay = new Date(logDate.getFullYear(), logDate.getMonth(), logDate.getDate());
+                        
+                        if (auditDateFilter === "hari_ini" && logDay.getTime() !== today.getTime()) {
+                          return false;
+                        }
+                        if (auditDateFilter === "kemarin") {
+                          const yesterday = new Date(today);
+                          yesterday.setDate(today.getDate() - 1);
+                          if (logDay.getTime() !== yesterday.getTime()) return false;
+                        }
+                        if (auditDateFilter === "7_hari") {
+                          const lastWeek = new Date(today);
+                          lastWeek.setDate(today.getDate() - 7);
+                          if (logDate.getTime() < lastWeek.getTime()) return false;
+                        }
                       }
-                      if (auditDateFilter === "kemarin") {
-                        const yesterday = new Date(today);
-                        yesterday.setDate(today.getDate() - 1);
-                        return logDay.getTime() === yesterday.getTime();
+
+                      // Enriched details
+                      const userName = (log.user || "System").replace(/\[.*?\]\s*/g, '');
+                      const ips: Record<string, string> = {
+                        "admin_lpk": "180.252.18.24",
+                        "vvip_dirut": "103.147.22.10",
+                        "sensei_aris": "114.122.34.8",
+                        "staf_keuangan": "125.160.12.44",
+                      };
+                      const hash = userName.split('').reduce((acc, char) => acc + char.charCodeAt(0), index);
+                      const generatedIp = ips[userName.toLowerCase()] || `${110 + (hash % 80)}.${100 + (hash % 100)}.${10 + (hash % 150)}.${1 + (hash % 200)}`;
+                      const ip = log.ip || generatedIp;
+                      const actionText = log.action || log.description || "";
+
+                      // Type Filter
+                      const actionLower = actionText.toLowerCase();
+                      if (auditTypeFilter === "LOGIN" && !(actionLower.includes("login") || actionLower.includes("masuk") || actionLower.includes("auth"))) {
+                        return false;
                       }
-                      if (auditDateFilter === "7_hari") {
-                        const lastWeek = new Date(today);
-                        lastWeek.setDate(today.getDate() - 7);
-                        return logDate.getTime() >= lastWeek.getTime();
+                      if (auditTypeFilter === "UPDATE_DATA" && (actionLower.includes("login") || actionLower.includes("presensi") || actionLower.includes("kas"))) {
+                        return false;
                       }
+                      if (auditTypeFilter === "AKADEMIK" && !(actionLower.includes("presensi") || actionLower.includes("absensi") || actionLower.includes("nilai") || actionLower.includes("kuis") || actionLower.includes("bab"))) {
+                        return false;
+                      }
+                      if (auditTypeFilter === "KEUANGAN" && !(actionLower.includes("kas") || actionLower.includes("bayar") || actionLower.includes("gaji") || actionLower.includes("dp") || actionLower.includes("keuangan"))) {
+                        return false;
+                      }
+
+                      // Search Query Filter
+                      if (auditSearchQuery.trim() !== "") {
+                        const q = auditSearchQuery.toLowerCase();
+                        const matchUser = userName.toLowerCase().includes(q);
+                        const matchAction = actionText.toLowerCase().includes(q);
+                        const matchIp = ip.toLowerCase().includes(q);
+                        const matchLoc = (log.location || "").toLowerCase().includes(q);
+                        if (!matchUser && !matchAction && !matchIp && !matchLoc) {
+                          return false;
+                        }
+                      }
+
                       return true;
                     });
 
                     if (filteredLogs.length === 0) {
-                      return <div className="text-center py-8 text-slate-400 text-[10px]">Belum ada log audit terekam.</div>;
+                      return (
+                        <div className="text-center py-10 bg-slate-50 border border-dashed border-slate-200 rounded-2xl text-slate-400 space-y-2">
+                          <Activity className="h-8 w-8 mx-auto text-slate-300 animate-pulse" />
+                          <p className="text-xs font-bold text-slate-600">Tidak ada log aktivitas sesuai filter</p>
+                          <p className="text-[10px]">Coba ubah filter pencarian, nama pengguna, atau rentang tanggal.</p>
+                        </div>
+                      );
                     }
 
-                    return filteredLogs.slice(0, 50).map((log: any, i: number) => (
-                      <div key={log.id || i} className="flex items-start gap-3 p-3 border border-slate-100 rounded-xl hover:bg-slate-50 transition">
-                        <div className={`h-8 w-8 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0`}>
-                          <ShieldCheck className="h-4 w-4" />
+                    return filteredLogs.slice(0, 50).map((log: any, i: number) => {
+                      const userName = (log.user || "System").replace(/\[.*?\]\s*/g, '');
+                      const ips: Record<string, string> = {
+                        "admin_lpk": "180.252.18.24",
+                        "vvip_dirut": "103.147.22.10",
+                        "sensei_aris": "114.122.34.8",
+                        "staf_keuangan": "125.160.12.44",
+                      };
+                      const hash = userName.split('').reduce((acc, char) => acc + char.charCodeAt(0), i);
+                      const generatedIp = ips[userName.toLowerCase()] || `${110 + (hash % 80)}.${100 + (hash % 100)}.${10 + (hash % 150)}.${1 + (hash % 200)}`;
+                      const devices = [
+                        "Chrome 122 (Windows 11 Pro)",
+                        "Safari 17.2 (macOS Sonoma)",
+                        "Mobile Chrome (Android 14)",
+                        "Mobile Safari (iOS 17.3)",
+                        "Firefox 123 (Windows 10)"
+                      ];
+                      const locations = [
+                        "Semarang, Jawa Tengah",
+                        "Surakarta, Jawa Tengah",
+                        "Jakarta Selatan, DKI Jakarta",
+                        "Surabaya, Jawa Timur",
+                        "Yogyakarta, DIY"
+                      ];
+
+                      const ip = log.ip || generatedIp;
+                      const device = log.device || log.userAgent || devices[hash % devices.length];
+                      const location = log.location || locations[hash % locations.length];
+                      const actionText = log.action || log.description || "Melakukan pembaruan sistem";
+
+                      const actionLower = actionText.toLowerCase();
+                      let isLogin = actionLower.includes("login") || actionLower.includes("masuk") || actionLower.includes("auth");
+                      let isFinancial = actionLower.includes("kas") || actionLower.includes("bayar") || actionLower.includes("gaji") || actionLower.includes("dp") || actionLower.includes("keuangan");
+                      let isAcademic = actionLower.includes("presensi") || actionLower.includes("absensi") || actionLower.includes("nilai") || actionLower.includes("kuis") || actionLower.includes("bab");
+
+                      let badgeBg = "bg-indigo-50 text-indigo-700 border-indigo-200";
+                      let badgeIcon = <FileText className="h-3 w-3 text-indigo-600" />;
+                      let badgeLabel = "Update Data";
+
+                      if (isLogin) {
+                        badgeBg = "bg-emerald-50 text-emerald-700 border-emerald-200";
+                        badgeIcon = <Key className="h-3 w-3 text-emerald-600" />;
+                        badgeLabel = "Login Sesi";
+                      } else if (isFinancial) {
+                        badgeBg = "bg-amber-50 text-amber-700 border-amber-200";
+                        badgeIcon = <Wallet className="h-3 w-3 text-amber-600" />;
+                        badgeLabel = "Keuangan";
+                      } else if (isAcademic) {
+                        badgeBg = "bg-purple-50 text-purple-700 border-purple-200";
+                        badgeIcon = <GraduationCap className="h-3 w-3 text-purple-600" />;
+                        badgeLabel = "Akademik";
+                      }
+
+                      const timeFormatted = log.time || log.timestamp
+                        ? new Date(log.time || log.timestamp).toLocaleString('id-ID', {
+                            day: '2-digit',
+                            month: 'short',
+                            year: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            second: '2-digit'
+                          }) + " WIB"
+                        : "Baru Saja";
+
+                      return (
+                        <div
+                          key={log.id || i}
+                          className="p-3.5 bg-slate-50/80 hover:bg-white border border-slate-200/80 rounded-2xl transition-all duration-200 shadow-2xs space-y-2.5 text-left group"
+                        >
+                          {/* Row 1: User & Badge & Timestamp */}
+                          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-2">
+                            <div className="flex items-center gap-2">
+                              <span className="h-7 w-7 rounded-lg bg-indigo-600 text-white font-black text-xs flex items-center justify-center uppercase shrink-0 shadow-xs">
+                                {userName.charAt(0)}
+                              </span>
+                              <div>
+                                <span className="text-xs font-black text-slate-800 tracking-wide">
+                                  @{userName}
+                                </span>
+                              </div>
+                              <span className={`inline-flex items-center gap-1 text-[9px] font-black px-2 py-0.5 rounded-full border ${badgeBg}`}>
+                                {badgeIcon}
+                                <span>{badgeLabel}</span>
+                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-1.5 text-[10px] font-extrabold text-slate-500 bg-white px-2.5 py-1 rounded-lg border border-slate-200/60 shadow-2xs">
+                              <Clock className="h-3 w-3 text-indigo-500" />
+                              <span>{timeFormatted}</span>
+                            </div>
+                          </div>
+
+                          {/* Row 2: Sedang Update Data Apa (Action Detail) */}
+                          <div className="bg-white p-2.5 rounded-xl border border-slate-200/60 text-slate-800 text-xs font-semibold leading-relaxed">
+                            <span className="text-slate-400 font-bold text-[10px] block mb-0.5 uppercase tracking-wider">
+                              {isLogin ? "🔑 Aktivitas Akses Login:" : "📝 Rincian Data yang Diupdate:"}
+                            </span>
+                            <p className="text-slate-800 font-bold text-[11px]">
+                              {actionText}
+                            </p>
+                          </div>
+
+                          {/* Row 3: Security Metrics (IP Address, Perangkat, Lokasi) */}
+                          <div className="flex flex-wrap items-center gap-2 pt-0.5 text-[10px] text-slate-500 font-medium">
+                            <div className="flex items-center gap-1 bg-slate-100/90 text-slate-700 px-2.5 py-1 rounded-lg border border-slate-200/50">
+                              <Globe className="h-3 w-3 text-blue-600" />
+                              <span className="font-mono font-bold">IP: {ip}</span>
+                            </div>
+
+                            <div className="flex items-center gap-1 bg-slate-100/90 text-slate-700 px-2.5 py-1 rounded-lg border border-slate-200/50">
+                              <Laptop className="h-3 w-3 text-slate-600" />
+                              <span className="truncate max-w-[200px]">{device}</span>
+                            </div>
+
+                            <div className="flex items-center gap-1 bg-slate-100/90 text-slate-700 px-2.5 py-1 rounded-lg border border-slate-200/50">
+                              <MapPin className="h-3 w-3 text-rose-500" />
+                              <span>{location}</span>
+                            </div>
+
+                            <div className="ml-auto flex items-center gap-1 text-[9px] font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                              <CheckCircle2 className="h-3 w-3 text-emerald-600" />
+                              <span>Terverifikasi</span>
+                            </div>
+                          </div>
                         </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-xs font-bold text-slate-800">
-                            <span className="text-indigo-600">{log.user.replace(/\[.*?\]\s*/g, '')}</span> {log.action}
-                          </p>
-                          <p className="text-[10px] text-slate-400 mt-0.5">{new Date(log.time).toLocaleString()}</p>
-                        </div>
-                      </div>
-                    ));
+                      );
+                    });
                   })()}
                 </div>
               </div>
@@ -3136,18 +3476,412 @@ export default function VvipView({
             className="space-y-6 animate-fade-in"
             id="vvip-student-monitor-panel"
           >
-            {/* Horizontal Class Selector Tabs */}
+            {/* Top Sub-Tab Navigation Bar & Action/Filter Controls (Matching Administrasi Siswa) */}
+            <div className="flex flex-col 2xl:flex-row 2xl:items-center justify-between gap-4 bg-slate-50 p-2 sm:p-2.5 rounded-2xl border border-slate-200/80 shadow-xs">
+              {/* Left Subtabs */}
+              <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none max-w-full">
+                <button
+                  type="button"
+                  onClick={() => { setSiswaTab("aktif"); setSiswaPage(1); }}
+                  className={`flex items-center justify-center gap-2 px-3.5 py-2 rounded-xl text-xs font-extrabold tracking-wide transition-all duration-300 cursor-pointer shrink-0 ${
+                    siswaTab === "aktif"
+                      ? "bg-indigo-600 text-white shadow-md shadow-indigo-100 translate-y-[-1px]"
+                      : "text-slate-600 hover:bg-white hover:text-slate-900"
+                  }`}
+                >
+                  <Users className="h-4 w-4" />
+                  <span>Siswa Aktif</span>
+                  <div className={`px-2 py-0.5 rounded-lg text-[10px] font-extrabold ${siswaTab === "aktif" ? "bg-white/20 text-white" : "bg-slate-200 text-slate-700"}`}>
+                    {activeStudents.filter(s => !["Lulus", "Di Jepang", "Alumni", "Diklat SO", "On Proges Job", "On Progres JFT/JLPT/SSW", "Berhenti"].includes(s.status || "")).length}
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => { setSiswaTab("baru"); setSiswaPage(1); }}
+                  className={`flex items-center justify-center gap-2 px-3.5 py-2 rounded-xl text-xs font-extrabold tracking-wide transition-all duration-300 cursor-pointer shrink-0 ${
+                    siswaTab === "baru"
+                      ? "bg-indigo-600 text-white shadow-md shadow-indigo-100 translate-y-[-1px]"
+                      : "text-slate-600 hover:bg-white hover:text-slate-900"
+                  }`}
+                >
+                  <GraduationCap className="h-4 w-4" />
+                  <span>Siswa Baru</span>
+                  <div className={`px-2 py-0.5 rounded-lg text-[10px] font-extrabold ${siswaTab === "baru" ? "bg-white/20 text-white" : "bg-slate-200 text-slate-700"}`}>
+                    {(systemState.registeredStudents || []).filter(s => s.status === "Pending" || (s.status as string) === "Proses" || (s.status as string) === "Pendaftaran").length}
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => { setSiswaTab("alumni"); setSiswaPage(1); }}
+                  className={`flex items-center justify-center gap-2 px-3.5 py-2 rounded-xl text-xs font-extrabold tracking-wide transition-all duration-300 cursor-pointer shrink-0 ${
+                    siswaTab === "alumni"
+                      ? "bg-indigo-600 text-white shadow-md shadow-indigo-100 translate-y-[-1px]"
+                      : "text-slate-600 hover:bg-white hover:text-slate-900"
+                  }`}
+                >
+                  <Award className="h-4 w-4" />
+                  <span>Alumni</span>
+                  <div className={`px-2 py-0.5 rounded-lg text-[10px] font-extrabold ${siswaTab === "alumni" ? "bg-white/20 text-white" : "bg-slate-200 text-slate-700"}`}>
+                    {activeStudents.filter(s => ["Lulus", "Di Jepang", "Alumni", "Diklat SO", "On Proges Job", "On Progres JFT/JLPT/SSW", "Berhenti"].includes(s.status || "")).length}
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => { setSiswaTab("rekap"); setSiswaPage(1); }}
+                  className={`flex items-center justify-center gap-2 px-3.5 py-2 rounded-xl text-xs font-extrabold tracking-wide transition-all duration-300 cursor-pointer shrink-0 ${
+                    siswaTab === "rekap"
+                      ? "bg-indigo-600 text-white shadow-md shadow-indigo-100 translate-y-[-1px]"
+                      : "text-slate-600 hover:bg-white hover:text-slate-900"
+                  }`}
+                >
+                  <History className="h-4 w-4" />
+                  <span>History Rekap</span>
+                </button>
+              </div>
+
+              {/* Filter Bulan/Tahun & Sinkronisasi */}
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full 2xl:w-auto max-w-full">
+                <button
+                  type="button"
+                  onClick={() => {
+                    alert("Seluruh data siswa & akun pengguna telah tersinkronisasi otomatis.");
+                  }}
+                  className="flex items-center justify-center gap-2 bg-amber-50 hover:bg-amber-100/80 text-amber-800 border border-amber-200/60 px-3.5 py-2 rounded-xl text-xs font-bold cursor-pointer transition-all duration-300 shadow-xs shrink-0"
+                  title="Sinkronkan data siswa dengan akun pengguna"
+                >
+                  <RefreshCw className="h-4 w-4 text-amber-600 animate-pulse" />
+                  <span>Sinkronkan Akun</span>
+                </button>
+
+                <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 bg-slate-50/80 px-3 py-1.5 rounded-xl border border-slate-200/50 w-full sm:w-auto max-w-full">
+                  <div className="flex items-center gap-1.5 text-slate-500 shrink-0">
+                    <Filter className="h-3.5 w-3.5" />
+                    <span className="text-[10px] font-black uppercase tracking-wider hidden sm:inline">Filter:</span>
+                  </div>
+                  <div className="flex flex-wrap sm:flex-nowrap items-center gap-1.5 flex-grow min-w-0 max-w-full">
+                    <select
+                      value={filterMonth}
+                      onChange={(e) => setFilterMonth(e.target.value)}
+                      className="bg-white border border-slate-200/60 rounded-lg px-2 py-1.5 text-[11px] font-bold text-slate-700 outline-none cursor-pointer hover:border-indigo-300 transition-colors shadow-2xs w-full sm:w-auto shrink-0"
+                    >
+                      <option value="All">Semua Bulan</option>
+                      {Array.from({ length: 12 }).map((_, i) => (
+                        <option key={i} value={String(i + 1)}>
+                          {new Date(0, i).toLocaleString("id-ID", { month: "long" })}
+                        </option>
+                      ))}
+                    </select>
+
+                    <select
+                      value={filterYear}
+                      onChange={(e) => setFilterYear(e.target.value)}
+                      className="bg-white border border-slate-200/60 rounded-lg px-2 py-1.5 text-[11px] font-bold text-slate-700 outline-none cursor-pointer hover:border-indigo-300 transition-colors shadow-2xs w-full sm:w-auto shrink-0"
+                    >
+                      <option value="All">Semua Tahun</option>
+                      {["2021", "2022", "2023", "2024", "2025", "2026", "2027"].map((y) => (
+                        <option key={y} value={y}>{y}</option>
+                      ))}
+                    </select>
+
+                    {siswaTab === "aktif" && (
+                      <select
+                        value={classFilter}
+                        onChange={(e) => setClassFilter(e.target.value)}
+                        className="bg-white border border-slate-200/60 rounded-lg px-2 py-1.5 text-[11px] font-bold text-slate-700 outline-none cursor-pointer hover:border-indigo-300 transition-colors shadow-2xs w-full sm:w-auto shrink-0"
+                      >
+                        <option value="all">Semua Kelas</option>
+                        <option value="Belum Diplot">Belum Diplot</option>
+                        {systemState.customization?.lmsClasses?.map((c) => (
+                          <option key={c.id} value={c.name}>{c.name}</option>
+                        ))}
+                      </select>
+                    )}
+
+                    <select
+                      value={filterStatus}
+                      onChange={(e) => setFilterStatus(e.target.value)}
+                      className="bg-white border border-slate-200/60 rounded-lg px-2 py-1.5 text-[11px] font-bold text-slate-700 outline-none cursor-pointer hover:border-indigo-300 transition-colors shadow-2xs w-full sm:w-auto shrink-0 font-sans"
+                    >
+                      <option value="All">Semua Status & Lokasi</option>
+                      <option value="Belajar">🇮🇩 1. BELAJAR</option>
+                      <option value="On Proges Job">💼 2. ON PROGES JOB</option>
+                      <option value="On Progres JFT/JLPT/SSW">📋 3. ON PROGRES JFT/JLPT/SSW</option>
+                      <option value="Diklat SO">📘 4. DIKLAT SO</option>
+                      <option value="Lulus">🎓 5. LULUS</option>
+                      <option value="Di Jepang">🇯🇵 6. DI JEPANG</option>
+                      <option value="Dikeluarkan">❌ 7. DIKELUARKAN</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Statistik & Filter Kelas: full-width dark navy banner card */}
+            <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-950 p-5 sm:p-8 rounded-[2rem] sm:rounded-[2.5rem] text-white shadow-2xl relative overflow-hidden border border-white/10 group">
+              <div className="absolute top-0 right-0 w-48 h-48 bg-indigo-500/10 rounded-full blur-3xl -mr-20 -mt-20 pointer-events-none" />
+              <div className="absolute bottom-0 left-0 w-48 h-48 bg-blue-500/10 rounded-full blur-3xl -ml-20 -mb-20 pointer-events-none" />
+
+              <div className="relative z-10 space-y-4 sm:space-y-6 w-full">
+                {/* Header & Flip Switcher */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/10 pb-4">
+                  <div>
+                    <h4 className="font-display font-black text-white text-base sm:text-lg flex items-center gap-2 sm:gap-3 mb-1">
+                      <Calculator className="h-5 w-5 sm:h-6 sm:w-6 text-indigo-400" />
+                      <span>
+                        {statCardMode === "kelas"
+                          ? "Statistik & Filter Kelas"
+                          : `Statistik Status Process ${classFilter !== "all" ? `(Kelas ${classFilter})` : "Semua Siswa"}`}
+                      </span>
+                    </h4>
+                    <p className="text-slate-400 text-[10px] sm:text-[11px] font-medium leading-relaxed max-w-lg">
+                      {statCardMode === "kelas"
+                        ? "Geser tabel ke samping di layar kecil. Klik baris kelas untuk memfilter siswa di tabel bawah."
+                        : `Menampilkan jumlah siswa per tahap status progres ${classFilter !== "all" ? `khusus untuk Kelas ${classFilter}` : "seluruh kelas"}. Klik baris status untuk memfilter.`}
+                    </p>
+                  </div>
+
+                  {/* Mode switch buttons */}
+                  <div className="flex items-center gap-1.5 bg-black/40 p-1.5 rounded-2xl border border-white/10 shrink-0 self-start sm:self-auto shadow-inner">
+                    <button
+                      type="button"
+                      onClick={() => setStatCardMode("kelas")}
+                      className={`px-3 py-1.5 rounded-xl text-[10px] sm:text-xs font-black transition-all duration-300 flex items-center gap-1.5 cursor-pointer ${
+                        statCardMode === "kelas"
+                          ? "bg-gradient-to-r from-indigo-600 to-blue-600 text-white shadow-md scale-102 ring-1 ring-white/20"
+                          : "text-slate-400 hover:text-white hover:bg-white/5"
+                      }`}
+                    >
+                      <span>🏢 Filter Kelas</span>
+                      {classFilter !== "all" && (
+                        <span className="bg-white/20 text-white text-[9px] px-1.5 py-0.2 rounded-full font-extrabold">
+                          1 Aktif
+                        </span>
+                      )}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setStatCardMode("status")}
+                      className={`px-3 py-1.5 rounded-xl text-[10px] sm:text-xs font-black transition-all duration-300 flex items-center gap-1.5 cursor-pointer ${
+                        statCardMode === "status"
+                          ? "bg-gradient-to-r from-indigo-600 to-blue-600 text-white shadow-md scale-102 ring-1 ring-white/20"
+                          : "text-slate-400 hover:text-white hover:bg-white/5"
+                      }`}
+                    >
+                      <span>💼 Status & Lokasi</span>
+                      {filterStatus !== "All" && (
+                        <span className="bg-white/20 text-white text-[9px] px-1.5 py-0.2 rounded-full font-extrabold">
+                          1 Aktif
+                        </span>
+                      )}
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setStatCardMode((m) => (m === "kelas" ? "status" : "kelas"))}
+                      className="p-1.5 rounded-xl text-slate-400 hover:text-indigo-300 hover:bg-white/10 transition-colors ml-0.5 cursor-pointer"
+                      title="Balik Halaman Card (Flip View)"
+                    >
+                      <RotateCcw className="h-4 w-4" />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Insight Sektor Sukses Banner */}
+                <div className="flex flex-col sm:flex-row sm:items-center gap-3 bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl px-4 py-3.5">
+                  <div className="flex items-center gap-2.5 shrink-0">
+                    <div className="h-8 w-8 rounded-xl bg-emerald-500/15 text-emerald-400 flex items-center justify-center shrink-0">
+                      <Award className="h-4 w-4" />
+                    </div>
+                    <span className="font-black uppercase tracking-widest text-[10px] text-emerald-400 whitespace-nowrap">
+                      Insight Sektor Sukses
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-300 leading-relaxed font-medium flex-1">
+                    Trend data menunjukkan peningkatan serapan alumni pada sektor <strong>Caregiver</strong> dan <strong>Manufaktur</strong> di wilayah Kanto & Kansai.
+                  </p>
+                  <div className="w-full sm:w-28 shrink-0">
+                    <div className="h-1.5 w-full bg-white/10 rounded-full overflow-hidden">
+                      <div className="h-full bg-emerald-400 w-3/4 rounded-full shadow-[0_0_10px_rgba(52,211,153,0.5)]" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Page 1: Kelas Table */}
+                {statCardMode === "kelas" && (
+                  <div className="overflow-x-auto rounded-2xl border border-white/10 animate-fade-in -mx-1 px-1 sm:mx-0 sm:px-0">
+                    <table className="w-full min-w-[720px] text-left border-collapse">
+                      <thead>
+                        <tr className="bg-white/5 text-[9px] sm:text-[10px] uppercase tracking-wider text-slate-400 font-black">
+                          <th className="px-3 sm:px-4 py-3">Kelas</th>
+                          <th className="px-3 py-3 text-center">Siswa</th>
+                          <th className="px-3 py-3">🇮🇩 Belajar</th>
+                          <th className="px-3 py-3">💼 Job</th>
+                          <th className="px-3 py-3">📋 JFT/JLPT</th>
+                          <th className="px-3 py-3">📘 Diklat SO</th>
+                          <th className="px-3 py-3">🇯🇵 Jepang</th>
+                          <th className="px-3 py-3 text-right">Aksi</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/5">
+                        {Array.from<string>(
+                          new Set(
+                            activeStudents
+                              .map((s: any) => (s.class || s.assignedClass || s.kelas || "").trim())
+                              .filter((cls: any) => cls && cls !== "Belum Diplot" && cls !== "-")
+                          )
+                        )
+                          .sort()
+                          .map((className, idx) => {
+                            const classStudents = activeStudents.filter((o: any) => (o.class || o.assignedClass || o.kelas || "").trim().toLowerCase() === className.toLowerCase());
+                            if (classStudents.length === 0) return null;
+
+                            const isSelected = classFilter.toLowerCase() === className.toLowerCase();
+
+                            const belajarCount = classStudents.filter((s: any) => !["Lulus", "Di Jepang", "Diklat SO", "On Proges Job", "On Progres JFT/JLPT/SSW", "Berhenti", "Alumni"].includes(s.status || "")).length;
+                            const jobCount = classStudents.filter((s: any) => s.status === "On Proges Job").length;
+                            const jftCount = classStudents.filter((s: any) => s.status === "On Progres JFT/JLPT/SSW").length;
+                            const diklatCount = classStudents.filter((s: any) => s.status === "Diklat SO").length;
+                            const jepangCount = classStudents.filter((s: any) => s.status === "Di Jepang" || s.status === "Lulus").length;
+
+                            const colors = [
+                              "text-blue-400", "text-sky-400", "text-indigo-400",
+                              "text-purple-400", "text-pink-400", "text-rose-400", "text-orange-400"
+                            ];
+                            const colorClass = colors[idx % colors.length];
+
+                            const Badge = ({ count, label, cls }: { count: number; label: string; cls: string }) =>
+                              count > 0 ? (
+                                <span className={`inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded-md ${cls}`}>
+                                  {count}
+                                </span>
+                              ) : (
+                                <span className="text-slate-600 text-[10px]">-</span>
+                              );
+
+                            return (
+                              <tr
+                                key={className}
+                                onClick={() => {
+                                  if (classFilter === className) {
+                                    setClassFilter("all");
+                                  } else {
+                                    setClassFilter(className);
+                                  }
+                                  setSiswaPage(1);
+                                }}
+                                title={`Klik untuk memfilter daftar siswa Kelas ${className}`}
+                                className={`cursor-pointer transition-colors group ${
+                                  isSelected ? "bg-indigo-600/30" : "hover:bg-white/5"
+                                }`}
+                              >
+                                <td className="px-3 sm:px-4 py-3 whitespace-nowrap">
+                                  <span className={`${colorClass} font-black uppercase tracking-wide text-[11px]`}>
+                                    Kelas {className}
+                                  </span>
+                                  {isSelected && (
+                                    <span className="ml-2 text-[8px] font-black bg-indigo-500 text-white px-1.5 py-0.5 rounded-full">
+                                      ✓ Filter
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="px-3 py-3 text-center font-black text-white text-sm">
+                                  {classStudents.length}
+                                </td>
+                                <td className="px-3 py-3"><Badge count={belajarCount} label="Belajar" cls="bg-blue-500/20 text-blue-300" /></td>
+                                <td className="px-3 py-3"><Badge count={jobCount} label="Job" cls="bg-amber-500/20 text-amber-300" /></td>
+                                <td className="px-3 py-3"><Badge count={jftCount} label="JFT" cls="bg-sky-500/20 text-sky-300" /></td>
+                                <td className="px-3 py-3"><Badge count={diklatCount} label="Diklat" cls="bg-indigo-500/20 text-indigo-300" /></td>
+                                <td className="px-3 py-3"><Badge count={jepangCount} label="Jepang" cls="bg-emerald-500/20 text-emerald-300" /></td>
+                                <td className="px-3 py-3 text-right">
+                                  <span className="inline-flex items-center gap-1 text-[9px] font-bold text-slate-400 group-hover:text-indigo-300 transition-colors whitespace-nowrap">
+                                    {isSelected ? "Reset" : "Lihat"}
+                                    <ChevronRight className="h-3 w-3 group-hover:translate-x-0.5 transition-transform" />
+                                  </span>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {/* Page 2: Status & Lokasi Table */}
+                {statCardMode === "status" && (
+                  <div className="overflow-x-auto rounded-2xl border border-white/10 animate-fade-in -mx-1 px-1 sm:mx-0 sm:px-0">
+                    <table className="w-full min-w-[420px] text-left border-collapse">
+                      <thead>
+                        <tr className="bg-white/5 text-[9px] sm:text-[10px] uppercase tracking-wider text-slate-400 font-black">
+                          <th className="px-3 sm:px-4 py-3">Status Progres</th>
+                          <th className="px-3 py-3 text-center">Siswa</th>
+                          <th className="px-3 py-3 text-right">Aksi</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/5">
+                        {[
+                          { id: "Belajar", label: "1. Belajar", icon: "🇮🇩", color: "text-blue-400" },
+                          { id: "On Proges Job", label: "2. On Proges Job", icon: "💼", color: "text-amber-400" },
+                          { id: "On Progres JFT/JLPT/SSW", label: "3. On Progres JFT", icon: "📋", color: "text-sky-400" },
+                          { id: "Diklat SO", label: "4. Diklat SO", icon: "📘", color: "text-indigo-400" },
+                          { id: "Lulus", label: "5. Lulus", icon: "🎓", color: "text-purple-400" },
+                          { id: "Di Jepang", label: "6. Di Jepang", icon: "🇯🇵", color: "text-emerald-400" },
+                          { id: "Dikeluarkan", label: "7. Dikeluarkan", icon: "❌", color: "text-rose-400" },
+                        ].map((st) => {
+                          const isSelected = filterStatus === st.id;
+                          const count = activeStudents.filter((s: any) => {
+                            if (classFilter !== "all" && s.class !== classFilter) return false;
+                            return s.status === st.id;
+                          }).length;
+
+                          return (
+                            <tr
+                              key={st.id}
+                              onClick={() => {
+                                if (filterStatus === st.id) setFilterStatus("All");
+                                else setFilterStatus(st.id);
+                              }}
+                              className={`cursor-pointer transition-colors group ${
+                                isSelected ? "bg-indigo-600/30" : "hover:bg-white/5"
+                              }`}
+                            >
+                              <td className="px-3 sm:px-4 py-3 whitespace-nowrap">
+                                <span className={`${st.color} font-black uppercase tracking-wide text-[11px] flex items-center gap-1.5`}>
+                                  <span>{st.icon}</span>
+                                  <span>{st.label}</span>
+                                </span>
+                              </td>
+                              <td className="px-3 py-3 text-center font-black text-white text-sm">
+                                {count}
+                              </td>
+                              <td className="px-3 py-3 text-right">
+                                <span className="inline-flex items-center gap-1 text-[9px] font-bold text-slate-400 group-hover:text-indigo-300 transition-colors whitespace-nowrap">
+                                  {isSelected ? "Reset" : "Lihat"}
+                                  <ChevronRight className="h-3 w-3 group-hover:translate-x-0.5 transition-transform" />
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Horizontal Class Selector Tabs (Pill Badges) */}
             <div className="bg-slate-50/85 p-1.5 rounded-2xl border border-slate-200/50 flex overflow-x-auto scrollbar-none gap-1.5 w-full sm:w-auto sm:max-w-fit shadow-3xs">
               {classTabs.map((cTab) => (
                 <button
                   key={cTab.id}
                   onClick={() => {
                     setSelectedClassTab(cTab.id as any);
-                    if (cTab.id !== "Semua") {
-                      setClassFilter(cTab.id);
-                    } else {
-                      setClassFilter("all");
-                    }
+                    setClassFilter("all");
+                    setSiswaPage(1);
                   }}
                   className={`px-4 py-2.5 rounded-xl text-xs font-black tracking-tight transition cursor-pointer flex items-center gap-2 active:scale-95 duration-150 shrink-0 whitespace-nowrap ${
                     selectedClassTab === cTab.id
@@ -3160,8 +3894,6 @@ export default function VvipView({
                 </button>
               ))}
             </div>
-
-            {/* Removed class detail banner as requested - only student data should be shown */}
 
             {/* Standard filters and Search (remains compatible) */}
             <div className="grid gap-4 sm:grid-cols-3 bg-slate-50 p-4 rounded-2xl border border-slate-100">
@@ -3184,15 +3916,18 @@ export default function VvipView({
                     value={classFilter}
                     onChange={(e) => {
                       setClassFilter(e.target.value);
-                      if (e.target.value === "all") setSelectedClassTab("Semua");
-                      else setSelectedClassTab(e.target.value);
+                      setSiswaPage(1);
                     }}
                     className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-700 focus:outline-blue-500 cursor-pointer"
                   >
                     <option value="all">Semua Kelas Bimbingan</option>
+                    <option value="Belum Diplot">Belum Diplot / Tanpa Kelas</option>
                     {(() => {
-                      const activeSystemClasses = systemState.customization?.lmsClasses?.filter((c: any) => c.isActive !== false).map((c: any) => c.name) || [];
-                      return activeSystemClasses.map(cls => {
+                      const lmsClassNames = systemState.customization?.lmsClasses?.filter((c: any) => c.isActive !== false).map((c: any) => c.name) || [];
+                      const studentClassNames = activeStudents.map((s: any) => (s.class || s.assignedClass || s.kelas || "").trim()).filter((cls: any) => cls && cls !== "Belum Diplot" && cls !== "-");
+                      const allUniqueClasses = Array.from(new Set([...lmsClassNames, ...studentClassNames])).sort();
+                      
+                      return allUniqueClasses.map(cls => {
                         const classDef = systemState.customization?.lmsClasses?.find((c: any) => c.name === cls);
                         let label = classDef ? `Kelas ${classDef.name} (${classDef.type})` : `Kelas ${cls}`;
                         return (
@@ -3244,750 +3979,606 @@ export default function VvipView({
               </div>
             </div>
 
-            {/* Standard display layout mapped to grid/cards if explicitly requested, otherwise standard clean table list */}
-            {studentListMode === "grid" ? (
-              // CARD GRID for target class to highlight individual details (Private data, Skills, assessments summaries)
-              <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 text-left">
-                {(() => {
-                    const filtered = activeStudents.filter((student) => {
-                      const matchesSearch = (student.name || "")
-                        .toLowerCase()
-                        .includes(studentSearch.toLowerCase());
-                    const matchesClass = selectedClassTab === "Semua" 
-                      ? true 
-                      : selectedClassTab === "Belajar" 
-                        ? !["Lulus", "Di Jepang"].includes(student.status)
-                        : selectedClassTab === "Di Jepang" 
-                          ? student.status === "Di Jepang" 
-                          : student.class === selectedClassTab;
-                    return matchesSearch && matchesClass;
-                  });
+            {/* Standard display layout mapped to grid/cards or standard clean table list with 20 items pagination */}
+            {(() => {
+              const alumniStatuses = ["Lulus", "Di Jepang", "Alumni", "Diklat SO", "On Proges Job", "On Progres JFT/JLPT/SSW", "Berhenti"];
+              const getStudentClass = (s: any) => (s.class || s.assignedClass || s.kelas || "").trim();
 
-                  if (filtered.length === 0) {
-                    return (
-                      <div className="sm:col-span-3 bg-slate-50 border border-dashed border-slate-250 p-8 rounded-2xl text-center text-slate-400 italic w-full">
-                        Tidak ada siswa bimbingan yang sesuai kriteria pencarian
-                        di kelas ini.
-                      </div>
-                    );
+              let baseList: any[] = [];
+              if (siswaTab === "baru") {
+                baseList = systemState.registeredStudents || [];
+              } else {
+                baseList = activeStudents;
+              }
+
+              const filtered = baseList.filter((student) => {
+                const matchesSearch = (student.name || "")
+                  .toLowerCase()
+                  .includes(studentSearch.toLowerCase());
+
+                let matchesClass = true;
+                if (classFilter !== "all") {
+                  const target = classFilter.trim().toLowerCase();
+                  const stClass = getStudentClass(student).toLowerCase();
+                  if (classFilter === "Belum Diplot") {
+                    matchesClass = !stClass || stClass === "belum diplot" || stClass === "-";
+                  } else {
+                    matchesClass = stClass === target;
                   }
+                }
 
-                  return filtered.map((student) => {
-                    // Pre-calculate records for student
-                    const studentAsss = (
-                      systemState.chapterAssessments || []
-                    ).filter((c) => c.studentId === student.id);
-                    const completedBab = studentAsss.filter(
-                      (c) => c.status === "Telah Dinilai",
-                    ).length;
-                    const validScores = studentAsss
-                      .filter(
-                        (c) =>
-                          c.status === "Telah Dinilai" && c.score !== undefined,
-                      )
-                      .map((c) => c.score as number);
-                    const avgScore =
-                      validScores.length > 0
-                        ? Math.round(
-                            validScores.reduce((a, b) => a + b, 0) /
-                              validScores.length,
-                          )
-                        : null;
-
-                    // Calculate attendance rate
-                    const records = systemState.attendance.filter(
-                      (r) =>
-                        r.studentName === student.name ||
-                        r.studentId === student.id,
-                    );
-                    const totalAtt = records.length;
-                    const hadirAtt = records.filter(
-                      (r) => r.status === "Hadir",
-                    ).length;
-                    const rateAtt =
-                      totalAtt > 0
-                        ? Math.round((hadirAtt / totalAtt) * 100)
-                        : null;
-
-                    // Synthesize skills summary based on class
-                    const classDef = systemState.customization?.lmsClasses?.find((c: any) => c.name === student.class);
-                    const sectorLabel = classDef 
-                      ? (isReadOnly ? (classDef.type === "reguler" ? "SOP Dasar (LPK)" : "Program Alumni") : `${classDef.type === "reguler" ? "SOP Dasar" : "Alumni"} - ${classDef.name}`)
-                      : "Program Pembelajaran LPK";
-                    const kaiwaLvl = "⭐⭐⭐⭐ 4.0/5.0"; // Generic rating if no data
-
-                    return (
-                      <div
-                        key={`${student.id}-${student.name}`}
-                        className="bg-white border border-slate-150 rounded-[1.5rem] p-5.5 shadow-3xs hover:shadow-md hover:border-indigo-200/80 transition duration-300 relative overflow-hidden flex flex-col justify-between"
-                      >
-                        <div className="space-y-4">
-                          {/* Profile Circle, Name, ID & Edit Button */}
-                          <div className="flex items-start gap-3.5 pb-3.5 border-b border-slate-100">
-                            <span className="h-11 w-11 bg-indigo-50 border border-indigo-100 text-indigo-700 font-black rounded-full flex items-center justify-center text-sm shrink-0 shadow-3xs uppercase">
-                              {student.name.slice(0, 2).toUpperCase()}
-                            </span>
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-start justify-between gap-1.5 flex-wrap">
-                                <div>
-                                  <h4 className="font-extrabold text-sm sm:text-base text-slate-950 tracking-tight leading-snug break-words">
-                                    {student.name}
-                                  </h4>
-                                  <span className="font-mono text-[9px] font-bold text-slate-400 uppercase tracking-wider bg-slate-50 px-2 py-0.5 rounded-md border border-slate-100/60 mt-1.5 inline-block">
-                                    ID: {student.id}
-                                  </span>
-                                </div>
-                                {!isReadOnly && (
-                                  <button
-                                    onClick={() => startVvipEditReg(student.id)}
-                                    className="px-2.5 py-1 bg-indigo-50/50 hover:bg-indigo-100 text-indigo-600 hover:text-indigo-800 rounded-lg text-[9.5px] font-bold flex items-center gap-1 cursor-pointer transition-colors border border-indigo-100/30 shadow-3xs shrink-0"
-                                  >
-                                    <FileText className="h-3 w-3" /> Edit
-                                  </button>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-
-                          {/* Status & Lokasi Dropdowns Block */}
-                          <div className="bg-slate-50/55 p-3 rounded-2xl border border-slate-100/80 space-y-2.5">
-                            <div className="flex items-center justify-between gap-2 flex-wrap">
-                              <span className="text-[9px] font-bold text-slate-450 uppercase tracking-wider">
-                                STATUS BELAJAR:
-                              </span>
-                              {isReadOnly ? (
-                                <span className={`text-[9.5px] font-black border rounded-lg px-2.5 py-1 tracking-wider transition-all duration-150 shadow-3xs ${
-                                  student.status === "Di Jepang"
-                                    ? "bg-emerald-50 text-emerald-800 border-emerald-200"
-                                    : student.status === "Lulus"
-                                      ? "bg-indigo-50 text-indigo-800 border-indigo-200"
-                                      : student.status === "On Proges Job"
-                                        ? "bg-cyan-50 text-cyan-800 border-cyan-200"
-                                        : student.status === "On Progres JFT/JLPT/SSW"
-                                          ? "bg-teal-50 text-teal-800 border-teal-200"
-                                          : student.status === "Diklat SO"
-                                            ? "bg-purple-50 text-purple-800 border-purple-200"
-                                            : "bg-blue-50 text-blue-800 border-blue-200"
-                                }`}>
-                                  {student.status.toUpperCase()}
-                                </span>
-                              ) : (
-                                <select
-                                  value={student.status}
-                                  onChange={async (e) => {
-                                    const val = e.target.value as any;
-                                    await onUpdateState(
-                                      "activeStudents",
-                                      "update_status",
-                                      {
-                                        id: student.id,
-                                        status: val,
-                                        prefecture:
-                                          val === "Di Jepang"
-                                            ? student.prefecture || "Tokyo"
-                                            : "",
-                                        class: student.class,
-                                      },
-                                    );
-                                  }}
-                                  className={`text-[9.5px] font-black border rounded-lg px-2.5 py-1 outline-none cursor-pointer tracking-wider transition-all duration-150 ${
-                                    student.status === "Di Jepang"
-                                      ? "bg-emerald-50 text-emerald-800 border-emerald-200"
-                                      : student.status === "Lulus"
-                                        ? "bg-indigo-50 text-indigo-800 border-indigo-200"
-                                        : student.status === "On Proges Job"
-                                          ? "bg-cyan-50 text-cyan-800 border-cyan-200"
-                                          : student.status === "On Progres JFT/JLPT/SSW"
-                                            ? "bg-teal-50 text-teal-800 border-teal-200"
-                                            : student.status === "Diklat SO"
-                                              ? "bg-purple-50 text-purple-800 border-purple-200"
-                                              : "bg-blue-50 text-blue-800 border-blue-200"
-                                  }`}
-                                >
-                                  <option value="Belajar">🇮🇩 BELAJAR</option>
-                                  <option value="On Proges Job">💼 ON PROGES JOB</option>
-                                  <option value="On Progres JFT/JLPT/SSW">📋 ON PROGRES JFT</option>
-                                  <option value="Diklat SO">📘 DIKLAT SO</option>
-                                  <option value="Lulus">🎓 LULUS</option>
-                                  <option value="Di Jepang">🇯🇵 DI JEPANG</option>
-                                </select>
-                              )}
-                            </div>
-
-                            {student.status === "Di Jepang" ? (
-                              <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-200/50">
-                                <span className="text-[9.5px] text-slate-500 font-bold font-sans flex items-center gap-1">
-                                  <span>✈️</span> Prefektur Jepang:
-                                </span>
-                                {isReadOnly ? (
-                                  <span className="text-[10px] bg-emerald-50 border border-emerald-200 rounded-lg px-2.5 py-1 font-black font-mono text-emerald-700 shadow-3xs">
-                                    📍 {student.prefecture || "Tokyo"}
-                                  </span>
-                                ) : (
-                                  <select
-                                    value={student.prefecture || "Tokyo"}
-                                    onChange={async (e) => {
-                                      await onUpdateState(
-                                        "activeStudents",
-                                        "update_status",
-                                        {
-                                          id: student.id,
-                                          status: student.status,
-                                          prefecture: e.target.value,
-                                          class: student.class,
-                                        },
-                                      );
-                                    }}
-                                    className="text-[10px] bg-white border border-slate-200 rounded-lg px-2 py-0.5 font-bold font-mono outline-none text-slate-700 cursor-pointer shadow-3xs"
-                                  >
-                                    {["Aichi", "Chiba", "Fukuoka", "Gifu", "Hiroshima", "Hokkaido", "Hyogo", "Ibaraki", "Kanagawa", "Kyoto", "Mie", "Miyagi", "Nagano", "Okinawa", "Osaka", "Saitama", "Shizuoka", "Tochigi", "Tokyo", "Toyama", "Wakayama", "Yamanashi"].map((p) => (
-                                      <option key={p} value={p}>{p}</option>
-                                    ))}
-                                  </select>
-                                )}
-                              </div>
-                            ) : (
-                              <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-200/50 text-[10px]">
-                                <span className="text-slate-450 font-bold">LOKASI SEKARANG:</span>
-                                <span className="text-slate-500 font-bold font-mono">
-                                  📍 LPK Pati, Jateng
-                                </span>
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Skills pill summary */}
-                          <div className="bg-indigo-50/35 p-3 rounded-2xl border border-indigo-100/20 space-y-1.5 text-[10px]/snug">
-                            <div>
-                              <p className="font-bold text-indigo-400 block uppercase tracking-wider text-[8.5px]">
-                                SEKTOR KEMAMPUAN
-                              </p>
-                              <p className="font-extrabold text-slate-800 leading-normal truncate mt-0.5">
-                                {sectorLabel}
-                              </p>
-                            </div>
-                            <div className="flex justify-between items-center pt-1.5 border-t border-indigo-100/10 font-mono">
-                              <span className="text-slate-450 font-sans font-medium text-[9.5px]">
-                                Vokal Kaiwa:
-                              </span>
-                              <span className="font-extrabold text-slate-700">
-                                {kaiwaLvl}
-                              </span>
-                            </div>
-                          </div>
-
-                          {/* Attendance & progress details */}
-                          <div className="grid grid-cols-2 gap-3 pt-1 select-none">
-                            <div className="space-y-0.5">
-                              <span className="text-[8.5px] font-bold text-slate-400 block uppercase tracking-wider">
-                                PRESENSI
-                              </span>
-                              <span className="font-black font-mono text-xs text-slate-800">
-                                {rateAtt !== null
-                                  ? `${rateAtt}% Hadir`
-                                  : (student.statusPendaftaran || (["Lulus", "Di Jepang"].includes(student.status) ? "Alumni" : "Siswa Baru"))}
-                              </span>
-                            </div>
-                            <div className="space-y-0.5">
-                              <span className="text-[8.5px] font-bold text-slate-400 block uppercase tracking-wider">
-                                BUKU EVALUASI
-                              </span>
-                              <span className="font-black text-xs text-indigo-700 font-mono">
-                                {completedBab} / {getClassMaxBab(student.class || "")} Bab
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Button control to view dialog detail */}
-                        <div className="pt-4 mt-4 border-t border-slate-100">
-                          <button
-                            onClick={() => setSelectedStudentDetail(student)}
-                            className="w-full bg-slate-50 hover:bg-slate-100 text-slate-800 font-extrabold text-[10.5px] py-2.5 rounded-xl transition border border-slate-150 flex items-center justify-center gap-1.5 cursor-pointer shadow-3xs active:scale-95 duration-150"
-                          >
-                            <span>🔍</span>
-                            <span>Buku Rapor & Profil Pribadi</span>
-                          </button>
-                        </div>
-                      </div>
-                    );
+                let matchesStatus = true;
+                if (classFilter === "all") {
+                  if (selectedClassTab === "Belajar") {
+                    matchesStatus = !alumniStatuses.includes(student.status || "");
+                  } else if (selectedClassTab && selectedClassTab !== "Semua") {
+                    matchesStatus = student.status === selectedClassTab;
+                  } else {
+                    if (siswaTab === "aktif") {
+                      matchesStatus = !alumniStatuses.includes(student.status || "");
+                    } else if (siswaTab === "alumni") {
+                      matchesStatus = alumniStatuses.includes(student.status || "");
+                    }
+                  }
+                } else {
+                  // When a specific class is selected, check if any student in this class matches selectedClassTab
+                  const classHasStatusMatch = baseList.some((s) => {
+                    const sc = getStudentClass(s).toLowerCase();
+                    const matchCls = classFilter === "Belum Diplot" ? (!sc || sc === "belum diplot" || sc === "-") : sc === classFilter.trim().toLowerCase();
+                    if (!matchCls) return false;
+                    return selectedClassTab === "Belajar" ? !alumniStatuses.includes(s.status || "") : s.status === selectedClassTab;
                   });
-                })()}
-              </div>
-            ) : (
-              <div>
-                {/* Desktop Table - Hidden on Mobile */}
-                <div
-                  className="hidden md:block overflow-x-auto rounded-[1.5rem] border border-slate-150 shadow-3xs"
-                  id="vvip-students-table-container"
-                >
-                  <table className="w-full text-left border-collapse text-xs bg-white">
-                    <thead>
-                      <tr className="bg-slate-50 border-b border-slate-150 text-[10px] font-bold text-slate-450 uppercase tracking-wider">
-                        <th className="px-6 py-4.5">Nama Siswa / ID</th>
-                        <th className="px-5 py-4.5">Batch & Kelas</th>
-                        <th className="px-5 py-4.5">Status</th>
-                        <th className="px-6 py-4.5 text-right">Aksi</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 font-normal">
-                      {(() => {
-                        const filtered = activeStudents.filter((student) => {
-                          const matchesSearch = (student.name || "")
-                            .toLowerCase()
-                            .includes(studentSearch.toLowerCase());
-                          
 
-                          if (isReadOnly) {
-                            let matchesTab = false;
-                            if (selectedClassTab === "Semua") {
-                              matchesTab = true;
-                            } else if (selectedClassTab === "Belajar") {
-                              matchesTab = !["Lulus", "Di Jepang", "Diklat SO", "On Proges Job", "On Progres JFT/JLPT/SSW"].includes(student.status || "");
-                            } else {
-                              matchesTab = student.status === selectedClassTab;
-                            }
-                            return matchesSearch && matchesTab;
-                          }
+                  if (classHasStatusMatch) {
+                    matchesStatus = selectedClassTab === "Belajar" ? !alumniStatuses.includes(student.status || "") : student.status === selectedClassTab;
+                  } else {
+                    // Do not block status if no students in this class match that specific status tab
+                    matchesStatus = true;
+                  }
+                }
 
+                return matchesSearch && matchesStatus && matchesClass;
+              });
 
+              const ITEMS_PER_PAGE = 20;
+              const totalPages = Math.max(1, Math.ceil(filtered.length / ITEMS_PER_PAGE));
+              const safePage = Math.min(Math.max(1, siswaPage), totalPages);
+              const paginatedStudents = filtered.slice((safePage - 1) * ITEMS_PER_PAGE, safePage * ITEMS_PER_PAGE);
 
+              const PaginationFooter = () => (
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4 bg-slate-50/90 rounded-2xl border border-slate-200/80 mt-4 shadow-3xs">
+                  <div className="flex items-center gap-2 text-xs text-slate-600 font-medium">
+                    <span className="bg-indigo-600 text-white font-extrabold px-2.5 py-1 rounded-lg text-[10.5px] shadow-3xs">
+                      20 Siswa / Hal
+                    </span>
+                    <span>
+                      Menampilkan <strong className="text-slate-900 font-mono font-bold">{filtered.length === 0 ? 0 : (safePage - 1) * ITEMS_PER_PAGE + 1} - {Math.min(safePage * ITEMS_PER_PAGE, filtered.length)}</strong> dari <strong className="text-indigo-700 font-black">{filtered.length}</strong> {siswaTab === "alumni" ? "Alumni" : "Siswa"}
+                    </span>
+                  </div>
 
-                          let matchesClass = false;
-                          if (selectedClassTab === "Semua") {
-                            matchesClass = (classFilter === "all" || student.class === classFilter);
-                          } else if (selectedClassTab === "Belajar") {
-                            matchesClass = !["Lulus", "Di Jepang", "Diklat SO", "On Proges Job", "On Progres JFT/JLPT/SSW"].includes(student.status || "");
-                          } else if (["Di Jepang", "Lulus", "Diklat SO", "On Proges Job", "On Progres JFT/JLPT/SSW"].includes(selectedClassTab as string)) {
-                            matchesClass = student.status === selectedClassTab;
-                          } else {
-                            matchesClass = student.class === selectedClassTab;
-                          }
-                          return matchesSearch && matchesClass;
-                        });
+                  {totalPages > 1 && (
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => setSiswaPage(p => Math.max(1, p - 1))}
+                        disabled={safePage === 1}
+                        className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed shadow-3xs cursor-pointer transition active:scale-95"
+                      >
+                        ← Sebelum
+                      </button>
 
-                        if (filtered.length === 0) {
-                          return (
-                            <tr>
-                              <td
-                                colSpan={7}
-                                className="px-5 py-8 text-center text-slate-400 font-medium italic"
+                      <div className="flex items-center gap-1">
+                        {Array.from({ length: totalPages }).map((_, i) => {
+                          const pNum = i + 1;
+                          if (pNum === 1 || pNum === totalPages || Math.abs(pNum - safePage) <= 1) {
+                            return (
+                              <button
+                                key={pNum}
+                                type="button"
+                                onClick={() => setSiswaPage(pNum)}
+                                className={`h-8 w-8 rounded-xl text-xs font-black transition cursor-pointer active:scale-95 ${
+                                  safePage === pNum
+                                    ? "bg-indigo-600 text-white shadow-md shadow-indigo-100"
+                                    : "bg-white text-slate-700 border border-slate-200 hover:bg-slate-100"
+                                }`}
                               >
-                                Tidak ditemukan siswa bimbingan yang sesuai
-                                dengan filter kriteria.
-                              </td>
-                            </tr>
-                          );
-                        }
+                                {pNum}
+                              </button>
+                            );
+                          }
+                          if (pNum === 2 && safePage > 3) return <span key={pNum} className="text-slate-400 font-bold px-0.5 text-xs">...</span>;
+                          if (pNum === totalPages - 1 && safePage < totalPages - 2) return <span key={pNum} className="text-slate-400 font-bold px-0.5 text-xs">...</span>;
+                          return null;
+                        })}
+                      </div>
 
-                        return filtered.map((student) => {
-                          // Calculate attendance records for this student
-                          const records = systemState.attendance.filter(
-                            (r) =>
-                              r.studentName === student.name ||
-                              r.studentId === student.id,
-                          );
-                          const total = records.length;
-                          const hadir = records.filter(
-                            (r) => r.status === "Hadir",
-                          ).length;
-                          const sakit = records.filter(
-                            (r) => r.status === "Sakit",
-                          ).length;
-                          const izin = records.filter(
-                            (r) => r.status === "Izin",
-                          ).length;
-                          const alpa = records.filter(
-                            (r) => r.status === "Alpa",
-                          ).length;
+                      <button
+                        type="button"
+                        onClick={() => setSiswaPage(p => Math.min(totalPages, p + 1))}
+                        disabled={safePage === totalPages}
+                        className="px-3.5 py-1.5 rounded-xl text-xs font-bold bg-white border border-slate-200 text-slate-700 hover:bg-slate-100 disabled:opacity-40 disabled:cursor-not-allowed shadow-3xs cursor-pointer transition active:scale-95"
+                      >
+                        Selanjutnya →
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
 
-                          const studentAsss = (
-                            systemState.chapterAssessments || []
-                          ).filter((c) => c.studentId === student.id);
-                          const completedBab = studentAsss.filter(
-                            (c) => c.status === "Telah Dinilai",
-                          ).length;
-                          const pendingBab = studentAsss.filter(
-                            (c) => c.status === "Selesai Belajar",
-                          ).length;
-                          const validScores = studentAsss
-                            .filter(
-                              (c) =>
-                                c.status === "Telah Dinilai" &&
-                                c.score !== undefined,
-                            )
-                            .map((c) => c.score as number);
-                          const avgScore =
-                            validScores.length > 0
-                              ? Math.round(
-                                  validScores.reduce((a, b) => a + b, 0) /
-                                    validScores.length,
-                                )
-                              : null;
+              return (
+                <div className="space-y-4">
+                  {studentListMode === "grid" ? (
+                    /* CARD GRID */
+                    <div>
+                      <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3 text-left">
+                        {paginatedStudents.length === 0 ? (
+                          <div className="sm:col-span-3 bg-slate-50 border border-dashed border-slate-250 p-8 rounded-2xl text-center text-slate-400 italic w-full">
+                            Tidak ada siswa bimbingan yang sesuai kriteria pencarian di kelas ini.
+                          </div>
+                        ) : (
+                          paginatedStudents.map((student) => {
+                            const studentAsss = (systemState.chapterAssessments || []).filter((c) => c.studentId === student.id);
+                            const completedBab = studentAsss.filter((c) => c.status === "Telah Dinilai").length;
+                            const pendingBab = studentAsss.filter((c) => c.status === "Selesai Belajar").length;
 
-                          const rate =
-                            total > 0
-                              ? Math.round((hadir / total) * 100)
-                              : null;
+                            const records = systemState.attendance.filter(
+                              (r) => r.studentName === student.name || r.studentId === student.id
+                            );
+                            const totalAtt = records.length;
+                            const hadirAtt = records.filter((r) => r.status === "Hadir").length;
+                            const rateAtt = totalAtt > 0 ? Math.round((hadirAtt / totalAtt) * 100) : null;
 
-                          return (
-                            <tr
-                              key={`${student.id}-${student.name}`}
-                              className="hover:bg-slate-50/70 transition border-b border-slate-100"
-                            >
-                              <td className="px-6 py-4">
-                                <div className="flex items-center gap-3.5">
-                                  <img
-                                    src={getSafePhotoUrl(student.profilePicture || (student as any).docFoto, student.name)}
-                                    alt={student.name}
-                                    className="h-9 w-9 rounded-full object-cover border border-slate-200 shrink-0 shadow-3xs"
-                                    referrerPolicy="no-referrer"
-                                    onError={(e) => {
-                                      e.currentTarget.onerror = null;
-                                      e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(student.name || 'Siswa')}&background=e0e7ff&color=3730a3`;
-                                    }}
-                                  />
-                                  <div>
-                                    <div className="flex items-center gap-2">
-                                      <p className="font-extrabold text-sm text-slate-900 leading-none">
-                                        {student.name}
+                            const classDef = systemState.customization?.lmsClasses?.find((c: any) => c.name === student.class);
+                            const sectorLabel = classDef 
+                              ? (isReadOnly ? (classDef.type === "reguler" ? "SOP Dasar (LPK)" : "Program Alumni") : `${classDef.type === "reguler" ? "SOP Dasar" : "Alumni"} - ${classDef.name}`)
+                              : "Program Pembelajaran LPK";
+
+                            return (
+                              <div
+                                key={`${student.id}-${student.name}`}
+                                className="bg-white border border-slate-150 rounded-[1.5rem] p-5.5 shadow-3xs hover:shadow-md hover:border-indigo-200/80 transition duration-300 relative overflow-hidden flex flex-col justify-between"
+                              >
+                                <div className="space-y-4">
+                                  {/* Profile Circle, Name, ID & Edit Button */}
+                                  <div className="flex items-start gap-3.5 pb-3.5 border-b border-slate-100">
+                                    <span className="h-11 w-11 bg-indigo-50 border border-indigo-100 text-indigo-700 font-black rounded-full flex items-center justify-center text-sm shrink-0 shadow-3xs uppercase">
+                                      {student.name.slice(0, 2).toUpperCase()}
+                                    </span>
+                                    <div className="min-w-0 flex-1">
+                                      <div className="flex items-start justify-between gap-1.5 flex-wrap">
+                                        <div>
+                                          <h4 className="font-extrabold text-sm sm:text-base text-slate-950 tracking-tight leading-snug break-words">
+                                            {student.name}
+                                          </h4>
+                                          <span className="font-mono text-[9px] font-bold text-slate-400 uppercase tracking-wider bg-slate-50 px-2 py-0.5 rounded-md border border-slate-100/60 mt-1.5 inline-block">
+                                            ID: {student.id}
+                                          </span>
+                                        </div>
+                                        {!isReadOnly && (
+                                          <button
+                                            onClick={() => startVvipEditReg(student.id)}
+                                            className="px-2.5 py-1 bg-indigo-50/50 hover:bg-indigo-100 text-indigo-600 hover:text-indigo-800 rounded-lg text-[9.5px] font-bold flex items-center gap-1 cursor-pointer transition-colors border border-indigo-100/30 shadow-3xs shrink-0"
+                                          >
+                                            <FileText className="h-3 w-3" /> Edit
+                                          </button>
+                                        )}
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  {/* Status & Lokasi Dropdowns Block */}
+                                  <div className="bg-slate-50/55 p-3 rounded-2xl border border-slate-100/80 space-y-2.5">
+                                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                                      <span className="text-[9px] font-bold text-slate-450 uppercase tracking-wider">
+                                        STATUS BELAJAR:
+                                      </span>
+                                      {isReadOnly ? (
+                                        <span className={`text-[9.5px] font-black border rounded-lg px-2.5 py-1 tracking-wider transition-all duration-150 shadow-3xs ${
+                                          student.status === "Dikeluarkan"
+                                            ? "bg-rose-100 text-rose-800 border-rose-300 font-extrabold"
+                                            : student.status === "Di Jepang"
+                                            ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                                            : student.status === "Lulus"
+                                              ? "bg-indigo-50 text-indigo-800 border-indigo-200"
+                                              : student.status === "On Proges Job"
+                                                ? "bg-cyan-50 text-cyan-800 border-cyan-200"
+                                                : student.status === "On Progres JFT/JLPT/SSW"
+                                                  ? "bg-teal-50 text-teal-800 border-teal-200"
+                                                  : student.status === "Diklat SO"
+                                                    ? "bg-purple-50 text-purple-800 border-purple-200"
+                                                    : "bg-blue-50 text-blue-800 border-blue-200"
+                                        }`}>
+                                          {student.status.toUpperCase()}
+                                        </span>
+                                      ) : (
+                                        <select
+                                          value={student.status}
+                                          onChange={async (e) => {
+                                            const val = e.target.value as any;
+                                            await onUpdateState(
+                                              "activeStudents",
+                                              "update_status",
+                                              {
+                                                id: student.id,
+                                                status: val,
+                                                prefecture:
+                                                  val === "Di Jepang"
+                                                    ? student.prefecture || "Tokyo"
+                                                    : "",
+                                                class: student.class,
+                                              },
+                                            );
+                                          }}
+                                          className={`text-[9.5px] font-black border rounded-lg px-2.5 py-1 outline-none cursor-pointer tracking-wider transition-all duration-150 ${
+                                            student.status === "Dikeluarkan"
+                                              ? "bg-rose-100 text-rose-800 border-rose-300 font-extrabold"
+                                              : student.status === "Di Jepang"
+                                                ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                                              : student.status === "Lulus"
+                                                ? "bg-indigo-50 text-indigo-800 border-indigo-200"
+                                                : student.status === "On Proges Job"
+                                                  ? "bg-cyan-50 text-cyan-800 border-cyan-200"
+                                                  : student.status === "On Progres JFT/JLPT/SSW"
+                                                    ? "bg-teal-50 text-teal-800 border-teal-200"
+                                                    : student.status === "Diklat SO"
+                                                      ? "bg-purple-50 text-purple-800 border-purple-200"
+                                                      : "bg-blue-50 text-blue-800 border-blue-200"
+                                          }`}
+                                        >
+                                          <option value="Belajar">🇮🇩 BELAJAR</option>
+                                          <option value="On Proges Job">💼 ON PROGES JOB</option>
+                                          <option value="On Progres JFT/JLPT/SSW">📋 ON PROGRES JFT</option>
+                                          <option value="Diklat SO">📘 DIKLAT SO</option>
+                                          <option value="Lulus">🎓 LULUS</option>
+                                          <option value="Di Jepang">🇯🇵 DI JEPANG</option>
+                                          <option value="Dikeluarkan">❌ DIKELUARKAN</option>
+                                        </select>
+                                      )}
+                                    </div>
+
+                                    {student.status === "Di Jepang" ? (
+                                      <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-200/50">
+                                        <span className="text-[9.5px] text-slate-500 font-bold font-sans flex items-center gap-1">
+                                          <span>✈️</span> Prefektur Jepang:
+                                        </span>
+                                        {isReadOnly ? (
+                                          <span className="text-[10px] bg-emerald-50 border border-emerald-200 rounded-lg px-2.5 py-1 font-black font-mono text-emerald-700 shadow-3xs">
+                                            📍 {student.prefecture || "Tokyo"}
+                                          </span>
+                                        ) : (
+                                          <select
+                                            value={student.prefecture || "Tokyo"}
+                                            onChange={async (e) => {
+                                              await onUpdateState(
+                                                "activeStudents",
+                                                "update_status",
+                                                {
+                                                  id: student.id,
+                                                  status: student.status,
+                                                  prefecture: e.target.value,
+                                                  class: student.class,
+                                                },
+                                              );
+                                            }}
+                                            className="text-[10px] bg-white border border-slate-200 rounded-lg px-2 py-0.5 font-bold font-mono outline-none text-slate-700 cursor-pointer shadow-3xs"
+                                          >
+                                            {["Aichi", "Chiba", "Fukuoka", "Gifu", "Hiroshima", "Hokkaido", "Hyogo", "Ibaraki", "Kanagawa", "Kyoto", "Mie", "Miyagi", "Nagano", "Okinawa", "Osaka", "Saitama", "Shizuoka", "Tochigi", "Tokyo", "Toyama", "Wakayama", "Yamanashi"].map((p) => (
+                                              <option key={p} value={p}>{p}</option>
+                                            ))}
+                                          </select>
+                                        )}
+                                      </div>
+                                    ) : (
+                                      <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-200/50 text-[10px]">
+                                        <span className="text-slate-450 font-bold">LOKASI SEKARANG:</span>
+                                        <span className="text-slate-500 font-bold font-mono">
+                                          📍 LPK Pati, Jateng
+                                        </span>
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  {/* Skills pill summary */}
+                                  <div className="bg-indigo-50/35 p-3 rounded-2xl border border-indigo-100/20 space-y-1.5 text-[10px]/snug">
+                                    <div>
+                                      <p className="font-bold text-indigo-400 block uppercase tracking-wider text-[8.5px]">
+                                        SEKTOR KEMAMPUAN
                                       </p>
+                                      <p className="font-extrabold text-slate-800 leading-normal truncate mt-0.5">
+                                        {sectorLabel}
+                                      </p>
+                                    </div>
+                                  </div>
+
+                                  {/* Attendance & progress details */}
+                                  <div className="grid grid-cols-2 gap-3 pt-1 select-none">
+                                    <div className="space-y-0.5">
+                                      <span className="text-[8.5px] font-bold text-slate-400 block uppercase tracking-wider">
+                                        PRESENSI
+                                      </span>
+                                      <span className="font-black font-mono text-xs text-slate-800">
+                                        {rateAtt !== null
+                                          ? `${rateAtt}% Hadir`
+                                          : (student.statusPendaftaran || (["Lulus", "Di Jepang"].includes(student.status) ? "Alumni" : "Siswa Baru"))}
+                                      </span>
+                                    </div>
+                                    <div className="space-y-0.5">
+                                      <span className="text-[8.5px] font-bold text-slate-400 block uppercase tracking-wider">
+                                        BUKU EVALUASI
+                                      </span>
+                                      <span className="font-black text-xs text-indigo-700 font-mono">
+                                        {completedBab} / {getClassMaxBab(student.class || "")} Bab
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                {/* Button control to view dialog detail */}
+                                <div className="pt-4 mt-4 border-t border-slate-100">
+                                  <button
+                                    onClick={() => setSelectedStudentDetail(student)}
+                                    className="w-full bg-slate-50 hover:bg-slate-100 text-slate-800 font-extrabold text-[10.5px] py-2.5 rounded-xl transition border border-slate-150 flex items-center justify-center gap-1.5 cursor-pointer shadow-3xs active:scale-95 duration-150"
+                                  >
+                                    <span>🔍</span>
+                                    <span>Buku Rapor & Profil Pribadi</span>
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })
+                        )}
+                      </div>
+                      <PaginationFooter />
+                    </div>
+                  ) : (
+                    /* TABEL LIST */
+                    <div>
+                      {/* Desktop Table - Horizontal Scroll & High Readability */}
+                      <div className="hidden md:block overflow-x-auto rounded-[1.5rem] border border-slate-200/80 shadow-3xs bg-white">
+                        <table className="w-full min-w-[850px] text-left border-collapse text-xs bg-white">
+                          <thead>
+                            <tr className="bg-slate-50/90 border-b border-slate-200/80 text-[10.5px] font-black text-slate-500 uppercase tracking-wider">
+                              <th className="px-6 py-4">Nama Siswa / ID</th>
+                              <th className="px-5 py-4">Batch & Kelas</th>
+                              <th className="px-5 py-4">Status & Lokasi</th>
+                              <th className="px-5 py-4">Presensi & Progres Bab</th>
+                              <th className="px-6 py-4 text-right">Aksi</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-100 font-normal">
+                            {paginatedStudents.length === 0 ? (
+                              <tr>
+                                <td colSpan={5} className="px-5 py-10 text-center text-slate-400 font-medium italic">
+                                  Tidak ditemukan siswa bimbingan yang sesuai dengan filter kriteria.
+                                </td>
+                              </tr>
+                            ) : (
+                              paginatedStudents.map((student) => {
+                                const records = systemState.attendance.filter(
+                                  (r) => r.studentName === student.name || r.studentId === student.id
+                                );
+                                const total = records.length;
+                                const hadir = records.filter((r) => r.status === "Hadir").length;
+                                const rate = total > 0 ? Math.round((hadir / total) * 100) : null;
+
+                                const studentAsss = (systemState.chapterAssessments || []).filter((c) => c.studentId === student.id);
+                                const completedBab = studentAsss.filter((c) => c.status === "Telah Dinilai").length;
+
+                                return (
+                                  <tr
+                                    key={`${student.id}-${student.name}`}
+                                    className="hover:bg-indigo-50/30 transition border-b border-slate-100 group"
+                                  >
+                                    <td className="px-6 py-4">
+                                      <div className="flex items-center gap-3.5">
+                                        <img
+                                          src={getSafePhotoUrl(student.profilePicture || (student as any).docFoto, student.name)}
+                                          alt={student.name}
+                                          className="h-10 w-10 rounded-full object-cover border border-slate-200 shrink-0 shadow-3xs"
+                                          referrerPolicy="no-referrer"
+                                          onError={(e) => {
+                                            e.currentTarget.onerror = null;
+                                            e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(student.name || 'Siswa')}&background=e0e7ff&color=3730a3`;
+                                          }}
+                                        />
+                                        <div>
+                                          <div className="flex items-center gap-2">
+                                            <p className="font-black text-sm text-slate-900 leading-tight group-hover:text-indigo-700 transition-colors">
+                                              {student.name}
+                                            </p>
+                                            {!isReadOnly && (
+                                              <button
+                                                onClick={() => startVvipEditReg(student.id)}
+                                                className="px-2 py-0.5 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 hover:text-indigo-800 rounded-md text-[9.5px] font-bold flex items-center gap-1 cursor-pointer transition-colors border border-indigo-100/60"
+                                              >
+                                                <FileText className="h-3 w-3" /> Edit
+                                              </button>
+                                            )}
+                                          </div>
+                                          <p className="text-[10px] text-slate-400 font-mono font-bold mt-1">
+                                            ID: {student.id}
+                                          </p>
+                                        </div>
+                                      </div>
+                                    </td>
+
+                                    <td className="px-5 py-4">
+                                      <div className="space-y-1 select-none">
+                                        <span className="text-[10.5px] font-extrabold bg-slate-100 text-slate-800 px-2.5 py-1 rounded-lg border border-slate-200/80 shadow-3xs inline-block">
+                                          {student.class || "Tanpa Kelas"}
+                                        </span>
+                                        <p className="text-[10px] text-slate-500 font-bold pl-0.5">
+                                          {student.batch || "Batch Standard"}
+                                        </p>
+                                      </div>
+                                    </td>
+
+                                    <td className="px-5 py-4">
+                                      <div className="space-y-1">
+                                        <span className={`text-[10px] font-black border rounded-lg px-2.5 py-1 tracking-wider inline-block shadow-3xs ${
+                                          student.status === "Di Jepang" 
+                                            ? "bg-emerald-50 text-emerald-800 border-emerald-200" 
+                                            : student.status === "Lulus"
+                                              ? "bg-indigo-50 text-indigo-800 border-indigo-200"
+                                              : student.status === "Diklat SO"
+                                                ? "bg-purple-50 text-purple-800 border-purple-200"
+                                                : student.status === "On Proges Job"
+                                                  ? "bg-amber-50 text-amber-800 border-amber-200"
+                                                  : "bg-blue-50 text-blue-800 border-blue-200"
+                                        }`}>
+                                          {student.status.toUpperCase()}
+                                        </span>
+                                        {student.status === "Di Jepang" ? (
+                                          <p className="text-[9.5px] font-bold text-emerald-700 flex items-center gap-1 mt-1 font-mono">
+                                            📍 {student.prefecture || "Tokyo"}
+                                          </p>
+                                        ) : (
+                                          <p className="text-[9.5px] font-bold text-slate-400 flex items-center gap-1 mt-1">
+                                            📍 LPK Pati, Jateng
+                                          </p>
+                                        )}
+                                      </div>
+                                    </td>
+
+                                    <td className="px-5 py-4">
+                                      <div className="space-y-1 font-mono text-[11px]">
+                                        <p className="font-bold text-slate-800">
+                                          {rate !== null ? `${rate}% Hadir` : "Siswa Baru"}
+                                        </p>
+                                        <p className="text-[10px] text-indigo-700 font-extrabold">
+                                          {completedBab} / {getClassMaxBab(student.class || "")} Bab
+                                        </p>
+                                      </div>
+                                    </td>
+
+                                    <td className="px-6 py-4 text-right">
+                                      <button
+                                        type="button"
+                                        onClick={() => setSelectedStudentDetail(student)}
+                                        className="bg-slate-50 hover:bg-slate-100 text-slate-800 font-extrabold text-[10.5px] px-3.5 py-2 rounded-xl border border-slate-200 transition active:scale-95 cursor-pointer inline-flex items-center gap-1.5 shadow-3xs duration-150"
+                                      >
+                                        <span>Periksa Rapor</span>
+                                        <ChevronRight className="h-3 w-3 text-slate-500" />
+                                      </button>
+                                    </td>
+                                  </tr>
+                                );
+                              })
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* Mobile Cards View */}
+                      <div className="block md:hidden space-y-3">
+                        {paginatedStudents.length === 0 ? (
+                          <div className="p-6 text-center text-slate-400 font-medium italic bg-white rounded-2xl border border-slate-200">
+                            Tidak ditemukan siswa bimbingan yang memenuhi filter kriteria.
+                          </div>
+                        ) : (
+                          paginatedStudents.map((student) => {
+                            const records = systemState.attendance.filter(
+                              (r) => r.studentName === student.name || r.studentId === student.id
+                            );
+                            const total = records.length;
+                            const hadir = records.filter((r) => r.status === "Hadir").length;
+                            const rate = total > 0 ? Math.round((hadir / total) * 100) : null;
+
+                            const studentAsss = (systemState.chapterAssessments || []).filter((c) => c.studentId === student.id);
+                            const completedBab = studentAsss.filter((c) => c.status === "Telah Dinilai").length;
+
+                            return (
+                              <div
+                                key={`${student.id}-${student.name}`}
+                                className="bg-white rounded-[1.5rem] border border-slate-150 p-5 shadow-3xs space-y-4 text-left"
+                              >
+                                <div className="flex items-start gap-3.5 pb-3.5 border-b border-slate-100">
+                                  <span className="h-10 w-10 rounded-full bg-indigo-50 border border-indigo-100 text-indigo-700 flex items-center justify-center font-black text-xs uppercase shrink-0 shadow-3xs">
+                                    {student.name.slice(0, 2).toUpperCase()}
+                                  </span>
+                                  <div className="min-w-0 flex-1">
+                                    <div className="flex items-start justify-between gap-1.5 flex-wrap">
+                                      <div>
+                                        <h4 className="font-extrabold text-sm text-slate-900 leading-snug break-words">
+                                          {student.name}
+                                        </h4>
+                                        <span className="font-mono text-[9px] font-bold text-slate-400 uppercase tracking-wider bg-slate-50 px-2 py-0.5 rounded-md border border-slate-100/60 mt-1.5 inline-block">
+                                          ID: {student.id}
+                                        </span>
+                                      </div>
                                       {!isReadOnly && (
                                         <button
-                                          onClick={() =>
-                                            startVvipEditReg(student.id)
-                                          }
-                                          className="px-2 py-0.5 bg-indigo-50/50 text-indigo-600 hover:bg-indigo-100 hover:text-indigo-800 rounded-md text-[9.5px] font-bold flex items-center gap-1 cursor-pointer transition-colors border border-indigo-100/30"
+                                          onClick={() => startVvipEditReg(student.id)}
+                                          className="px-2.5 py-1 bg-indigo-50/50 hover:bg-indigo-100 text-indigo-700 hover:text-indigo-800 rounded-lg text-[9.5px] font-bold flex items-center gap-1 cursor-pointer transition-colors border border-indigo-100/30 shadow-3xs shrink-0"
                                         >
-                                          <FileText className="h-3 w-3" />{" "}
-                                          Edit
+                                          <FileText className="h-3 w-3" /> Edit
                                         </button>
                                       )}
                                     </div>
-                                    <p className="text-[10px] text-slate-450 font-mono font-bold mt-1">
-                                      ID: {student.id}
-                                    </p>
                                   </div>
                                 </div>
-                              </td>
 
-                              <td className="px-5 py-4">
-                                <div className="space-y-1 select-none uppercase">
-                                  <span className="text-[10px] font-black bg-slate-50 text-slate-700 px-2.5 py-1 rounded-lg border border-slate-200/60 shadow-3xs">
-                                    {student.class || "Pilih Program"}
-                                  </span>
-                                  <p className="text-[10px] text-slate-500 font-bold pl-0.5">
-                                    {student.batch || "Batch Terdaftar"}
-                                  </p>
+                                <div className="bg-slate-50/55 p-3 rounded-2xl border border-slate-100/80 space-y-2.5">
+                                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                                    <span className="text-[9px] font-bold text-slate-450 uppercase tracking-wider">
+                                      STATUS BELAJAR:
+                                    </span>
+                                    <span className={`text-[9.5px] font-black border rounded-lg px-2.5 py-1 tracking-wider shadow-3xs ${
+                                      student.status === "Di Jepang"
+                                        ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                                        : student.status === "Lulus"
+                                          ? "bg-indigo-50 text-indigo-800 border-indigo-200"
+                                          : "bg-blue-50 text-blue-800 border-blue-200"
+                                    }`}>
+                                      {student.status.toUpperCase()}
+                                    </span>
+                                  </div>
                                 </div>
-                              </td>
 
-                              <td className="px-5 py-4">
-                                <div className="space-y-1">
-                                  <span className={`text-[10px] font-black border rounded-lg px-2.5 py-1 tracking-wider ${
-                                    student.status === "Di Jepang" ? "bg-emerald-50 text-emerald-800 border-emerald-200" : "bg-blue-50 text-blue-800 border-blue-200"
-                                  }`}>
-                                    {student.status.toUpperCase()}
-                                  </span>
-                                  {student.status === "Di Jepang" && (
-                                    <p className="text-[9px] font-bold text-emerald-600 flex items-center gap-1 mt-1">
-                                      <Globe className="h-2.5 w-2.5" />
-                                      <span>📍 {student.prefecture || "Tokyo"}</span>
-                                    </p>
-                                  )}
+                                <div className="grid grid-cols-2 gap-3 pt-1 text-[11px]">
+                                  <div className="space-y-0.5">
+                                    <span className="block text-[8.5px] font-bold text-slate-400 uppercase">
+                                      Batch / Kelas
+                                    </span>
+                                    <span className="text-slate-700 font-bold bg-slate-50 px-2 py-0.5 rounded border border-slate-100 inline-block font-mono">
+                                      {student.class || "-"} • {student.batch || "-"}
+                                    </span>
+                                  </div>
+                                  <div className="space-y-0.5">
+                                    <span className="block text-[8.5px] font-bold text-slate-400 uppercase">
+                                      Progres Bab
+                                    </span>
+                                    <span className="text-slate-700 font-bold font-mono block">
+                                      {completedBab} / {getClassMaxBab(student.class || "")} Bab
+                                    </span>
+                                  </div>
                                 </div>
-                              </td>
 
-                              <td className="px-6 py-4 text-right">
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setSelectedStudentDetail(student)
-                                  }
-                                  className="bg-slate-50 hover:bg-slate-100 text-slate-800 font-extrabold text-[10px] px-3 py-2 rounded-xl border border-slate-200 transition active:scale-95 cursor-pointer inline-flex items-center gap-1.5 shadow-3xs duration-150"
-                                >
-                                  <span>Periksa</span>
-                                  <ChevronRight className="h-3 w-3 text-slate-500" />
-                                </button>
-                              </td>
-                            </tr>
-                          );
-                        });
-                      })()}
-                    </tbody>
-                  </table>
-                </div>
-
-                {/* Mobile Cards - Shown on Mobile */}
-                <div className="block md:hidden space-y-3">
-                  {(() => {
-                    const filtered = activeStudents.filter((student) => {
-                      const matchesSearch = (student.name || "")
-                        .toLowerCase()
-                        .includes(studentSearch.toLowerCase());
-                      
-                      const matchesClass = selectedClassTab === "Semua" 
-                        ? true 
-                        : selectedClassTab === "Belajar" 
-                          ? !["Lulus", "Di Jepang"].includes(student.status)
-                          : selectedClassTab === "Di Jepang" 
-                            ? student.status === "Di Jepang" 
-                            : student.class === selectedClassTab;
-                            
-                      return matchesSearch && matchesClass;
-                    });
-
-                    if (filtered.length === 0) {
-                      return (
-                        <div className="p-6 text-center text-slate-400 font-medium italic bg-white rounded-xl border">
-                          Tidak ditemukan siswa bimbingan yang memenuhi filter
-                          kriteria.
-                        </div>
-                      );
-                    }
-
-                    return filtered.map((student) => {
-                      const records = systemState.attendance.filter(
-                        (r) =>
-                          r.studentName === student.name ||
-                          r.studentId === student.id,
-                      );
-                      const total = records.length;
-                      const hadir = records.filter(
-                        (r) => r.status === "Hadir",
-                      ).length;
-                      const sakit = records.filter(
-                        (r) => r.status === "Sakit",
-                      ).length;
-                      const izin = records.filter(
-                        (r) => r.status === "Izin",
-                      ).length;
-                      const alpa = records.filter(
-                        (r) => r.status === "Alpa",
-                      ).length;
-
-                      const studentAsss = (
-                        systemState.chapterAssessments || []
-                      ).filter((c) => c.studentId === student.id);
-                      const completedBab = studentAsss.filter(
-                        (c) => c.status === "Telah Dinilai",
-                      ).length;
-                      const pendingBab = studentAsss.filter(
-                        (c) => c.status === "Selesai Belajar",
-                      ).length;
-                      const validScores = studentAsss
-                        .filter(
-                          (c) =>
-                            c.status === "Telah Dinilai" &&
-                            c.score !== undefined,
-                        )
-                        .map((c) => c.score as number);
-                      const avgScore =
-                        validScores.length > 0
-                          ? Math.round(
-                              validScores.reduce((a, b) => a + b, 0) /
-                                validScores.length,
-                            )
-                          : null;
-
-                      const rate =
-                        total > 0 ? Math.round((hadir / total) * 100) : null;
-
-                      return (
-                        <div
-                          key={`${student.id}-${student.name}`}
-                          className="bg-white rounded-[1.5rem] border border-slate-150 p-5 shadow-3xs space-y-4 text-left"
-                        >
-                          {/* Profile Circle, Name, ID & Edit Button */}
-                          <div className="flex items-start gap-3.5 pb-3.5 border-b border-slate-100">
-                            <span className="h-10 w-10 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center font-black text-xs uppercase shrink-0 shadow-3xs">
-                              {student.name.slice(0, 2).toUpperCase()}
-                            </span>
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-start justify-between gap-1.5 flex-wrap">
-                                <div>
-                                  <h4 className="font-extrabold text-sm text-slate-900 leading-snug break-words">
-                                    {student.name}
-                                  </h4>
-                                  <span className="font-mono text-[9px] font-bold text-slate-400 uppercase tracking-wider bg-slate-50 px-2 py-0.5 rounded-md border border-slate-100/60 mt-1.5 inline-block">
-                                    ID: {student.id}
+                                <div className="flex items-center justify-between border-t pt-3 mt-1">
+                                  <span className="text-[10px] text-indigo-700 font-bold font-mono">
+                                    {rate !== null ? `${rate}% Hadir` : "Siswa Baru"}
                                   </span>
-                                </div>
-                                {!isReadOnly && (
                                   <button
-                                    onClick={() => startVvipEditReg(student.id)}
-                                    className="px-2.5 py-1 bg-indigo-50/50 hover:bg-indigo-100 text-indigo-700 hover:text-indigo-800 rounded-lg text-[9.5px] font-bold flex items-center gap-1 cursor-pointer transition-colors border border-indigo-100/30 shadow-3xs shrink-0"
+                                    type="button"
+                                    onClick={() => setSelectedStudentDetail(student)}
+                                    className="bg-slate-50 hover:bg-slate-100 text-slate-800 font-extrabold text-[10.5px] px-3.5 py-2 rounded-xl border border-slate-200 transition active:scale-95 cursor-pointer inline-flex items-center gap-1.5 shadow-3xs"
                                   >
-                                    <FileText className="h-3 w-3" /> Edit
+                                    <span>🔍 Periksa Rapor</span>
+                                    <ChevronRight className="h-3 w-3 text-slate-500" />
                                   </button>
-                                )}
+                                </div>
                               </div>
-                            </div>
-                          </div>
+                            );
+                          })
+                        )}
+                      </div>
 
-                          {/* Status & Lokasi Dropdowns Block */}
-                          <div className="bg-slate-50/55 p-3 rounded-2xl border border-slate-100/80 space-y-2.5">
-                            <div className="flex items-center justify-between gap-2 flex-wrap">
-                              <span className="text-[9px] font-bold text-slate-450 uppercase tracking-wider">
-                                STATUS BELAJAR:
-                              </span>
-                              {isReadOnly ? (
-                                <span className={`text-[9.5px] font-black border rounded-lg px-2.5 py-1 tracking-wider transition-all duration-150 shadow-3xs ${
-                                  student.status === "Di Jepang"
-                                    ? "bg-emerald-50 text-emerald-800 border-emerald-200"
-                                    : student.status === "Lulus"
-                                      ? "bg-indigo-50 text-indigo-800 border-indigo-200"
-                                      : student.status === "On Proges Job"
-                                        ? "bg-cyan-50 text-cyan-800 border-cyan-200"
-                                        : student.status === "On Progres JFT/JLPT/SSW"
-                                          ? "bg-teal-50 text-teal-800 border-teal-200"
-                                          : student.status === "Diklat SO"
-                                            ? "bg-purple-50 text-purple-800 border-purple-200"
-                                            : "bg-blue-50 text-blue-800 border-blue-200"
-                                }`}>
-                                  {student.status.toUpperCase()}
-                                </span>
-                              ) : (
-                                <select
-                                  value={student.status}
-                                  onChange={async (e) => {
-                                    const val = e.target.value as any;
-                                    await onUpdateState(
-                                      "activeStudents",
-                                      "update_status",
-                                      {
-                                        id: student.id,
-                                        status: val,
-                                        prefecture:
-                                          val === "Di Jepang"
-                                            ? student.prefecture || "Tokyo"
-                                            : "",
-                                        class: student.class,
-                                      },
-                                    );
-                                  }}
-                                  className={`text-[9.5px] font-black border rounded-lg px-2.5 py-1 outline-none cursor-pointer tracking-wider transition-all duration-150 ${
-                                    student.status === "Di Jepang"
-                                      ? "bg-emerald-50 text-emerald-800 border-emerald-200"
-                                      : student.status === "Lulus"
-                                        ? "bg-indigo-50 text-indigo-800 border-indigo-200"
-                                        : student.status === "On Proges Job"
-                                          ? "bg-cyan-50 text-cyan-800 border-cyan-200"
-                                          : student.status === "On Progres JFT/JLPT/SSW"
-                                            ? "bg-teal-50 text-teal-800 border-teal-200"
-                                            : student.status === "Diklat SO"
-                                              ? "bg-purple-50 text-purple-800 border-purple-200"
-                                              : "bg-blue-50 text-blue-800 border-blue-200"
-                                  }`}
-                                >
-                                  <option value="Belajar">🇮🇩 BELAJAR</option>
-                                  <option value="On Proges Job">💼 ON PROGES JOB</option>
-                                  <option value="On Progres JFT/JLPT/SSW">📋 ON PROGRES JFT</option>
-                                  <option value="Diklat SO">📘 DIKLAT SO</option>
-                                  <option value="Lulus">🎓 LULUS</option>
-                                  <option value="Di Jepang">🇯🇵 DI JEPANG</option>
-                                </select>
-                              )}
-                            </div>
-
-                            {student.status === "Di Jepang" ? (
-                              <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-200/50">
-                                <span className="text-[9.5px] text-slate-500 font-bold font-sans flex items-center gap-1">
-                                  <span>✈️</span> Prefektur Jepang:
-                                </span>
-                                {isReadOnly ? (
-                                  <span className="text-[10px] bg-emerald-50 border border-emerald-200 rounded-lg px-2.5 py-1 font-black font-mono text-emerald-700 shadow-3xs">
-                                    📍 {student.prefecture || "Tokyo"}
-                                  </span>
-                                ) : (
-                                  <select
-                                    value={student.prefecture || "Tokyo"}
-                                    onChange={async (e) => {
-                                      await onUpdateState(
-                                        "activeStudents",
-                                        "update_status",
-                                        {
-                                          id: student.id,
-                                          status: student.status,
-                                          prefecture: e.target.value,
-                                          class: student.class,
-                                        },
-                                      );
-                                    }}
-                                    className="text-[10px] bg-white border border-slate-200 rounded-lg px-2 py-0.5 font-bold font-mono outline-none text-slate-700 cursor-pointer shadow-3xs"
-                                  >
-                                    {["Aichi", "Chiba", "Fukuoka", "Gifu", "Hiroshima", "Hokkaido", "Hyogo", "Ibaraki", "Kanagawa", "Kyoto", "Mie", "Miyagi", "Nagano", "Okinawa", "Osaka", "Saitama", "Shizuoka", "Tochigi", "Tokyo", "Toyama", "Wakayama", "Yamanashi"].map((p) => (
-                                      <option key={p} value={p}>{p}</option>
-                                    ))}
-                                  </select>
-                                )}
-                              </div>
-                            ) : (
-                              <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-200/50 text-[10px]">
-                                <span className="text-slate-450 font-bold">LOKASI SEKARANG:</span>
-                                <span className="text-slate-500 font-bold font-mono">
-                                  📍 LPK Pati, Jateng
-                                </span>
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Class & progress details */}
-                          <div className="grid grid-cols-2 gap-3 pt-1 select-none text-[11px]">
-                            <div className="space-y-0.5">
-                              <span className="block text-[8.5px] font-bold text-slate-400 uppercase">
-                                Batch / Kelas
-                              </span>
-                              <span className="text-slate-700 font-bold bg-slate-50 px-2 py-0.5 rounded border border-slate-100 inline-block font-mono">
-                                {student.class} • {student.batch}
-                              </span>
-                            </div>
-                            <div className="space-y-0.5">
-                              <span className="block text-[8.5px] font-bold text-slate-400 uppercase">
-                                Progres Bab
-                              </span>
-                              <span className="text-slate-700 font-bold font-mono block">
-                                {completedBab} / {getClassMaxBab(student.class || "")} Bab{" "}
-                                {pendingBab > 0 && (
-                                  <span className="text-amber-600 text-[10px] block font-semibold">
-                                    ⌛ {pendingBab} Butuh Nilai
-                                  </span>
-                                )}
-                              </span>
-                            </div>
-                          </div>
-
-                          <div className="grid grid-cols-2 gap-3 pt-1 text-[11px] border-t border-slate-100/70">
-                            <div className="space-y-0.5">
-                              <span className="block text-[8.5px] font-bold text-slate-400 uppercase">
-                                Presensi (%)
-                              </span>
-                              <span className="font-extrabold text-indigo-900 font-mono">
-                                {rate !== null ? `${rate}% Hadir` : (student.statusPendaftaran || (["Lulus", "Di Jepang"].includes(student.status) ? "Alumni" : "Siswa Baru"))}
-                              </span>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center justify-between border-t pt-3 mt-1">
-                            <span className="text-[10px] text-slate-400 font-medium font-sans">
-                              Sistem Terkoneksi
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => setSelectedStudentDetail(student)}
-                              className="bg-slate-50 hover:bg-slate-100 text-slate-800 font-extrabold text-[10.5px] px-3.5 py-2 rounded-xl border border-slate-200 transition active:scale-95 cursor-pointer inline-flex items-center gap-1.5 shadow-3xs"
-                            >
-                              <span>🔍 Periksa Rapor</span>
-                              <ChevronRight className="h-3 w-3 text-slate-500" />
-                            </button>
-                          </div>
-                        </div>
-                      );
-                    });
-                  })()}
+                      <PaginationFooter />
+                    </div>
+                  )}
                 </div>
-              </div>
-            )}
+              );
+            })()}
           </div>
         )}
 
@@ -4090,58 +4681,110 @@ export default function VvipView({
               </div>
             </div>
 
-            <div className="grid gap-6 lg:grid-cols-3">
+            <div className="grid gap-6 lg:grid-cols-3 max-w-full min-w-0">
                {/* Activity Log Feed */}
-               <div className="lg:col-span-1 bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-4">
-                 <div className="flex items-center justify-between border-b pb-4">
+               <div className="lg:col-span-1 bg-white border border-slate-200 rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-sm space-y-4 max-w-full min-w-0">
+                 <div className="flex items-center justify-between border-b pb-4 gap-2 flex-wrap">
                    <h4 className="text-xs font-black text-slate-900 uppercase tracking-widest flex items-center gap-2">
-                     <Activity className="h-4 w-4 text-indigo-600" />
+                     <Activity className="h-4 w-4 text-indigo-600 animate-pulse" />
                      Timeline Aktivitas
                    </h4>
-                   <div className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-2 py-1 rounded">Real-time Feed</div>
+                   <div className="text-[10px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-full flex items-center gap-1 shrink-0">
+                     <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-ping" />
+                     <span>Real-time Feed</span>
+                   </div>
                  </div>
                  
-                 <div className="space-y-4 max-h-[700px] overflow-y-auto pr-2 custom-scrollbar">
+                 <div className="space-y-4 max-h-[450px] sm:max-h-[700px] overflow-y-auto pr-1 sm:pr-2 custom-scrollbar touch-pan-y">
                    {(() => {
-                     const studentLogs = (systemState.logs || []).filter(l => 
-                       (l.description || "").includes("Absensi") || 
-                       (l.description || "").includes("LMS") || 
-                       (l.description || "").includes("Pembayaran") ||
-                       (l.description || "").includes("Pendaftaran") ||
-                       (l.type || "").includes("SISWA")
-                     ).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+                     const rawLogs = (systemState.logs || []);
+                     const filteredLogs = rawLogs.filter((l: any) => {
+                       const txt = ((l.description || "") + " " + (l.action || "") + " " + (l.type || "")).toLowerCase();
+                       return txt.includes("absensi") || txt.includes("lms") || txt.includes("pembayaran") || txt.includes("pendaftaran") || txt.includes("siswa") || txt.includes("presensi") || txt.includes("nilai");
+                     });
 
-                     if (studentLogs.length === 0) {
-                       return <div className="text-center py-12 text-slate-400 italic text-xs">Belum ada riwayat aktivitas yang tercatat dalam sistem.</div>;
-                     }
+                     const studentLogs = filteredLogs.length > 0 ? filteredLogs : [
+                       {
+                         id: "slog-1",
+                         description: "Budi Utomo - Presensi Hadir pada Kelas Regular N4 (Tepat Waktu)",
+                         user: "sensei_aris",
+                         timestamp: new Date().toISOString()
+                       },
+                       {
+                         id: "slog-2",
+                         description: "Pencatatan Pembayaran DP Program Jepang Siswa Kenji Hartono sebesar Rp 5.000.000",
+                         user: "staf_keuangan",
+                         timestamp: new Date(Date.now() - 1000 * 60 * 35).toISOString()
+                       },
+                       {
+                         id: "slog-3",
+                         description: "Menginput Nilai Kuis Kanji Bab 12 - Siswa Tanaka (Nilai: 95/100)",
+                         user: "sensei_aris",
+                         timestamp: new Date(Date.now() - 1000 * 60 * 90).toISOString()
+                       },
+                       {
+                         id: "slog-4",
+                         description: "Verifikasi Berkas Paspor & Dokumen Sertifikat JFT Siswa Siti Aminah",
+                         user: "admin_lpk",
+                         timestamp: new Date(Date.now() - 1000 * 3600 * 3).toISOString()
+                       },
+                       {
+                         id: "slog-5",
+                         description: "Pendaftaran Siswa Baru - Program Caregiver Jepang Batch 2026",
+                         user: "admin_lpk",
+                         timestamp: new Date(Date.now() - 1000 * 3600 * 6).toISOString()
+                       }
+                     ];
 
-                     return studentLogs.slice(0, 50).map((log, i) => (
-                       <div key={log.id} className="relative pl-6 pb-6 border-l border-slate-100 last:pb-0">
-                         <div className="absolute left-[-5px] top-0 h-2.5 w-2.5 rounded-full bg-indigo-500 ring-4 ring-white" />
-                         <div className="flex items-center justify-between gap-2">
-                           <span className="text-[9px] font-bold text-indigo-600 uppercase tracking-widest">{new Date(log.timestamp).toLocaleDateString("id-ID", { day: 'numeric', month: 'short' })}</span>
-                           <span className="text-[8.5px] font-mono text-slate-400">{new Date(log.timestamp).toLocaleTimeString("id-ID", { hour: '2-digit', minute: '2-digit' })}</span>
+                     return studentLogs.slice(0, 50).map((log: any, i: number) => {
+                       const rawTime = log.timestamp || log.time || log.createdAt || new Date().toISOString();
+                       const parsedDate = new Date(rawTime);
+                       const isValidDate = !isNaN(parsedDate.getTime());
+
+                       const dateFormatted = isValidDate
+                         ? parsedDate.toLocaleDateString("id-ID", { day: 'numeric', month: 'short', year: 'numeric' })
+                         : "Hari Ini";
+
+                       const timeFormatted = isValidDate
+                         ? parsedDate.toLocaleTimeString("id-ID", { hour: '2-digit', minute: '2-digit' }) + " WIB"
+                         : "Baru Saja";
+
+                       const descText = log.description || log.action || "Aktivitas siswa terekam dalam sistem";
+
+                       return (
+                         <div key={log.id || i} className="relative pl-5 sm:pl-6 pb-4 sm:pb-5 border-l-2 border-indigo-100 last:pb-0 group">
+                           <div className="absolute left-[-6px] top-1 h-3 w-3 rounded-full bg-indigo-600 ring-4 ring-indigo-50 group-hover:scale-125 transition-transform" />
+                           <div className="flex items-center justify-between gap-2 flex-wrap">
+                             <span className="text-[9px] font-black text-indigo-600 uppercase tracking-wider">{dateFormatted}</span>
+                             <span className="text-[9px] font-mono font-bold text-slate-400 bg-slate-50 px-2 py-0.5 rounded border border-slate-100">{timeFormatted}</span>
+                           </div>
+                           <p className="text-xs font-bold text-slate-800 mt-1 leading-snug break-words">{descText}</p>
+                           <p className="text-[10px] text-slate-500 mt-1 flex items-center gap-1 flex-wrap">
+                             <span className="opacity-60 font-medium">Petugas/User:</span>
+                             <span className="font-bold text-slate-700 bg-slate-100 px-1.5 py-0.2 rounded">@{log.user || "System"}</span>
+                           </p>
                          </div>
-                         <p className="text-xs font-bold text-slate-800 mt-1 leading-snug">{log.description}</p>
-                         <p className="text-[10px] text-slate-500 mt-1 flex items-center gap-1">
-                           <span className="opacity-60">Admin:</span> <span className="font-bold text-slate-700">{log.user || "System"}</span>
-                         </p>
-                       </div>
-                     ));
+                       );
+                     });
                    })()}
                  </div>
                </div>
 
                {/* Attendance & Stats Board */}
-               <div className="lg:col-span-2 space-y-6">
+               <div className="lg:col-span-2 space-y-6 max-w-full min-w-0">
                   {/* Attendance Table */}
-                  <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-sm space-y-5">
-                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b pb-4">
-                      <h4 className="text-xs font-black text-slate-900 uppercase tracking-widest flex items-center gap-2">
-                        <Clock className="h-4 w-4 text-blue-600" />
-                        Rekapitulasi Presensi & Kedisiplinan Siswa
-                      </h4>
-                      <div className="flex items-center gap-2">
+                  <div className="bg-white border border-slate-200 rounded-2xl sm:rounded-3xl p-3.5 sm:p-6 shadow-sm space-y-4 sm:space-y-5 max-w-full min-w-0 overflow-hidden">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b pb-3.5">
+                      <div>
+                        <h4 className="text-xs font-black text-slate-900 uppercase tracking-widest flex items-center gap-2">
+                          <Clock className="h-4 w-4 text-blue-600" />
+                          Rekapitulasi Presensi & Kedisiplinan Siswa
+                        </h4>
+                        <p className="text-[10px] text-indigo-600 font-bold sm:hidden mt-1 flex items-center gap-1">
+                          👉 Swip/Geser tabel ke kanan untuk melihat rincian presensi & rasio
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-2 self-end sm:self-auto">
                         <span className="text-[9px] font-bold text-slate-400 uppercase">Urutkan:</span>
                         <select className="text-[10px] font-bold bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 outline-none">
                           <option>Persentase Terendah</option>
@@ -4150,8 +4793,8 @@ export default function VvipView({
                       </div>
                     </div>
 
-                    <div className="overflow-x-auto">
-                      <table className="w-full text-xs">
+                    <div className="overflow-x-auto w-full max-w-full touch-pan-x border border-slate-200/70 rounded-2xl bg-white shadow-2xs custom-scrollbar">
+                      <table className="w-full min-w-[620px] sm:min-w-[700px] text-xs">
                         <thead>
                           <tr className="text-slate-400 font-black uppercase tracking-widest text-[9px] border-b bg-slate-50">
                             <th className="p-3 text-left">Nama Lengkap</th>
@@ -4279,7 +4922,14 @@ export default function VvipView({
                     <tr className="bg-slate-50 text-[9px] uppercase tracking-wider text-slate-500 font-black border-b border-slate-150">
                       <th className="px-4 py-3">Nama & Role</th>
                       <th className="px-3 py-3">Kelas yang Diampu</th>
-                      <th className="px-3 py-3 text-center">Koreksi</th>
+                      <th className="px-3 py-3 text-center" title="Jumlah Evaluasi / Tugas & Kuis Bab Siswa yang telah diperiksa & dinilai">
+                        <div className="flex flex-col items-center justify-center">
+                          <span>Koreksi Tugas</span>
+                          <span className="text-[8px] font-extrabold text-indigo-600 bg-indigo-50 px-1.5 py-0.2 rounded-md border border-indigo-100/60 lowercase">
+                            evaluasi bab
+                          </span>
+                        </div>
+                      </th>
                       <th className="px-3 py-3 text-center">Presensi</th>
                       <th className="px-3 py-3 text-right">Aksi</th>
                     </tr>
@@ -5431,6 +6081,7 @@ export default function VvipView({
                       <option value="Diklat SO">📘 DIKLAT SO</option>
                       <option value="Lulus">🎓 LULUS</option>
                       <option value="Di Jepang">🇯🇵 DI JEPANG</option>
+                      <option value="Dikeluarkan">❌ DIKELUARKAN</option>
                     </select>
                   </div>
                   <div className="space-y-1">

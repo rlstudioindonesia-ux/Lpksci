@@ -112,7 +112,7 @@ export interface ActiveStudent {
   name: string;
   batch: string;
   class: string; // e.g., "Regular A", "Alumni N3"
-  status: "Belajar" | "On Proges Job" | "On Progres JFT/JLPT/SSW" | "Diklat SO" | "Lulus" | "Di Jepang";
+  status: "Belajar" | "On Proges Job" | "On Progres JFT/JLPT/SSW" | "Diklat SO" | "Lulus" | "Di Jepang" | "Dikeluarkan";
   kategoriPendaftaran?: string; // "Siswa Baru" | "Alumni"
   statusPendaftaran?: string; // "Siswa Baru" | "Alumni"
   referrer?: string;

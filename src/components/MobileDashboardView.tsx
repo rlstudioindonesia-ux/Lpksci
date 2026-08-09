@@ -141,18 +141,41 @@ import MobileJobsSegment from "./mobile/MobileJobsSegment";
 import MobileBottomNav from "./mobile/MobileBottomNav";
 import { StudentActivitySummary } from "./StudentActivitySummary";
 
-const FrontendView = React.lazy(() => import("./FrontendView"));
-const LmsView = React.lazy(() => import("./LmsView"));
-const AdminView = React.lazy(() => import("./AdminView"));
-const VvipView = React.lazy(() => import("./VvipView"));
-const AccountSettingsView = React.lazy(() => import("./AccountSettingsView"));
-const CalendarView = React.lazy(() => import("./CalendarView"));
-const ChatView = React.lazy(() => import("./ChatView"));
-const PrivacyPolicyView = React.lazy(() => import("./PrivacyPolicyView"));
-const StudentCvView = React.lazy(() => import("./StudentCvView"));
-const RegistrationView = React.lazy(() => import("./RegistrationView"));
-const AlumniDashboardView = React.lazy(() => import("./AlumniDashboardView"));
-const SenseiDashboardView = React.lazy(() => import("./SenseiDashboardView"));
+function safeLazy<T extends React.ComponentType<any>>(
+  factory: () => Promise<{ default: T }>
+) {
+  return React.lazy(async () => {
+    try {
+      return await factory();
+    } catch (error) {
+      console.warn("Retrying dynamic module import failure:", error);
+      try {
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        return await factory();
+      } catch (retryError) {
+        const key = "chunk_failed_reload";
+        if (!sessionStorage.getItem(key)) {
+          sessionStorage.setItem(key, "true");
+          window.location.reload();
+        }
+        throw retryError;
+      }
+    }
+  });
+}
+
+const FrontendView = safeLazy(() => import("./FrontendView"));
+const LmsView = safeLazy(() => import("./LmsView"));
+const AdminView = safeLazy(() => import("./AdminView"));
+const VvipView = safeLazy(() => import("./VvipView"));
+const AccountSettingsView = safeLazy(() => import("./AccountSettingsView"));
+const CalendarView = safeLazy(() => import("./CalendarView"));
+const ChatView = safeLazy(() => import("./ChatView"));
+const PrivacyPolicyView = safeLazy(() => import("./PrivacyPolicyView"));
+const StudentCvView = safeLazy(() => import("./StudentCvView"));
+const RegistrationView = safeLazy(() => import("./RegistrationView"));
+const AlumniDashboardView = safeLazy(() => import("./AlumniDashboardView"));
+const SenseiDashboardView = safeLazy(() => import("./SenseiDashboardView"));
 
 const isAndroidWebView = () => {
   if (typeof window === "undefined") return false;

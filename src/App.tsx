@@ -50,26 +50,42 @@ import ResetPasswordView from "./components/ResetPasswordView";
 import PembayaranSiswaView from "./components/PembayaranSiswaView";
 import JobsView from "./components/JobsView";
 import EksplorasiView from "./components/EksplorasiView";
+import MobileDashboardView from "./components/MobileDashboardView";
 
-// Only ever rendered on narrow viewports (isMobile) - lazy so desktop visitors
-// never pay for its ~5,300 lines.
-const MobileDashboardView = React.lazy(() => import("./components/MobileDashboardView"));
+function safeLazy<T extends React.ComponentType<any>>(
+  factory: () => Promise<{ default: T }>
+) {
+  return React.lazy(async () => {
+    try {
+      return await factory();
+    } catch (error) {
+      console.warn("Retrying dynamic module import failure:", error);
+      try {
+        await new Promise((resolve) => setTimeout(resolve, 300));
+        return await factory();
+      } catch (retryError) {
+        const key = "chunk_failed_reload";
+        if (!sessionStorage.getItem(key)) {
+          sessionStorage.setItem(key, "true");
+          window.location.reload();
+        }
+        throw retryError;
+      }
+    }
+  });
+}
 
-// Lazily loaded so their code only downloads for the roles/tabs that actually need
-// them, instead of bloating the bundle every visitor pays for on first load. These
-// are also dynamically imported inside MobileDashboardView; a static import here
-// would force Vite to keep them in the main chunk regardless (see build warnings).
-const FrontendView = React.lazy(() => import("./components/FrontendView"));
-const LmsView = React.lazy(() => import("./components/LmsView"));
-const AdminView = React.lazy(() => import("./components/AdminView"));
-const VvipView = React.lazy(() => import("./components/VvipView"));
-const AccountSettingsView = React.lazy(() => import("./components/AccountSettingsView"));
-const CalendarView = React.lazy(() => import("./components/CalendarView"));
-const ChatView = React.lazy(() => import("./components/ChatView"));
-const RegistrationView = React.lazy(() => import("./components/RegistrationView"));
-const PrivacyPolicyView = React.lazy(() => import("./components/PrivacyPolicyView"));
-const AlumniDashboardView = React.lazy(() => import("./components/AlumniDashboardView"));
-const SenseiDashboardView = React.lazy(() => import("./components/SenseiDashboardView"));
+const FrontendView = safeLazy(() => import("./components/FrontendView"));
+const LmsView = safeLazy(() => import("./components/LmsView"));
+const AdminView = safeLazy(() => import("./components/AdminView"));
+const VvipView = safeLazy(() => import("./components/VvipView"));
+const AccountSettingsView = safeLazy(() => import("./components/AccountSettingsView"));
+const CalendarView = safeLazy(() => import("./components/CalendarView"));
+const ChatView = safeLazy(() => import("./components/ChatView"));
+const RegistrationView = safeLazy(() => import("./components/RegistrationView"));
+const PrivacyPolicyView = safeLazy(() => import("./components/PrivacyPolicyView"));
+const AlumniDashboardView = safeLazy(() => import("./components/AlumniDashboardView"));
+const SenseiDashboardView = safeLazy(() => import("./components/SenseiDashboardView"));
 
 export default function App() {
   const [activeTab, setActiveTabState] = useState<string>(() => {

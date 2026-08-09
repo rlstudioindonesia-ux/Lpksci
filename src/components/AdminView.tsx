@@ -501,6 +501,7 @@ export default function AdminView({
 
   const [siswaTab, setSiswaTab] = useState<"aktif" | "baru" | "alumni" | "rekap" | "sensei">("aktif");
   const [siswaPage, setSiswaPage] = useState(1);
+  const [siswaSearch, setSiswaSearch] = useState("");
   const [syncingStudents, setSyncingStudents] = useState(false);
   const [showSyncModal, setShowSyncModal] = useState(false);
   const [outOfSyncActive, setOutOfSyncActive] = useState<any[]>([]);
@@ -1218,48 +1219,89 @@ export default function AdminView({
   };
 
   const startAdminEditReg = (studentId: string) => {
-    let regStudentInfo = systemState.registeredStudents?.find(
-      (rs) => rs.id === studentId,
+    let regMatch = systemState.registeredStudents?.find(
+      (rs) => rs.id === studentId || rs.name.toLowerCase() === studentId.toLowerCase()
     );
 
-    // Fallback if not found in registeredStudents
-    if (!regStudentInfo) {
-      const activeInfo = systemState.activeStudents?.find(
-        (s) => s.id === studentId,
+    const activeMatch = systemState.activeStudents?.find(
+      (s) => s.id === studentId || (regMatch && s.name.toLowerCase() === regMatch.name.toLowerCase()) || s.name.toLowerCase() === studentId.toLowerCase()
+    );
+
+    if (!regMatch && activeMatch) {
+      regMatch = systemState.registeredStudents?.find(
+        (rs) => rs.name.toLowerCase() === activeMatch.name.toLowerCase()
       );
-      if (activeInfo) {
-        const matchByName = systemState.registeredStudents?.find(
-          (rs) => rs.name === activeInfo.name
-        );
-        if (matchByName) {
-          regStudentInfo = matchByName;
-        } else {
-          regStudentInfo = {
-            id: activeInfo.id,
-            name: activeInfo.name,
-            email: `${activeInfo.name.toLowerCase().replace(/\s+/g, "")}@example.com`,
-            phone: "-",
-            district: "-",
-            birthDate: "-",
-            gender: "-" as any,
-            education: "-",
-            school: "-",
-            japaneseLevel: "-",
-            graduationYear: activeInfo.graduationYear || "",
-            program: activeInfo.class,
-            status: "Terverifikasi" as any,
-            date: "-",
-          };
-        }
-      }
     }
 
-    if (regStudentInfo) {
-      setAdminRegData({ ...regStudentInfo });
-      setAdminEditingStudentId(studentId);
-      setAdminRegError("");
-      setAdminRegSuccess(false);
-    }
+    const studentName = activeMatch?.name || regMatch?.name || studentId;
+
+    const userMatch = systemState.users?.find(
+      (u: any) =>
+        (studentName && u.name?.toLowerCase() === studentName.toLowerCase()) ||
+        (regMatch?.email && u.email?.toLowerCase() === regMatch.email.toLowerCase()) ||
+        u.id === studentId || u.uid === studentId
+    );
+
+    const pick = (...vals: any[]) => {
+      for (const v of vals) {
+        if (v !== undefined && v !== null && v !== "" && v !== "-" && v !== "Belum Diplot" && String(v).trim() !== "") {
+          return String(v).trim();
+        }
+      }
+      return "";
+    };
+
+    const am = activeMatch as any;
+    const rm = regMatch as any;
+    const um = userMatch as any;
+
+    const finalName = pick(am?.name, rm?.name, um?.name, um?.realName, um?.displayName, studentId);
+    const finalEmail = pick(
+      rm?.email,
+      um?.email,
+      am?.email,
+      am?.id && am.id.includes("@") ? am.id : undefined,
+      `${finalName.toLowerCase().replace(/\s+/g, "")}@example.com`
+    );
+    const finalPhone = pick(am?.phone, am?.noHp, am?.telepon, am?.whatsapp, rm?.phone, um?.phone, um?.noHp);
+    const finalDistrict = pick(am?.district, am?.alamat, am?.domisili, am?.address, rm?.district, um?.district, um?.address);
+    const finalBirthDate = pick(am?.birthDate, am?.tanggalLahir, am?.tglLahir, rm?.birthDate, um?.birthDate);
+    const finalGender = pick(am?.gender, am?.jenisKelamin, rm?.gender, um?.gender);
+    const finalEducation = pick(am?.education, am?.pendidikan, rm?.education, um?.education);
+    const finalSchool = pick(am?.school, am?.asalSekolah, am?.sekolah, rm?.school, um?.school);
+    const finalGraduationYear = pick(am?.graduationYear, am?.tahunLulus, rm?.graduationYear);
+    const finalJapaneseLevel = pick(am?.japaneseLevel, am?.levelJepang, rm?.japaneseLevel);
+    const finalProgram = pick(am?.class, am?.assignedClass, am?.program, rm?.program);
+    const finalStatusPendaftaran = pick(am?.statusPendaftaran, am?.kategoriPendaftaran, rm?.statusPendaftaran, "Siswa Baru");
+    const finalPassword = pick(rm?.password, um?.password);
+    const finalProfilePicture = pick(am?.profilePicture, am?.docFoto, am?.foto, rm?.docFoto, rm?.profilePicture, um?.photoURL, um?.profilePicture);
+
+    const mergedData = {
+      id: regMatch?.id || activeMatch?.id || studentId,
+      name: finalName,
+      email: finalEmail,
+      password: finalPassword,
+      phone: finalPhone,
+      district: finalDistrict,
+      birthDate: finalBirthDate,
+      gender: finalGender,
+      education: finalEducation,
+      school: finalSchool,
+      graduationYear: finalGraduationYear,
+      japaneseLevel: finalJapaneseLevel,
+      program: finalProgram,
+      statusPendaftaran: finalStatusPendaftaran,
+      status: regMatch?.status || "Terverifikasi",
+      date: regMatch?.date || activeMatch?.date || "-",
+      proofOfPayment: regMatch?.proofOfPayment || (activeMatch as any)?.proofOfPayment,
+      profilePicture: finalProfilePicture,
+      docFoto: finalProfilePicture,
+    };
+
+    setAdminRegData(mergedData);
+    setAdminEditingStudentId(studentId);
+    setAdminRegError("");
+    setAdminRegSuccess(false);
   };
 
   const handleAdminSaveReg = async (e: React.FormEvent) => {
@@ -1274,19 +1316,25 @@ export default function AdminView({
 
     let success = false;
     
-    // First try to update registered students if the ID matches a registered student
-    const isRegistered = systemState.registeredStudents?.some(rs => rs.id === adminRegData.id);
-    if (isRegistered) {
+    // Update or add registered student record
+    const regMatch = systemState.registeredStudents?.find(rs => rs.id === adminRegData.id || rs.name.toLowerCase() === adminRegData.name.toLowerCase());
+    if (regMatch) {
       success = await onUpdateState(
         "registeredStudents",
         "update",
+        { ...adminRegData, id: regMatch.id },
+      );
+    } else {
+      success = await onUpdateState(
+        "registeredStudents",
+        "add",
         adminRegData,
       );
     }
 
-    // Update active student if it exists (using original editing ID or name)
+    // Update active student if it exists
     const activeInfo = systemState.activeStudents?.find(
-      (s) => s.id === adminEditingStudentId || s.name === adminRegData.name
+      (s) => s.id === adminEditingStudentId || s.id === adminRegData.id || s.name.toLowerCase() === adminRegData.name.toLowerCase()
     );
 
     if (activeInfo) {
@@ -1294,7 +1342,17 @@ export default function AdminView({
         id: activeInfo.id,
         name: adminRegData.name,
         phone: adminRegData.phone,
+        district: adminRegData.district,
+        birthDate: adminRegData.birthDate,
+        gender: adminRegData.gender,
+        education: adminRegData.education,
+        school: adminRegData.school,
         graduationYear: adminRegData.graduationYear,
+        japaneseLevel: adminRegData.japaneseLevel,
+        statusPendaftaran: adminRegData.statusPendaftaran,
+        class: adminRegData.program || activeInfo.class,
+        profilePicture: adminRegData.profilePicture || adminRegData.docFoto,
+        docFoto: adminRegData.docFoto || adminRegData.profilePicture,
       });
       if (activeSuccess) success = true;
     }
@@ -1304,7 +1362,7 @@ export default function AdminView({
       setTimeout(() => {
         setAdminRegSuccess(false);
         setAdminEditingStudentId(null);
-      }, 2000);
+      }, 1500);
     } else {
       setAdminRegError("Gagal menyimpan data.");
     }
@@ -1441,7 +1499,7 @@ export default function AdminView({
     await onUpdateState("inventory", "delete", { id: item.id });
   };
 
-  const filteredSiswaItems = siswaTab === "baru"
+  const filteredSiswaItems = (siswaTab === "baru"
     ? [...(systemState.registeredStudents || [])]
         .filter((s) => s.status !== "Disetujui" && filterByMonthYear(s.date) && isStudentRoleOnly(s))
         .sort(sortStudentsByDateDesc)
@@ -1465,7 +1523,18 @@ export default function AdminView({
             }
           }
           return true;
-        }) || [];
+        }) || []
+  ).filter((s: any) => {
+    if (!siswaSearch.trim()) return true;
+    const query = siswaSearch.toLowerCase().trim();
+    const nameMatch = (s.name || "").toLowerCase().includes(query);
+    const idMatch = (s.id || "").toLowerCase().includes(query);
+    const emailMatch = (s.email || "").toLowerCase().includes(query);
+    const phoneMatch = (s.phone || "").toLowerCase().includes(query);
+    const classMatch = (s.class || s.program || "").toLowerCase().includes(query);
+    const districtMatch = (s.district || "").toLowerCase().includes(query);
+    return nameMatch || idMatch || emailMatch || phoneMatch || classMatch || districtMatch;
+  });
 
   const siswaItemsPerPage = 10;
   const siswaTotalPages = Math.max(1, Math.ceil(filteredSiswaItems.length / siswaItemsPerPage));
@@ -1809,6 +1878,7 @@ export default function AdminView({
                       <option value="Diklat SO">📘 4. DIKLAT SO</option>
                       <option value="Lulus">🎓 5. LULUS</option>
                       <option value="Di Jepang">🇯🇵 6. DI JEPANG</option>
+                      <option value="Dikeluarkan">❌ 7. DIKELUARKAN</option>
                     </select>
                   </div>
                 </div>
@@ -2093,6 +2163,7 @@ export default function AdminView({
                       { id: "Diklat SO", label: "4. Diklat SO", icon: "📘", color: "text-indigo-400", border: "border-indigo-400/30", bg: "bg-indigo-500/10" },
                       { id: "Lulus", label: "5. Lulus", icon: "🎓", color: "text-purple-400", border: "border-purple-400/30", bg: "bg-purple-500/10" },
                       { id: "Di Jepang", label: "6. Di Jepang", icon: "🇯🇵", color: "text-emerald-400", border: "border-emerald-400/30", bg: "bg-emerald-500/10" },
+                      { id: "Dikeluarkan", label: "7. Dikeluarkan", icon: "❌", color: "text-rose-400", border: "border-rose-400/30", bg: "bg-rose-500/10" },
                     ].map((st) => {
                       const isSelected = filterStatus === st.id;
                       const count = (systemState.activeStudents || []).filter((s: any) => {
@@ -2155,7 +2226,46 @@ export default function AdminView({
             </div>
 
             <div id="tabel-siswa-section" className="flex flex-col space-y-4 scroll-mt-6">
-              {(filterClass !== "All" || filterStatus !== "All" || siswaTab === "alumni") && (
+              {/* Search Bar Input */}
+              <div className="bg-white p-3 sm:p-4 rounded-2xl border border-slate-200 shadow-xs flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
+                <div className="relative flex-1">
+                  <Search className="h-4 w-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Cari siswa berdasarkan nama, ID, email, nomor HP, atau program..."
+                    value={siswaSearch}
+                    onChange={(e) => {
+                      setSiswaSearch(e.target.value);
+                      setSiswaPage(1);
+                    }}
+                    className="w-full pl-10 pr-9 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-indigo-500 focus:bg-white transition-all shadow-2xs"
+                    id="input-cari-siswa"
+                  />
+                  {siswaSearch && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSiswaSearch("");
+                        setSiswaPage(1);
+                      }}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1 rounded-full hover:bg-slate-200/60 transition-colors cursor-pointer"
+                      title="Clear search"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+                {siswaSearch && (
+                  <div className="text-xs font-bold text-slate-500 flex items-center gap-1.5 shrink-0 px-1">
+                    <span>Hasil:</span>
+                    <span className="bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-lg border border-indigo-100 font-black">
+                      {filteredSiswaItems.length} Siswa
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {(filterClass !== "All" || filterStatus !== "All" || siswaTab === "alumni" || siswaSearch) && (
                 <div className="bg-gradient-to-r from-indigo-500/10 via-blue-500/5 to-slate-100 border border-indigo-200/80 rounded-2xl p-3 sm:px-4 sm:py-3 flex items-center justify-between gap-3 shadow-xs animate-fade-in">
                   <div className="flex items-center gap-2.5 min-w-0">
                     <div className="h-8 w-8 rounded-xl bg-indigo-600 text-white flex items-center justify-center shrink-0 shadow-xs">
@@ -2173,6 +2283,11 @@ export default function AdminView({
                             Status: {filterStatus}
                           </span>
                         )}
+                        {siswaSearch && (
+                          <span className="bg-amber-500 text-white text-[10px] px-2 py-0.5 rounded-md font-bold flex items-center gap-1">
+                            Pencarian: "{siswaSearch}"
+                          </span>
+                        )}
                         <span className="text-xs font-bold text-slate-500">
                           ({filteredSiswaItems.length} Siswa)
                         </span>
@@ -2185,6 +2300,7 @@ export default function AdminView({
                       setSiswaTab("aktif");
                       setFilterClass("All");
                       setFilterStatus("All");
+                      setSiswaSearch("");
                       setSiswaPage(1);
                     }}
                     className="bg-white hover:bg-rose-50 text-slate-700 hover:text-rose-600 border border-slate-200 hover:border-rose-200 px-3 py-1.5 rounded-xl text-xs font-extrabold transition-all cursor-pointer shrink-0 flex items-center gap-1.5 shadow-2xs"
@@ -2495,44 +2611,14 @@ export default function AdminView({
                                   <div className="text-[10px] text-slate-500 font-mono mt-0.5">
                                     {s.batch}
                                   </div>
-                                  <div className="grid grid-cols-3 gap-1.5 mt-1.5 w-[260px]">
-                                    <label className="w-full justify-center px-1.5 py-1.5 bg-blue-50/80 border border-blue-100 text-blue-700 hover:bg-blue-100 rounded-lg text-[9.5px] font-extrabold flex items-center gap-1 cursor-pointer transition-all shadow-sm active:scale-95">
-                                      <Camera className="h-3 w-3 shrink-0" /> <span className="truncate">Ganti Foto</span>
-                                      <input
-                                        type="file"
-                                        accept="image/*"
-                                        className="hidden"
-                                        onChange={async (e) => {
-                                          const file = e.target.files?.[0];
-                                          if (!file) return;
-                                          try {
-                                            const url = await uploadFileToFirebase(file, "profile_pictures");
-                                            await onUpdateState(
-                                              "activeStudents",
-                                              "update_status",
-                                              {
-                                                id: s.id,
-                                                profilePicture: url,
-                                              },
-                                            );
-                                          } catch (err) {
-                                            console.error(err);
-                                            alert("Gagal mengunggah foto profil");
-                                          }
-                                        }}
-                                      />
-                                    </label>
+                                  <div className="mt-1">
                                     <button
-                                      onClick={() => startAdminEditReg(s.id)}
-                                      className="w-full justify-center px-1.5 py-1.5 bg-indigo-50/80 border border-indigo-100 text-indigo-700 hover:bg-indigo-100 rounded-lg text-[9.5px] font-extrabold flex items-center gap-1 cursor-pointer transition-all shadow-sm active:scale-95"
-                                    >
-                                      <FileText className="h-3 w-3 shrink-0" /> <span className="truncate">Biodata</span>
-                                    </button>
-                                    <button
+                                      type="button"
                                       onClick={() => setViewingCvStudentId(s.id)}
-                                      className="w-full justify-center px-1.5 py-1.5 bg-violet-50/80 border border-violet-100 text-violet-700 hover:bg-violet-100 rounded-lg text-[9.5px] font-extrabold flex items-center gap-1 cursor-pointer transition-all shadow-sm active:scale-95"
+                                      className="px-2 py-0.5 bg-violet-50 border border-violet-100 text-violet-700 hover:bg-violet-100 rounded-md text-[9.5px] font-extrabold inline-flex items-center gap-1 cursor-pointer transition-all shadow-2xs active:scale-95"
                                     >
-                                      <FileText className="h-3 w-3 shrink-0" /> <span className="truncate">CV Jepang</span>
+                                      <FileText className="h-3 w-3 shrink-0" />
+                                      <span>CV Jepang</span>
                                     </button>
                                   </div>
                                 </div>
@@ -2609,7 +2695,9 @@ export default function AdminView({
                                     );
                                   }}
                                   className={`text-[10px] font-black border rounded px-2 py-1 w-full outline-none cursor-pointer tracking-wider ${
-                                    s.status === "Di Jepang"
+                                    s.status === "Dikeluarkan"
+                                      ? "bg-rose-100 text-rose-800 border-rose-300 font-extrabold"
+                                      : s.status === "Di Jepang"
                                       ? "bg-emerald-50 text-emerald-800 border-emerald-300"
                                       : s.status === "Lulus"
                                         ? "bg-indigo-50 text-indigo-800 border-indigo-300 animate-pulse-once"
@@ -2635,6 +2723,9 @@ export default function AdminView({
                                   <option value="Lulus">🎓 5. LULUS</option>
                                   <option value="Di Jepang">
                                     🇯🇵 6. DI JEPANG
+                                  </option>
+                                  <option value="Dikeluarkan">
+                                    ❌ 7. DIKELUARKAN
                                   </option>
                                 </select>
   
@@ -2697,15 +2788,27 @@ export default function AdminView({
                               </div>
                             </td>
                             <td className="md:p-4 p-1.5 py-2 text-center align-middle">
-                              <ConfirmButton
-                                confirmTitle="Hapus Data Siswa"
-                                confirmMessage={`Hapus data siswa ${s.name} permanen?`}
-                                onConfirmClick={() => onUpdateState("activeStudents", "delete", { id: s.id })}
-                                className="inline-flex items-center justify-center p-2 bg-slate-50 hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-xl transition-all cursor-pointer border border-transparent hover:border-rose-200 shadow-xs"
-                                title="Hapus Data"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </ConfirmButton>
+                              <div className="flex items-center justify-center gap-1.5">
+                                <button
+                                  type="button"
+                                  onClick={() => startAdminEditReg(s.id)}
+                                  className="inline-flex items-center justify-center gap-1 px-2.5 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl transition-all cursor-pointer shadow-xs font-bold text-xs active:scale-95 shrink-0"
+                                  title="Edit Data Lengkap Siswa"
+                                  id={`btn-edit-siswa-${s.id}`}
+                                >
+                                  <Edit className="h-3.5 w-3.5" />
+                                  <span>Edit</span>
+                                </button>
+                                <ConfirmButton
+                                  confirmTitle="Hapus Data Siswa"
+                                  confirmMessage={`Hapus data siswa ${s.name} permanen?`}
+                                  onConfirmClick={() => onUpdateState("activeStudents", "delete", { id: s.id })}
+                                  className="inline-flex items-center justify-center p-1.5 bg-slate-50 hover:bg-rose-50 text-slate-400 hover:text-rose-600 rounded-xl transition-all cursor-pointer border border-transparent hover:border-rose-200 shadow-xs"
+                                  title="Hapus Data"
+                                >
+                                  <Trash2 className="h-4 w-4" />
+                                </ConfirmButton>
+                              </div>
                             </td>
                           </tr>
                         ))}
@@ -3008,42 +3111,19 @@ export default function AdminView({
                               <div className="font-bold text-xs text-slate-900 truncate">
                                 {s.name}
                               </div>
-                              <div className="grid grid-cols-2 gap-1.5 w-full">
-                                <label className="w-full justify-center px-1.5 py-1.5 bg-blue-50/80 border border-blue-100 text-blue-700 hover:bg-blue-100 hover:text-blue-800 rounded-lg text-[9.5px] font-extrabold flex items-center gap-1 cursor-pointer transition-all shadow-sm active:scale-95">
-                                  <Camera className="h-3 w-3 shrink-0" /> <span className="truncate">Ganti Foto</span>
-                                  <input
-                                    type="file"
-                                    accept="image/*"
-                                    className="hidden"
-                                    onChange={async (e) => {
-                                          const file = e.target.files?.[0];
-                                          if (!file) return;
-                                          try {
-                                            const url = await uploadFileToFirebase(file, "profile_pictures");
-                                            await onUpdateState(
-                                              "activeStudents",
-                                              "update_status",
-                                              {
-                                                id: s.id,
-                                                profilePicture: url,
-                                              },
-                                            );
-                                          } catch (err) {
-                                            console.error(err);
-                                            alert("Gagal mengunggah foto profil");
-                                          }
-                                    }}
-                                  />
-                                </label>
+                              <div className="grid grid-cols-3 gap-1.5 w-full">
                                 <button
+                                  type="button"
                                   onClick={() => startAdminEditReg(s.id)}
-                                  className="w-full justify-center px-1.5 py-1.5 bg-indigo-50/80 border border-indigo-100 text-indigo-700 hover:bg-indigo-100 hover:text-indigo-800 rounded-lg text-[9.5px] font-extrabold flex items-center gap-1 cursor-pointer transition-all shadow-sm active:scale-95"
+                                  className="w-full justify-center px-1.5 py-1.5 bg-indigo-600 text-white hover:bg-indigo-700 rounded-lg text-[9.5px] font-extrabold flex items-center gap-1 cursor-pointer transition-all shadow-2xs active:scale-95"
+                                  title="Edit Data Lengkap & Foto Siswa"
                                 >
-                                  <FileText className="h-3 w-3 shrink-0" /> <span className="truncate">Biodata</span>
+                                  <Edit className="h-3 w-3 shrink-0" /> <span className="truncate">Edit</span>
                                 </button>
                                 <button
+                                  type="button"
                                   onClick={() => setViewingCvStudentId(s.id)}
-                                  className="w-full justify-center px-1.5 py-1.5 bg-violet-50/80 border border-violet-100 text-violet-700 hover:bg-violet-100 hover:text-violet-800 rounded-lg text-[9.5px] font-extrabold flex items-center gap-1 cursor-pointer transition-all shadow-sm active:scale-95"
+                                  className="w-full justify-center px-1.5 py-1.5 bg-violet-50/80 border border-violet-100 text-violet-700 hover:bg-violet-100 hover:text-violet-800 rounded-lg text-[9.5px] font-extrabold flex items-center gap-1 cursor-pointer transition-all shadow-2xs active:scale-95"
                                 >
                                   <FileText className="h-3 w-3 shrink-0" /> <span className="truncate">CV Jepang</span>
                                 </button>
@@ -3051,7 +3131,7 @@ export default function AdminView({
                                   confirmTitle="Hapus Data Siswa"
                                   confirmMessage={`Hapus data siswa ${s.name} permanen?`}
                                   onConfirmClick={() => onUpdateState("activeStudents", "delete", { id: s.id })}
-                                  className="w-full justify-center px-1.5 py-1.5 bg-rose-50/80 border border-rose-100 text-rose-600 hover:bg-rose-100 rounded-lg text-[9.5px] font-extrabold flex items-center gap-1 cursor-pointer transition-all shadow-sm active:scale-95"
+                                  className="w-full justify-center px-1.5 py-1.5 bg-rose-50/80 border border-rose-100 text-rose-600 hover:bg-rose-100 rounded-lg text-[9.5px] font-extrabold flex items-center gap-1 cursor-pointer transition-all shadow-2xs active:scale-95"
                                   title="Hapus Data"
                                 >
                                   <Trash2 className="h-3 w-3 shrink-0" /> <span className="truncate">Hapus</span>
@@ -3141,17 +3221,19 @@ export default function AdminView({
                                   );
                                 }}
                                 className={`mt-0.5 text-[9.5px] font-black border rounded px-1.5 py-1 w-full outline-none cursor-pointer tracking-wider ${
-                                  s.status === "Di Jepang"
-                                    ? "bg-emerald-50 text-emerald-800 border-emerald-300"
-                                    : s.status === "Lulus"
-                                      ? "bg-indigo-50 text-indigo-800 border-indigo-300 shadow-sm"
-                                      : s.status === "On Proges Job"
-                                        ? "bg-cyan-50 text-cyan-800 border-cyan-300"
-                                        : s.status === "On Progres JFT/JLPT/SSW"
-                                          ? "bg-teal-50 text-teal-800 border-teal-300"
-                                          : s.status === "Diklat SO"
-                                            ? "bg-purple-50 text-purple-800 border-purple-300"
-                                            : "bg-blue-50 text-blue-800 border-blue-300"
+                                  s.status === "Dikeluarkan"
+                                    ? "bg-rose-100 text-rose-800 border-rose-300 font-extrabold"
+                                    : s.status === "Di Jepang"
+                                      ? "bg-emerald-50 text-emerald-800 border-emerald-300"
+                                      : s.status === "Lulus"
+                                        ? "bg-indigo-50 text-indigo-800 border-indigo-300 shadow-sm"
+                                        : s.status === "On Proges Job"
+                                          ? "bg-cyan-50 text-cyan-800 border-cyan-300"
+                                          : s.status === "On Progres JFT/JLPT/SSW"
+                                            ? "bg-teal-50 text-teal-800 border-teal-300"
+                                            : s.status === "Diklat SO"
+                                              ? "bg-purple-50 text-purple-800 border-purple-300"
+                                              : "bg-blue-50 text-blue-800 border-blue-300"
                                 }`}
                               >
                                 <option value="Belajar">🇮🇩 1. BELAJAR</option>
@@ -3164,6 +3246,7 @@ export default function AdminView({
                                 <option value="Diklat SO">📘 4. DIKLAT SO</option>
                                 <option value="Lulus">🎓 5. LULUS</option>
                                 <option value="Di Jepang">🇯🇵 6. DI JEPANG</option>
+                                <option value="Dikeluarkan">❌ 7. DIKELUARKAN</option>
                               </select>
                             </div>
                           </div>
@@ -9954,6 +10037,49 @@ export default function AdminView({
                       Data siswa berhasil diperbarui.
                     </div>
                   )}
+
+                  {/* Photo Upload Section */}
+                  <div className="bg-slate-50 border border-slate-200/80 p-4 rounded-2xl flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-3.5">
+                      <img
+                        src={getSafePhotoUrl(adminRegData.profilePicture || adminRegData.docFoto, adminRegData.name)}
+                        alt={adminRegData.name || "Foto Siswa"}
+                        className="h-16 w-16 rounded-2xl object-cover border-2 border-white shadow-xs bg-slate-200 shrink-0"
+                        onError={(e) => {
+                          e.currentTarget.onerror = null;
+                          e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(adminRegData.name || 'Siswa')}&background=e2e8f0&color=334155`;
+                        }}
+                      />
+                      <div>
+                        <h4 className="text-xs font-black text-slate-800">Foto Profil / Pas Foto</h4>
+                        <p className="text-[10px] text-slate-500 font-medium mt-0.5">Unggah foto terbaru siswa (PNG/JPG)</p>
+                      </div>
+                    </div>
+                    <label className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold cursor-pointer transition shadow-xs active:scale-95 shrink-0">
+                      <Camera className="h-4 w-4" />
+                      <span>Ganti Foto</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          try {
+                            const url = await uploadFileToFirebase(file, "profile_pictures");
+                            setAdminRegData({
+                              ...adminRegData,
+                              profilePicture: url,
+                              docFoto: url,
+                            });
+                          } catch (err) {
+                            console.error(err);
+                            alert("Gagal mengunggah foto profil");
+                          }
+                        }}
+                      />
+                    </label>
+                  </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                     <div className="space-y-1">
