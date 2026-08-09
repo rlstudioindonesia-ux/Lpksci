@@ -555,6 +555,7 @@ app.post("/api/state/update", (req, res) => {
           targetClass: payload.targetClass || ""
         };
         state.lmsLessons.push(newLesson);
+        syncEntityToFirestore("lmsLessons", newLesson.id, newLesson);
         return res.json({ success: true, item: newLesson });
       }
 
@@ -582,6 +583,7 @@ app.post("/api/state/update", (req, res) => {
             ...payload,
             chapterNumber: payload.chapterNumber !== undefined ? Number(payload.chapterNumber) : state.lmsLessons[index].chapterNumber
           };
+          syncEntityToFirestore("lmsLessons", state.lmsLessons[index].id, state.lmsLessons[index]);
           return res.json({ success: true, item: state.lmsLessons[index] });
         }
         return res.status(404).json({ error: "Lesson not found" });
@@ -612,6 +614,7 @@ app.post("/api/state/update", (req, res) => {
           state.lmsComments = [];
         }
         state.lmsComments.push(newComment);
+        syncEntityToFirestore("lmsComments", newComment.id, newComment);
         return res.json({ success: true, item: newComment });
       }
 
@@ -622,6 +625,7 @@ app.post("/api/state/update", (req, res) => {
             ...state.lmsComments[index],
             ...payload
           };
+          syncEntityToFirestore("lmsComments", state.lmsComments[index].id, state.lmsComments[index]);
           return res.json({ success: true, item: state.lmsComments[index] });
         }
         return res.status(404).json({ error: "Comment not found" });
@@ -653,6 +657,7 @@ app.post("/api/state/update", (req, res) => {
           audioUrl: payload.audioUrl || ""
         };
         state.lmsQuizzes.push(newQuiz);
+        syncEntityToFirestore("lmsQuizzes", newQuiz.id, newQuiz);
         return res.json({ success: true, item: newQuiz });
       }
 
@@ -663,6 +668,7 @@ app.post("/api/state/update", (req, res) => {
             ...state.lmsQuizzes[index],
             ...payload
           };
+          syncEntityToFirestore("lmsQuizzes", state.lmsQuizzes[index].id, state.lmsQuizzes[index]);
           return res.json({ success: true, item: state.lmsQuizzes[index] });
         }
         return res.status(404).json({ error: "Quiz not found" });
@@ -687,7 +693,8 @@ app.post("/api/state/update", (req, res) => {
         notes: payload.notes || ""
       };
       state.attendance.unshift(newAtt);
-      
+      syncEntityToFirestore("attendance", newAtt.id, newAtt);
+
       // Update student's attendanceScore dynamically
       if (payload.studentId) {
         const student = state.activeStudents.find(s => s.id === payload.studentId);
@@ -696,7 +703,7 @@ app.post("/api/state/update", (req, res) => {
           const presentCount = stRecords.filter(a => a.status === "Hadir").length;
           const totalRecords = stRecords.length;
           student.attendanceScore = totalRecords > 0 ? Math.round((presentCount / totalRecords) * 100) : 0;
-          
+
           // Also sync to firestore if using firebase
           if (typeof syncEntityToFirestore !== "undefined") {
             syncEntityToFirestore("activeStudents", student.id, student);
@@ -854,6 +861,8 @@ app.post("/api/state/update", (req, res) => {
           });
         }
 
+        syncEntityToFirestore("activeStudents", assignedStudentId, state.activeStudents.find(s => s.id === assignedStudentId));
+
         // Auto-provision or update a system user account
         const protectedRoles = ["Pengajar", "VVIP", "Admin", "Admin Super", "Admin Biasa"];
         const existingUser = state.users.find(u => u.username === match.email || u.email === match.email);
@@ -890,7 +899,8 @@ app.post("/api/state/update", (req, res) => {
         // REMOVE from registeredStudents to avoid double data (siswa baru becomes empty for this student)
         const approvedStudent = state.registeredStudents[index];
         state.registeredStudents.splice(index, 1);
-        
+        deleteEntityFromFirestore("registeredStudents", approvedStudent.id);
+
         return res.json({ success: true, updated: approvedStudent });
       }
     }
@@ -900,6 +910,7 @@ app.post("/api/state/update", (req, res) => {
       const index = state.registeredStudents.findIndex(s => s.id === studentId);
       if (index !== -1) {
         state.registeredStudents[index].status = "Ditolak";
+        syncEntityToFirestore("registeredStudents", state.registeredStudents[index].id, state.registeredStudents[index]);
         return res.json({ success: true, updated: state.registeredStudents[index] });
       }
     }
@@ -1028,6 +1039,7 @@ app.post("/api/state/update", (req, res) => {
       } else {
         state.payments.unshift(newPay);
       }
+      syncEntityToFirestore("payments", payId, existingIdx !== -1 ? state.payments[existingIdx] : newPay);
       return res.json({ success: true, item: newPay });
     }
 
@@ -1044,6 +1056,7 @@ app.post("/api/state/update", (req, res) => {
         );
         if (regMatch) {
           regMatch.paymentStatus = payload.status;
+          syncEntityToFirestore("registeredStudents", regMatch.id, regMatch);
         }
         
         // Auto-record to cash ledger if marked as Lunas
@@ -1066,7 +1079,8 @@ app.post("/api/state/update", (req, res) => {
              syncEntityToFirestore('cashLedger', newLedger.id, newLedger);
            }
         }
-        
+
+        syncEntityToFirestore("payments", state.payments[index].id, state.payments[index]);
         return res.json({ success: true, item: state.payments[index] });
       }
     }
@@ -1095,6 +1109,7 @@ app.post("/api/state/update", (req, res) => {
         if (status !== undefined) state.payments[index].status = status;
         if (isSigned !== undefined) state.payments[index].isSigned = isSigned;
         if (signatureDate !== undefined) state.payments[index].signatureDate = signatureDate;
+        syncEntityToFirestore("payments", state.payments[index].id, state.payments[index]);
         return res.json({ success: true, item: state.payments[index] });
       }
     }
@@ -1105,6 +1120,7 @@ app.post("/api/state/update", (req, res) => {
       if (index !== -1) {
         state.payments[index].isSigned = isSigned;
         state.payments[index].signatureDate = signatureDate;
+        syncEntityToFirestore("payments", state.payments[index].id, state.payments[index]);
         return res.json({ success: true, item: state.payments[index] });
       }
     }
@@ -1119,6 +1135,7 @@ app.post("/api/state/update", (req, res) => {
         location: payload.location || "Kantor"
       };
       state.inventory.unshift(newItem);
+      syncEntityToFirestore("inventory", newItem.id, newItem);
       return res.json({ success: true, item: newItem });
     }
 
@@ -1139,6 +1156,7 @@ app.post("/api/state/update", (req, res) => {
           condition: payload.condition || state.inventory[idx].condition,
           location: payload.location || state.inventory[idx].location,
         };
+        syncEntityToFirestore("inventory", state.inventory[idx].id, state.inventory[idx]);
         return res.json({ success: true });
       }
       return res.status(404).json({ error: "Item not found" });
@@ -1153,6 +1171,7 @@ app.post("/api/state/update", (req, res) => {
         if (payload.sptFile !== undefined) state.taxes[index].sptFile = payload.sptFile;
         if (payload.financialReportFile !== undefined) state.taxes[index].financialReportFile = payload.financialReportFile;
         if (payload.notes !== undefined) state.taxes[index].notes = payload.notes;
+        syncEntityToFirestore("taxes", state.taxes[index].id, state.taxes[index]);
         return res.json({ success: true, item: state.taxes[index] });
       } else {
         const newTax = {
@@ -1168,6 +1187,7 @@ app.post("/api/state/update", (req, res) => {
           notes: payload.notes || ""
         };
         state.taxes.push(newTax);
+        syncEntityToFirestore("taxes", newTax.id, newTax);
         return res.json({ success: true, item: newTax });
       }
     }
@@ -1186,6 +1206,7 @@ app.post("/api/state/update", (req, res) => {
         notes: payload.notes || ""
       };
       state.taxes.push(newTax);
+      syncEntityToFirestore("taxes", newTax.id, newTax);
       return res.json({ success: true, item: newTax });
     }
 
@@ -1203,6 +1224,7 @@ app.post("/api/state/update", (req, res) => {
             (payload.taxRate !== undefined ? Number(payload.taxRate) : state.taxes[index].taxRate)
           )
         };
+        syncEntityToFirestore("taxes", state.taxes[index].id, state.taxes[index]);
         return res.json({ success: true, item: state.taxes[index] });
       }
       return res.status(404).json({ error: "Tax record not found" });
@@ -1221,6 +1243,7 @@ app.post("/api/state/update", (req, res) => {
         ...(state.costConfig || {}),
         ...payload
       };
+      syncEntityToFirestore("system", "costConfig", state.costConfig);
       return res.json({ success: true, costConfig: state.costConfig });
     }
     
@@ -1281,7 +1304,8 @@ app.post("/api/state/update", (req, res) => {
              syncEntityToFirestore('cashLedger', newLedger.id, newLedger);
            }
         }
-        
+
+        syncEntityToFirestore("payments", state.payments[idx].id, state.payments[idx]);
         return res.json({ success: true, updated: state.payments[idx], item: state.payments[idx] });
       } else {
         const newPay = {
@@ -1313,6 +1337,7 @@ app.post("/api/state/update", (req, res) => {
            }
         }
 
+        syncEntityToFirestore("payments", newPay.id, newPay);
         return res.json({ success: true, updated: newPay, item: newPay });
       }
     }
@@ -1462,6 +1487,7 @@ app.post("/api/state/update", (req, res) => {
           state.chapterAssessments.push(record);
         }
 
+        syncEntityToFirestore("chapterAssessments", record.id, record);
         return res.json({ success: true, item: record });
       }
 
@@ -1822,6 +1848,7 @@ app.post("/api/state/update", (req, res) => {
         // Sync with users account (creating if they don't exist yet)
         syncActiveStudentToAlumniUser(newId, name, newStudent.status, payload.profilePicture);
 
+        syncEntityToFirestore("activeStudents", newStudent.id, newStudent);
         return res.json({ success: true, item: newStudent });
       }
 
@@ -1871,6 +1898,7 @@ app.post("/api/state/update", (req, res) => {
               }
             }
 
+            syncEntityToFirestore("activeStudents", state.activeStudents[index].id, state.activeStudents[index]);
             return res.json({ success: true, item: state.activeStudents[index] });
          } else {
             return res.status(404).json({ error: "Student not found to update." });
@@ -1878,7 +1906,7 @@ app.post("/api/state/update", (req, res) => {
       }
 
       if (action === "update_status") {
-        const { id, status, class: className, prefecture, city, company, latitude, longitude, profilePicture, sensei, statusPendaftaran, graduationYear, phone, name, currentChapter, keterangan, mitraSO, jobKeterangan, job1Bidang, job1TanggalMensetsu, job1Lokasi, job2Bidang, job2TanggalMensetsu, job2Lokasi, bulanKelulusan, attitudeScore, kaiwaScore, bobotNilaiRekomendasi } = payload;
+        const { id, status, class: className, prefecture, city, company, latitude, longitude, profilePicture, sensei, statusPendaftaran, graduationYear, phone, name, batch, currentChapter, keterangan, mitraSO, jobKeterangan, job1Bidang, job1TanggalMensetsu, job1Lokasi, job2Bidang, job2TanggalMensetsu, job2Lokasi, bulanKelulusan, attitudeScore, kaiwaScore, bobotNilaiRekomendasi } = payload;
         const index = state.activeStudents.findIndex(s => s.id === id);
         if (index !== -1) {
           if (status) {
@@ -1886,6 +1914,9 @@ app.post("/api/state/update", (req, res) => {
           }
           if (name) {
             state.activeStudents[index].name = name;
+          }
+          if (batch !== undefined) {
+            state.activeStudents[index].batch = batch;
           }
           if (phone) {
             state.activeStudents[index].phone = phone;
@@ -2138,6 +2169,7 @@ app.post("/api/state/update", (req, res) => {
         }
         const newUser = { username, name, email, role, studentId, assignedClass, password: isHashedPassword(password) ? password : hashPassword(password || "123456"), japaneseLevel, kecakapanSensei };
         state.users.push(newUser);
+        syncEntityToFirestore("users", newUser.username, newUser);
 
         // Sync to ActiveStudents if role is Siswa
         if (role === "Siswa" && studentId && assignedClass) {
@@ -2217,9 +2249,9 @@ app.post("/api/state/update", (req, res) => {
           // Synchronize profile picture, name, and class down to ActiveStudents and registeredStudents if they exist
           const currentUserObj = state.users[index];
           if (["Siswa", "Alumni"].includes(currentUserObj.role)) {
-            const regIndex = state.registeredStudents.findIndex(rs => 
-              rs.email.trim().toLowerCase() === currentUserObj.email.trim().toLowerCase() ||
-              rs.name.trim().toLowerCase() === currentUserObj.name.trim().toLowerCase()
+            const regIndex = state.registeredStudents.findIndex(rs =>
+              (currentUserObj.email && (rs.email || "").trim().toLowerCase() === (currentUserObj.email || "").trim().toLowerCase()) ||
+              (rs.name || "").trim().toLowerCase() === (currentUserObj.name || "").trim().toLowerCase()
             );
             if (regIndex !== -1 && currentUserObj.profilePicture && state.registeredStudents[regIndex].docFoto !== currentUserObj.profilePicture) {
               state.registeredStudents[regIndex].docFoto = currentUserObj.profilePicture;
@@ -2415,14 +2447,15 @@ app.post("/api/state/update", (req, res) => {
       }
       if (action === "clear_chat") {
         const { myChatId, otherChatId, isGroup } = payload;
-        if (isGroup) {
-          state.messages = state.messages.filter(m => m.receiverId !== otherChatId);
-        } else {
-          state.messages = state.messages.filter(m => !(
-            (m.senderId === myChatId && m.receiverId === otherChatId) ||
-            (m.senderId === otherChatId && m.receiverId === myChatId)
-          ));
-        }
+        const toRemove = isGroup
+          ? state.messages.filter(m => m.receiverId === otherChatId)
+          : state.messages.filter(m => (
+              (m.senderId === myChatId && m.receiverId === otherChatId) ||
+              (m.senderId === otherChatId && m.receiverId === myChatId)
+            ));
+        const removeIds = new Set(toRemove.map(m => m.id));
+        state.messages = state.messages.filter(m => !removeIds.has(m.id));
+        toRemove.forEach(m => deleteEntityFromFirestore("messages", m.id));
         return res.json({ success: true });
       }
     }

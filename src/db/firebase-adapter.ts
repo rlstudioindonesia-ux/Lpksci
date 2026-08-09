@@ -151,7 +151,7 @@ export async function loadStateFromFirestore(fallbackState: any) {
     let hasData = false;
 
     // Load customization and collections concurrently
-    const [custDoc, slideDoc, galleryDoc, ...snapshots] = await Promise.all([
+    const [custDoc, slideDoc, galleryDoc, costConfigDoc, ...snapshots] = await Promise.all([
       getDocFromServer(doc(db, 'system', 'customization')).catch((err) => {
         handleFirestoreError(err, OperationType.GET, 'system/customization');
         return null;
@@ -162,6 +162,10 @@ export async function loadStateFromFirestore(fallbackState: any) {
       }),
       getDocFromServer(doc(db, 'system', 'galleries')).catch((err) => {
         handleFirestoreError(err, OperationType.GET, 'system/galleries');
+        return null;
+      }),
+      getDocFromServer(doc(db, 'system', 'costConfig')).catch((err) => {
+        handleFirestoreError(err, OperationType.GET, 'system/costConfig');
         return null;
       }),
       ...collections.map(collName => getDocs(collection(db, collName)).catch((err) => {
@@ -191,6 +195,11 @@ export async function loadStateFromFirestore(fallbackState: any) {
       writeCache.set('system/galleries', JSON.stringify(sanitizeFirestoreData(galleryDoc.data())));
     } else {
       loadedState.galleries = [];
+    }
+    if (costConfigDoc && costConfigDoc.exists()) {
+      loadedState.costConfig = costConfigDoc.data();
+      hasData = true;
+      writeCache.set('system/costConfig', JSON.stringify(sanitizeFirestoreData(costConfigDoc.data())));
     }
     if (loadedState.customization) {
 

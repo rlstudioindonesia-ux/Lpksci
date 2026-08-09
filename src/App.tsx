@@ -46,6 +46,7 @@ import {
 } from "lucide-react";
 import PrivacyPolicyModal from "./components/PrivacyPolicyModal";
 import LoginModal from "./components/LoginModal";
+import ChangePasswordPrompt from "./components/ChangePasswordPrompt";
 import ResetPasswordView from "./components/ResetPasswordView";
 import PembayaranSiswaView from "./components/PembayaranSiswaView";
 import JobsView from "./components/JobsView";
@@ -231,6 +232,7 @@ export default function App() {
     }
   }, [currentUser, activeTab]);
   const [isPrivacyOpen, setIsPrivacyOpen] = useState<boolean>(false);
+  const [showChangePasswordPrompt, setShowChangePasswordPrompt] = useState<boolean>(false);
   const [pendingAdminStudentSearch, setPendingAdminStudentSearch] = useState<string>("");
   const [adminSegment, setAdminSegment] = useState<
     | "siswa"
@@ -1175,10 +1177,11 @@ export default function App() {
               handleUpdateState={handleUpdateState}
               activeTab={activeTab}
               setActiveTab={(t) => setActiveTab(t)}
-              onLoginSuccess={(user) => {
+              onLoginSuccess={(user, isDefaultPassword) => {
                 const now = new Date().toISOString();
                 handleUpdateState("users", "edit", { username: user.username, lastActive: now });
                 setCurrentUser({ ...user, lastActive: now });
+                if (isDefaultPassword) setShowChangePasswordPrompt(true);
                 if (user.role === "Siswa" || user.role === "Pengajar")
                   setActiveTab("lms");
                 if (user.role === "Admin" || user.role === "Admin Super" || user.role === "Admin Biasa") setActiveTab("admin");
@@ -1209,16 +1212,25 @@ export default function App() {
         <LoginModal
           systemState={systemState}
           onClose={() => setIsLoginOpen(false)}
-          onLoginSuccess={(user) => {
+          onLoginSuccess={(user, isDefaultPassword) => {
                 const now = new Date().toISOString();
                 handleUpdateState("users", "edit", { username: user.username, lastActive: now });
                 setCurrentUser({ ...user, lastActive: now });
+                if (isDefaultPassword) setShowChangePasswordPrompt(true);
             // Auto redirect to authorized view for exceptional onboarding experience!
             if (user.role === "Siswa" || user.role === "Pengajar")
               setActiveTab("lms");
             if (user.role === "Admin" || user.role === "Admin Super" || user.role === "Admin Biasa") setActiveTab("admin");
             if (user.role === "VVIP") setActiveTab("vvip");
           }}
+        />
+      )}
+
+      {showChangePasswordPrompt && currentUser && (
+        <ChangePasswordPrompt
+          user={currentUser}
+          onUpdateState={handleUpdateState}
+          onClose={() => setShowChangePasswordPrompt(false)}
         />
       )}
 

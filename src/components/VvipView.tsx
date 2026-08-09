@@ -7,6 +7,7 @@ import React, { useState, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { ConfirmButton } from "./ConfirmButton";
 import { getSafePhotoUrl } from "../lib/storageHelper";
+import { calculateAge } from "../lib/dateUtils";
 import {
   ResponsiveContainer,
   AreaChart,
@@ -4338,7 +4339,7 @@ export default function VvipView({
                     <div>
                       {/* Desktop Table - Spreadsheet-style monitoring, matches Excel referensi PT SCI */}
                       <div className="hidden md:block overflow-x-auto rounded-[1.5rem] border border-slate-200/80 shadow-3xs bg-white">
-                        <table className="w-full min-w-[1900px] text-left border-collapse text-[11px] bg-white">
+                        <table className="w-full min-w-[1650px] text-left border-collapse text-[11px] bg-white">
                           <thead>
                             <tr className="bg-slate-50/90 border-b border-slate-200/80 text-[9.5px] font-black text-slate-500 uppercase tracking-wider">
                               <th className="px-3 py-3">No</th>
@@ -4353,9 +4354,6 @@ export default function VvipView({
                               <th className="px-3 py-3 bg-blue-50/60">Job 1 - Tgl Mensetsu</th>
                               <th className="px-3 py-3 bg-blue-50/60">Job 1 - Lokasi</th>
                               <th className="px-3 py-3">Bulan Lulus</th>
-                              <th className="px-3 py-3 bg-violet-50/60">Job 2 - Bidang</th>
-                              <th className="px-3 py-3 bg-violet-50/60">Job 2 - Tgl Mensetsu</th>
-                              <th className="px-3 py-3 bg-violet-50/60">Job 2 - Lokasi</th>
                               <th className="px-3 py-3 text-center">Tahun Lulus</th>
                               <th className="px-3 py-3 text-center">Kehadiran</th>
                               <th className="px-3 py-3 text-center">Attitude</th>
@@ -4371,7 +4369,7 @@ export default function VvipView({
                           <tbody className="divide-y divide-slate-100 font-normal">
                             {paginatedStudents.length === 0 ? (
                               <tr>
-                                <td colSpan={24} className="px-5 py-10 text-center text-slate-400 font-medium italic">
+                                <td colSpan={21} className="px-5 py-10 text-center text-slate-400 font-medium italic">
                                   Tidak ditemukan siswa bimbingan yang sesuai dengan filter kriteria.
                                 </td>
                               </tr>
@@ -4435,7 +4433,7 @@ export default function VvipView({
                                         </div>
                                       </div>
                                     </td>
-                                    <td className="px-3 py-3 text-center font-mono text-slate-600">{(student as any).age || "-"}</td>
+                                    <td className="px-3 py-3 text-center font-mono text-slate-600">{calculateAge(student.birthDate) ?? (student as any).age ?? "-"}</td>
                                     <td className="px-3 py-3 text-center font-bold text-slate-500">{jk}</td>
                                     <td className="px-3 py-3 whitespace-nowrap">
                                       <span className="font-mono font-extrabold text-indigo-700">Bab {lastBab}</span>
@@ -4450,9 +4448,6 @@ export default function VvipView({
                                     <td className="px-3 py-3 whitespace-nowrap bg-blue-50/20 text-slate-500 font-mono">{(student as any).job1TanggalMensetsu || "-"}</td>
                                     <td className="px-3 py-3 whitespace-nowrap bg-blue-50/20 text-slate-600">{(student as any).job1Lokasi || "-"}</td>
                                     <td className="px-3 py-3 whitespace-nowrap text-slate-600 font-bold">{(student as any).bulanKelulusan || "-"}</td>
-                                    <td className="px-3 py-3 whitespace-nowrap bg-violet-50/20 text-slate-600">{(student as any).job2Bidang || "-"}</td>
-                                    <td className="px-3 py-3 whitespace-nowrap bg-violet-50/20 text-slate-500 font-mono">{(student as any).job2TanggalMensetsu || "-"}</td>
-                                    <td className="px-3 py-3 whitespace-nowrap bg-violet-50/20 text-slate-600">{(student as any).job2Lokasi || "-"}</td>
                                     <td className="px-3 py-3 text-center font-mono text-slate-600">{student.graduationYear || "-"}</td>
                                     <td className="px-3 py-3 text-center font-mono font-extrabold text-slate-800">{rate !== null ? `${rate}%` : "-"}</td>
                                     <td className="px-3 py-3 text-center font-mono text-slate-600">{(student as any).attitudeScore ?? "-"}</td>

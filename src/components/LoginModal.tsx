@@ -20,9 +20,13 @@ const isAndroidWebView = () => {
 
 interface LoginModalProps {
   onClose: () => void;
-  onLoginSuccess: (user: UserAccount) => void;
+  onLoginSuccess: (user: UserAccount, isDefaultPassword?: boolean) => void;
   systemState: SystemState;
 }
+
+// Siswa/Alumni yang masih login dengan password bawaan (default) perlu diminta menggantinya.
+const isDefaultPasswordLogin = (user: UserAccount, plainPassword: string) =>
+  (user.role === "Siswa" || user.role === "Alumni") && plainPassword === "123456";
 
 export default function LoginModal({
   onClose,
@@ -273,7 +277,7 @@ export default function LoginModal({
         // Coba login via Firebase Auth (untuk sinkronisasi password setelah reset email)
         if (existingUser.email) {
            await signInWithEmailAndPassword(auth, existingUser.email, cleanPassword);
-           onLoginSuccess(existingUser);
+           onLoginSuccess(existingUser, isDefaultPasswordLogin(existingUser, cleanPassword));
            onClose();
            return;
         }
@@ -301,7 +305,7 @@ export default function LoginModal({
           if (existingUser.email) {
               createUserWithEmailAndPassword(auth, existingUser.email, cleanPassword).catch(() => {});
           }
-          onLoginSuccess(verifiedUser);
+          onLoginSuccess(verifiedUser, isDefaultPasswordLogin(verifiedUser, cleanPassword));
           onClose();
           return;
         }

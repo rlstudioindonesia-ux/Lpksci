@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Briefcase, MapPin, Building2, User } from 'lucide-react';
 import { UserAccount, SystemState, JobOrder } from '../types';
 import { ConfirmButton } from './ConfirmButton';
+import { calculateAge } from '../lib/dateUtils';
 
 interface JobsViewProps {
   currentUser: UserAccount | null;
@@ -242,7 +243,7 @@ export default function JobsView({ currentUser, systemState, onUpdateState }: Jo
 
                             const ageMatches = job.ageRequirement?.match(/(\d+)/g);
                             if (ageMatches && ageMatches.length >= 1) { minAge = parseInt(ageMatches[0]); if (ageMatches.length >= 2) maxAge = parseInt(ageMatches[1]); }
-                            myAge = me.age || 0;
+                            myAge = calculateAge(me.birthDate) ?? me.age ?? 0;
 
                             const jpnMatches = (job.minJapaneseScore || "BAB 15").toString().match(/(\d+)/);
                             if (jpnMatches && jpnMatches[1]) minJpn = parseInt(jpnMatches[1]);

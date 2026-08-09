@@ -1303,6 +1303,7 @@ export default function AdminView({
       statusPendaftaran: finalStatusPendaftaran,
       status: regMatch?.status || "Terverifikasi",
       date: regMatch?.date || activeMatch?.date || "-",
+      batch: am?.batch || "",
       proofOfPayment: regMatch?.proofOfPayment || (activeMatch as any)?.proofOfPayment,
       profilePicture: finalProfilePicture,
       docFoto: finalProfilePicture,
@@ -1364,6 +1365,7 @@ export default function AdminView({
       const activeSuccess = await onUpdateState("activeStudents", "update_status", {
         id: activeInfo.id,
         name: adminRegData.name,
+        batch: adminRegData.batch,
         phone: adminRegData.phone,
         district: adminRegData.district,
         birthDate: adminRegData.birthDate,
@@ -10179,6 +10181,23 @@ export default function AdminView({
                           setAdminRegData({
                             ...adminRegData,
                             program: e.target.value,
+                          })
+                        }
+                        className="w-full text-sm font-semibold rounded-xl border border-slate-200 px-3 py-2 outline-none focus:border-indigo-500 transition bg-slate-50"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider block">
+                        Angkatan
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Contoh: Angkatan 11, Angkatan 12..."
+                        value={adminRegData.batch || ""}
+                        onChange={(e) =>
+                          setAdminRegData({
+                            ...adminRegData,
+                            batch: e.target.value,
                           })
                         }
                         className="w-full text-sm font-semibold rounded-xl border border-slate-200 px-3 py-2 outline-none focus:border-indigo-500 transition bg-slate-50"
