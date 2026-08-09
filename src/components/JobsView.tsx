@@ -220,10 +220,32 @@ export default function JobsView({ currentUser, systemState, onUpdateState }: Jo
                           let reqGender = "", myGender = "";
 
                           if (me && job) {
-                            mathScore = me.mathScore ?? 0;
+                            // Bahasa Jepang & Matematika are auto-computed elsewhere (Penilaian
+                            // Kelayakan Order Job) from real chapter assessments once the student
+                            // has graded chapters, but that computed average is display-only and
+                            // never written back to me.japaneseScore/me.mathScore - so this
+                            // eligibility check must compute it the same way instead of reading a
+                            // stored field that stays stale/zero forever once assessments exist.
+                            const myAssessments = (systemState.chapterAssessments || []).filter(
+                              (a) => a.studentId === me.id || (a.studentName && a.studentName === me.name)
+                            );
+                            const jpnAssessments = myAssessments.filter(
+                              (a) => (a.subject || "Bahasa Jepang") === "Bahasa Jepang" &&
+                                     (a.status === "Telah Dinilai" || a.status === "Sudah Dinilai") &&
+                                     typeof a.score === "number" && !isNaN(a.score)
+                            );
+                            const mathAssessments = myAssessments.filter(
+                              (a: any) => (a.subject === "SSW" || a.subject === "Matematika" || a.subject === "SSW Matematika") &&
+                                     (a.status === "Telah Dinilai" || a.status === "Sudah Dinilai") &&
+                                     typeof a.score === "number" && !isNaN(a.score)
+                            );
+
+                            mathScore = mathAssessments.length > 0
+                              ? Math.round(mathAssessments.reduce((acc, curr) => acc + (curr.score || 0), 0) / mathAssessments.length)
+                              : (me.mathScore ?? 0);
                             fiveSScore = me.fiveSScore ?? 0;
                             ethicsScore = me.ethicsScore ?? 0;
-                            
+
                             const records = systemState.attendance.filter((r) => r.studentName === me.name || r.studentId === me.id);
                             const rateAtt = records.length > 0 ? Math.round((records.filter((r) => r.status === "Hadir").length / records.length) * 100) : 0;
                             attendanceScore = me.attendanceScore ?? rateAtt;
@@ -247,7 +269,9 @@ export default function JobsView({ currentUser, systemState, onUpdateState }: Jo
 
                             const jpnMatches = (job.minJapaneseScore || "BAB 15").toString().match(/(\d+)/);
                             if (jpnMatches && jpnMatches[1]) minJpn = parseInt(jpnMatches[1]);
-                            myJpn = me.japaneseScore || 0;
+                            myJpn = jpnAssessments.length > 0
+                              ? Math.round(jpnAssessments.reduce((acc, curr) => acc + (curr.score || 0), 0) / jpnAssessments.length)
+                              : (me.japaneseScore || 0);
 
                             reqGender = job.gender?.toUpperCase() || "";
                             myGender = me.gender?.toUpperCase() || "";

@@ -4242,6 +4242,11 @@ export default function AdminView({
                       // Filter active students available for recommendation
                       const recommendableStudents =
                         systemState.activeStudents.filter((st) => {
+                          // Only students who have progressed far enough to be job-ready
+                          // (still "Belajar" means they haven't finished the curriculum yet)
+                          const isJobReady = ["Lulus", "On Proges Job", "On Progres JFT/JLPT/SSW", "Diklat SO"].includes(st.status);
+                          if (!isJobReady) return false;
+
                           // Check if they are locked in another active job (locked if they are recommended, showed interest, or approved)
                           const lockedInOtherJob = systemState.jobOrders.some(
                             (otherJob) =>
