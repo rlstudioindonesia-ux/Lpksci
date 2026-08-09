@@ -9,7 +9,11 @@ import {
   Eye,
   EyeOff,
 } from "lucide-react";
-import { SystemState } from "../types";
+import { SystemState, UserAccount } from "../types";
+
+// Siswa/Alumni yang masih login dengan password bawaan (default) perlu diminta menggantinya.
+const isDefaultPasswordLogin = (user: UserAccount, plainPassword: string) =>
+  (user.role === "Siswa" || user.role === "Alumni") && plainPassword === "123456";
 
 const isAndroidWebView = () => {
   if (typeof window === "undefined") return false;
@@ -29,7 +33,7 @@ export function InlineLoginPanel({
   title: string;
   requiredRole: string;
   description: string;
-  onLoginSuccess: (user: any) => void;
+  onLoginSuccess: (user: any, isDefaultPassword?: boolean) => void;
   systemState: SystemState;
 }) {
   const [errorMsg, setErrorMsg] = useState("");
@@ -171,7 +175,7 @@ export function InlineLoginPanel({
       try {
         if (existingUser.email) {
            await signInWithEmailAndPassword(auth, existingUser.email, cleanPassword);
-           onLoginSuccess(existingUser);
+           onLoginSuccess(existingUser, isDefaultPasswordLogin(existingUser, cleanPassword));
            return;
         }
       } catch (err) {}
@@ -193,7 +197,7 @@ export function InlineLoginPanel({
           if (existingUser.email) {
             createUserWithEmailAndPassword(auth, existingUser.email, cleanPassword).catch(() => {});
           }
-          onLoginSuccess(verifiedUser);
+          onLoginSuccess(verifiedUser, isDefaultPasswordLogin(verifiedUser, cleanPassword));
           return;
         }
       } catch (err) {}

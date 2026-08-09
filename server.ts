@@ -2217,9 +2217,9 @@ app.post("/api/state/update", (req, res) => {
           // Synchronize profile picture, name, and class down to ActiveStudents and registeredStudents if they exist
           const currentUserObj = state.users[index];
           if (["Siswa", "Alumni"].includes(currentUserObj.role)) {
-            const regIndex = state.registeredStudents.findIndex(rs => 
-              rs.email.trim().toLowerCase() === currentUserObj.email.trim().toLowerCase() ||
-              rs.name.trim().toLowerCase() === currentUserObj.name.trim().toLowerCase()
+            const regIndex = state.registeredStudents.findIndex(rs =>
+              (currentUserObj.email && (rs.email || "").trim().toLowerCase() === (currentUserObj.email || "").trim().toLowerCase()) ||
+              (rs.name || "").trim().toLowerCase() === (currentUserObj.name || "").trim().toLowerCase()
             );
             if (regIndex !== -1 && currentUserObj.profilePicture && state.registeredStudents[regIndex].docFoto !== currentUserObj.profilePicture) {
               state.registeredStudents[regIndex].docFoto = currentUserObj.profilePicture;

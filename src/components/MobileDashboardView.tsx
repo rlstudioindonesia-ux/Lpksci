@@ -185,6 +185,10 @@ const isAndroidWebView = () => {
   return isAndroid && isWebView;
 };
 
+// Siswa/Alumni yang masih login dengan password bawaan (default) perlu diminta menggantinya.
+const isDefaultPasswordLogin = (user: UserAccount, plainPassword: string) =>
+  (user.role === "Siswa" || user.role === "Alumni") && plainPassword === "123456";
+
 const getZoomAppLink = (webUrl: string) => {
   if (!webUrl) return "";
   const trimmed = webUrl.trim();
@@ -248,7 +252,7 @@ interface MobileDashboardViewProps {
   ) => Promise<boolean>;
   activeTab: string;
   setActiveTab: (tab: string) => void;
-  onLoginSuccess?: (user: UserAccount) => void;
+  onLoginSuccess?: (user: UserAccount, isDefaultPassword?: boolean) => void;
   onOpenPrivacy?: () => void;
   onLoginAs?: (user: UserAccount) => void;
 }
@@ -605,7 +609,7 @@ export default function MobileDashboardView({
       try {
         if (existingUser.email) {
            await signInWithEmailAndPassword(auth, existingUser.email, cleanPassword);
-           onLoginSuccess?.(existingUser);
+           onLoginSuccess?.(existingUser, isDefaultPasswordLogin(existingUser, cleanPassword));
            return;
         }
       } catch (err) {}
@@ -627,7 +631,7 @@ export default function MobileDashboardView({
           if (existingUser.email) {
               createUserWithEmailAndPassword(auth, existingUser.email, cleanPassword).catch(() => {});
           }
-          onLoginSuccess?.(verifiedUser);
+          onLoginSuccess?.(verifiedUser, isDefaultPasswordLogin(verifiedUser, cleanPassword));
           return;
         }
       } catch (err) {}
@@ -1444,7 +1448,7 @@ export default function MobileDashboardView({
                 title="E-Benkyou LMS"
                 requiredRole="Siswa"
                 description="Masuk untuk mengakses materi latihan kuis kosakata, gramatika, dan modul Kaigo LPK Pati."
-                onLoginSuccess={(u) => onLoginSuccess?.(u)}
+                onLoginSuccess={(u, isDefaultPassword) => onLoginSuccess?.(u, isDefaultPassword)}
                 systemState={systemState}
               />
             ) : (
@@ -2206,7 +2210,7 @@ export default function MobileDashboardView({
                 title="Admin Desk Portal"
                 requiredRole="Admin"
                 description="Akses terkunci! Halaman admin keuangan siswa, inventaris, dan perizinan membutuhkan autentikasi Admin LPK."
-                onLoginSuccess={(u) => onLoginSuccess?.(u)}
+                onLoginSuccess={(u, isDefaultPassword) => onLoginSuccess?.(u, isDefaultPassword)}
                 systemState={systemState}
               />
             ) : currentUser.role === "Admin Biasa" && (activeSubpage === "admin_pembayaran" || activeSubpage === "admin_pajak" || activeSubpage === "admin_gaji") ? (
@@ -2237,7 +2241,7 @@ export default function MobileDashboardView({
                 title="VVIP Executive KPI"
                 requiredRole="Direktur Utama VVIP (CEO)"
                 description="Halaman dashboard overview KPI monitoring ini hanya dapat diakses oleh Direktur Utama (VVIP/CEO) LPK."
-                onLoginSuccess={(u) => onLoginSuccess?.(u)}
+                onLoginSuccess={(u, isDefaultPassword) => onLoginSuccess?.(u, isDefaultPassword)}
                 systemState={systemState}
               />
             ) : (
@@ -3367,7 +3371,7 @@ export default function MobileDashboardView({
                 title="Program Afiliasi SCI"
                 requiredRole="Siswa"
                 description="Masuk untuk mengakses kode referral Anda dan memonitor pendaftaran siswa yang Anda rekomendasikan."
-                onLoginSuccess={(u) => onLoginSuccess?.(u)}
+                onLoginSuccess={(u, isDefaultPassword) => onLoginSuccess?.(u, isDefaultPassword)}
                 systemState={systemState}
               />
             ) : (

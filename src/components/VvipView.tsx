@@ -7,6 +7,7 @@ import React, { useState, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { ConfirmButton } from "./ConfirmButton";
 import { getSafePhotoUrl } from "../lib/storageHelper";
+import { calculateAge } from "../lib/dateUtils";
 import {
   ResponsiveContainer,
   AreaChart,
@@ -4435,7 +4436,7 @@ export default function VvipView({
                                         </div>
                                       </div>
                                     </td>
-                                    <td className="px-3 py-3 text-center font-mono text-slate-600">{(student as any).age || "-"}</td>
+                                    <td className="px-3 py-3 text-center font-mono text-slate-600">{calculateAge(student.birthDate) ?? (student as any).age ?? "-"}</td>
                                     <td className="px-3 py-3 text-center font-bold text-slate-500">{jk}</td>
                                     <td className="px-3 py-3 whitespace-nowrap">
                                       <span className="font-mono font-extrabold text-indigo-700">Bab {lastBab}</span>

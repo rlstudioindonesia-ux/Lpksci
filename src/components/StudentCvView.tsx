@@ -16,6 +16,7 @@ import {
   Loader2,
 } from "lucide-react";
 import { uploadFileToFirebase } from "../lib/storageHelper";
+import { calculateAge } from "../lib/dateUtils";
 import { ActiveStudent } from "../types";
 
 interface StudentCvViewProps {
@@ -222,7 +223,8 @@ export default function StudentCvView({
     try {
       const payload = {
         id: student.id,
-        ...formData
+        ...formData,
+        age: calculateAge(formData.birthDate) ?? formData.age,
       };
       const result = await onUpdateStudent(payload);
       if (result) {
@@ -446,13 +448,16 @@ export default function StudentCvView({
                     />
                   </div>
                   <div>
-                    <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">Umur (Tahun)</label>
+                    <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">
+                      Umur (Tahun) <span className="text-slate-400 normal-case font-medium">- Otomatis dari tanggal lahir</span>
+                    </label>
                     <input
                       type="number"
-                      placeholder="e.g. 23"
-                      value={formData.age || ""}
-                      onChange={(e) => handleFieldChange("age", e.target.value ? Number(e.target.value) : "")}
-                      className="w-full text-xs p-3 border border-slate-200 rounded-xl outline-none focus:border-indigo-500"
+                      placeholder="Isi tanggal lahir dahulu"
+                      value={calculateAge(formData.birthDate) ?? ""}
+                      readOnly
+                      disabled
+                      className="w-full text-xs p-3 border border-slate-200 rounded-xl outline-none bg-slate-50 text-slate-500 cursor-not-allowed"
                     />
                   </div>
                   <div>
@@ -1355,7 +1360,10 @@ export default function StudentCvView({
                         <div className="text-[8.5px] text-slate-500">Umur :</div>
                       </td>
                       <td className="border border-black p-2 font-bold w-[120px]">
-                        {formData.age ? `${formData.age} 歳 Tahun` : "-"}
+                        {(() => {
+                          const computedAge = calculateAge(formData.birthDate) ?? formData.age;
+                          return computedAge ? `${computedAge} 歳 Tahun` : "-";
+                        })()}
                       </td>
                     </tr>
 
