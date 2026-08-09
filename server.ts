@@ -1028,6 +1028,7 @@ app.post("/api/state/update", (req, res) => {
       } else {
         state.payments.unshift(newPay);
       }
+      syncEntityToFirestore("payments", payId, existingIdx !== -1 ? state.payments[existingIdx] : newPay);
       return res.json({ success: true, item: newPay });
     }
 
@@ -1044,6 +1045,7 @@ app.post("/api/state/update", (req, res) => {
         );
         if (regMatch) {
           regMatch.paymentStatus = payload.status;
+          syncEntityToFirestore("registeredStudents", regMatch.id, regMatch);
         }
         
         // Auto-record to cash ledger if marked as Lunas
@@ -1066,7 +1068,8 @@ app.post("/api/state/update", (req, res) => {
              syncEntityToFirestore('cashLedger', newLedger.id, newLedger);
            }
         }
-        
+
+        syncEntityToFirestore("payments", state.payments[index].id, state.payments[index]);
         return res.json({ success: true, item: state.payments[index] });
       }
     }
@@ -1095,6 +1098,7 @@ app.post("/api/state/update", (req, res) => {
         if (status !== undefined) state.payments[index].status = status;
         if (isSigned !== undefined) state.payments[index].isSigned = isSigned;
         if (signatureDate !== undefined) state.payments[index].signatureDate = signatureDate;
+        syncEntityToFirestore("payments", state.payments[index].id, state.payments[index]);
         return res.json({ success: true, item: state.payments[index] });
       }
     }
@@ -1105,6 +1109,7 @@ app.post("/api/state/update", (req, res) => {
       if (index !== -1) {
         state.payments[index].isSigned = isSigned;
         state.payments[index].signatureDate = signatureDate;
+        syncEntityToFirestore("payments", state.payments[index].id, state.payments[index]);
         return res.json({ success: true, item: state.payments[index] });
       }
     }
@@ -1119,6 +1124,7 @@ app.post("/api/state/update", (req, res) => {
         location: payload.location || "Kantor"
       };
       state.inventory.unshift(newItem);
+      syncEntityToFirestore("inventory", newItem.id, newItem);
       return res.json({ success: true, item: newItem });
     }
 
@@ -1139,6 +1145,7 @@ app.post("/api/state/update", (req, res) => {
           condition: payload.condition || state.inventory[idx].condition,
           location: payload.location || state.inventory[idx].location,
         };
+        syncEntityToFirestore("inventory", state.inventory[idx].id, state.inventory[idx]);
         return res.json({ success: true });
       }
       return res.status(404).json({ error: "Item not found" });
@@ -1153,6 +1160,7 @@ app.post("/api/state/update", (req, res) => {
         if (payload.sptFile !== undefined) state.taxes[index].sptFile = payload.sptFile;
         if (payload.financialReportFile !== undefined) state.taxes[index].financialReportFile = payload.financialReportFile;
         if (payload.notes !== undefined) state.taxes[index].notes = payload.notes;
+        syncEntityToFirestore("taxes", state.taxes[index].id, state.taxes[index]);
         return res.json({ success: true, item: state.taxes[index] });
       } else {
         const newTax = {
@@ -1168,6 +1176,7 @@ app.post("/api/state/update", (req, res) => {
           notes: payload.notes || ""
         };
         state.taxes.push(newTax);
+        syncEntityToFirestore("taxes", newTax.id, newTax);
         return res.json({ success: true, item: newTax });
       }
     }
@@ -1186,6 +1195,7 @@ app.post("/api/state/update", (req, res) => {
         notes: payload.notes || ""
       };
       state.taxes.push(newTax);
+      syncEntityToFirestore("taxes", newTax.id, newTax);
       return res.json({ success: true, item: newTax });
     }
 
@@ -1203,6 +1213,7 @@ app.post("/api/state/update", (req, res) => {
             (payload.taxRate !== undefined ? Number(payload.taxRate) : state.taxes[index].taxRate)
           )
         };
+        syncEntityToFirestore("taxes", state.taxes[index].id, state.taxes[index]);
         return res.json({ success: true, item: state.taxes[index] });
       }
       return res.status(404).json({ error: "Tax record not found" });
@@ -1281,7 +1292,8 @@ app.post("/api/state/update", (req, res) => {
              syncEntityToFirestore('cashLedger', newLedger.id, newLedger);
            }
         }
-        
+
+        syncEntityToFirestore("payments", state.payments[idx].id, state.payments[idx]);
         return res.json({ success: true, updated: state.payments[idx], item: state.payments[idx] });
       } else {
         const newPay = {
@@ -1313,6 +1325,7 @@ app.post("/api/state/update", (req, res) => {
            }
         }
 
+        syncEntityToFirestore("payments", newPay.id, newPay);
         return res.json({ success: true, updated: newPay, item: newPay });
       }
     }
@@ -1822,6 +1835,7 @@ app.post("/api/state/update", (req, res) => {
         // Sync with users account (creating if they don't exist yet)
         syncActiveStudentToAlumniUser(newId, name, newStudent.status, payload.profilePicture);
 
+        syncEntityToFirestore("activeStudents", newStudent.id, newStudent);
         return res.json({ success: true, item: newStudent });
       }
 
