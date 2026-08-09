@@ -180,7 +180,7 @@ const resizeImage = (
   reader.readAsDataURL(file);
 };
 
-interface AdminViewProps { systemState: any; currentUser: any; onUpdateState: any; initialSegment?: any; onSegmentChange?: (segment: any) => void; }
+interface AdminViewProps { systemState: any; currentUser: any; onUpdateState: any; initialSegment?: any; onSegmentChange?: (segment: any) => void; initialStudentSearch?: string; }
 export const sortStudentsByDateDesc = (a: any, b: any) => {
   const idA = parseInt((a.id || "").replace(/\D/g, "") || "0");
   const idB = parseInt((b.id || "").replace(/\D/g, "") || "0");
@@ -200,6 +200,7 @@ export default function AdminView({
   onUpdateState,
   initialSegment,
   onSegmentChange,
+  initialStudentSearch,
 }: AdminViewProps) {
   const [activeSegment, setActiveSegment] = useState<
     | "siswa"
@@ -408,6 +409,15 @@ export default function AdminView({
       setActiveSegment(initialSegment);
     }
   }, [initialSegment]);
+
+  React.useEffect(() => {
+    if (initialStudentSearch) {
+      setActiveSegment("siswa");
+      setSiswaTab("aktif");
+      setSiswaSearch(initialStudentSearch);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialStudentSearch]);
 
   React.useEffect(() => {
     if (onSegmentChange && activeSegment) {
@@ -1296,6 +1306,19 @@ export default function AdminView({
       proofOfPayment: regMatch?.proofOfPayment || (activeMatch as any)?.proofOfPayment,
       profilePicture: finalProfilePicture,
       docFoto: finalProfilePicture,
+      mitraSO: am?.mitraSO || "",
+      jobKeterangan: am?.jobKeterangan || "",
+      job1Bidang: am?.job1Bidang || "",
+      job1TanggalMensetsu: am?.job1TanggalMensetsu || "",
+      job1Lokasi: am?.job1Lokasi || "",
+      job2Bidang: am?.job2Bidang || "",
+      job2TanggalMensetsu: am?.job2TanggalMensetsu || "",
+      job2Lokasi: am?.job2Lokasi || "",
+      bulanKelulusan: am?.bulanKelulusan || "",
+      attitudeScore: am?.attitudeScore ?? "",
+      kaiwaScore: am?.kaiwaScore ?? "",
+      bobotNilaiRekomendasi: am?.bobotNilaiRekomendasi ?? "",
+      keterangan: am?.keterangan || "",
     };
 
     setAdminRegData(mergedData);
@@ -1353,6 +1376,19 @@ export default function AdminView({
         class: adminRegData.program || activeInfo.class,
         profilePicture: adminRegData.profilePicture || adminRegData.docFoto,
         docFoto: adminRegData.docFoto || adminRegData.profilePicture,
+        keterangan: adminRegData.keterangan,
+        mitraSO: adminRegData.mitraSO,
+        jobKeterangan: adminRegData.jobKeterangan,
+        job1Bidang: adminRegData.job1Bidang,
+        job1TanggalMensetsu: adminRegData.job1TanggalMensetsu,
+        job1Lokasi: adminRegData.job1Lokasi,
+        job2Bidang: adminRegData.job2Bidang,
+        job2TanggalMensetsu: adminRegData.job2TanggalMensetsu,
+        job2Lokasi: adminRegData.job2Lokasi,
+        bulanKelulusan: adminRegData.bulanKelulusan,
+        attitudeScore: adminRegData.attitudeScore === "" ? null : adminRegData.attitudeScore,
+        kaiwaScore: adminRegData.kaiwaScore === "" ? null : adminRegData.kaiwaScore,
+        bobotNilaiRekomendasi: adminRegData.bobotNilaiRekomendasi === "" ? null : adminRegData.bobotNilaiRekomendasi,
       });
       if (activeSuccess) success = true;
     }
@@ -10343,6 +10379,171 @@ export default function AdminView({
                           )}
                         </button>
                       </div>
+                    </div>
+                  </div>
+
+                  {/* JOB MATCHING & EVALUASI - sesuai monitoring Excel */}
+                  <div className="border-t border-slate-100 pt-5 space-y-4">
+                    <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center gap-2">
+                      <span className="bg-amber-100 text-amber-700 p-1.5 rounded-lg">
+                        <Landmark className="h-3.5 w-3.5" />
+                      </span>
+                      Job Matching & Evaluasi
+                    </h4>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider block">
+                          Mitra SO / TSK
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="Contoh: OSSI/BREXA, LINK BALI"
+                          value={adminRegData.mitraSO || ""}
+                          onChange={(e) => setAdminRegData({ ...adminRegData, mitraSO: e.target.value })}
+                          className="w-full text-sm font-semibold rounded-xl border border-slate-200 px-3 py-2 outline-none focus:border-indigo-500 transition bg-slate-50"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider block">
+                          Keterangan (Status Job Matching)
+                        </label>
+                        <select
+                          value={adminRegData.jobKeterangan || ""}
+                          onChange={(e) => setAdminRegData({ ...adminRegData, jobKeterangan: e.target.value })}
+                          className="w-full text-sm font-semibold rounded-xl border border-slate-200 px-3 py-2 outline-none focus:border-indigo-500 transition bg-slate-50 cursor-pointer"
+                        >
+                          <option value="">-</option>
+                          <option value="Lulus">Lulus</option>
+                          <option value="Interview">Interview</option>
+                          <option value="SA/Mendang">SA/Mendang</option>
+                          <option value="Out">Out</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="bg-slate-50/70 border border-slate-150 rounded-2xl p-4 space-y-3">
+                      <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider block">List Job (1)</span>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <input
+                          type="text"
+                          placeholder="Bidang"
+                          value={adminRegData.job1Bidang || ""}
+                          onChange={(e) => setAdminRegData({ ...adminRegData, job1Bidang: e.target.value })}
+                          className="w-full text-xs font-semibold rounded-xl border border-slate-200 px-3 py-2 outline-none focus:border-indigo-500 transition bg-white"
+                        />
+                        <input
+                          type="text"
+                          placeholder="Tanggal Mensetsu"
+                          value={adminRegData.job1TanggalMensetsu || ""}
+                          onChange={(e) => setAdminRegData({ ...adminRegData, job1TanggalMensetsu: e.target.value })}
+                          className="w-full text-xs font-semibold rounded-xl border border-slate-200 px-3 py-2 outline-none focus:border-indigo-500 transition bg-white"
+                        />
+                        <input
+                          type="text"
+                          placeholder="Lokasi"
+                          value={adminRegData.job1Lokasi || ""}
+                          onChange={(e) => setAdminRegData({ ...adminRegData, job1Lokasi: e.target.value })}
+                          className="w-full text-xs font-semibold rounded-xl border border-slate-200 px-3 py-2 outline-none focus:border-indigo-500 transition bg-white"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="bg-slate-50/70 border border-slate-150 rounded-2xl p-4 space-y-3">
+                      <span className="text-[10px] font-black text-slate-500 uppercase tracking-wider block">List Job (2)</span>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <input
+                          type="text"
+                          placeholder="Bidang"
+                          value={adminRegData.job2Bidang || ""}
+                          onChange={(e) => setAdminRegData({ ...adminRegData, job2Bidang: e.target.value })}
+                          className="w-full text-xs font-semibold rounded-xl border border-slate-200 px-3 py-2 outline-none focus:border-indigo-500 transition bg-white"
+                        />
+                        <input
+                          type="text"
+                          placeholder="Tanggal Mensetsu"
+                          value={adminRegData.job2TanggalMensetsu || ""}
+                          onChange={(e) => setAdminRegData({ ...adminRegData, job2TanggalMensetsu: e.target.value })}
+                          className="w-full text-xs font-semibold rounded-xl border border-slate-200 px-3 py-2 outline-none focus:border-indigo-500 transition bg-white"
+                        />
+                        <input
+                          type="text"
+                          placeholder="Lokasi"
+                          value={adminRegData.job2Lokasi || ""}
+                          onChange={(e) => setAdminRegData({ ...adminRegData, job2Lokasi: e.target.value })}
+                          className="w-full text-xs font-semibold rounded-xl border border-slate-200 px-3 py-2 outline-none focus:border-indigo-500 transition bg-white"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider block">
+                          Bulan Kelulusan
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="Contoh: Juni"
+                          value={adminRegData.bulanKelulusan || ""}
+                          onChange={(e) => setAdminRegData({ ...adminRegData, bulanKelulusan: e.target.value })}
+                          className="w-full text-xs font-semibold rounded-xl border border-slate-200 px-3 py-2 outline-none focus:border-indigo-500 transition bg-slate-50"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider block">
+                          Attitude
+                        </label>
+                        <input
+                          type="number"
+                          min={0}
+                          max={100}
+                          placeholder="0-100"
+                          value={adminRegData.attitudeScore ?? ""}
+                          onChange={(e) => setAdminRegData({ ...adminRegData, attitudeScore: e.target.value })}
+                          className="w-full text-xs font-semibold rounded-xl border border-slate-200 px-3 py-2 outline-none focus:border-indigo-500 transition bg-slate-50"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider block">
+                          Nilai Kaiwa
+                        </label>
+                        <input
+                          type="number"
+                          min={0}
+                          max={100}
+                          placeholder="0-100"
+                          value={adminRegData.kaiwaScore ?? ""}
+                          onChange={(e) => setAdminRegData({ ...adminRegData, kaiwaScore: e.target.value })}
+                          className="w-full text-xs font-semibold rounded-xl border border-slate-200 px-3 py-2 outline-none focus:border-indigo-500 transition bg-slate-50"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider block">
+                          Bobot Rekomendasi
+                        </label>
+                        <input
+                          type="number"
+                          min={0}
+                          max={100}
+                          placeholder="0-100"
+                          value={adminRegData.bobotNilaiRekomendasi ?? ""}
+                          onChange={(e) => setAdminRegData({ ...adminRegData, bobotNilaiRekomendasi: e.target.value })}
+                          className="w-full text-xs font-semibold rounded-xl border border-slate-200 px-3 py-2 outline-none focus:border-indigo-500 transition bg-slate-50"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider block">
+                        Catatan
+                      </label>
+                      <textarea
+                        rows={2}
+                        placeholder="Catatan tambahan mengenai siswa..."
+                        value={adminRegData.keterangan || ""}
+                        onChange={(e) => setAdminRegData({ ...adminRegData, keterangan: e.target.value })}
+                        className="w-full text-sm font-medium rounded-xl border border-slate-200 px-3 py-2 outline-none focus:border-indigo-500 transition bg-slate-50 resize-y"
+                      />
                     </div>
                   </div>
                 </form>

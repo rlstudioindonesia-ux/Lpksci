@@ -231,6 +231,7 @@ export default function App() {
     }
   }, [currentUser, activeTab]);
   const [isPrivacyOpen, setIsPrivacyOpen] = useState<boolean>(false);
+  const [pendingAdminStudentSearch, setPendingAdminStudentSearch] = useState<string>("");
   const [adminSegment, setAdminSegment] = useState<
     | "siswa"
     | "pembayaran"
@@ -711,6 +712,7 @@ export default function App() {
                       currentUser={currentUser}
                       initialSegment={adminSegment}
                       onSegmentChange={setAdminSegment}
+                      initialStudentSearch={pendingAdminStudentSearch}
                     />
                   );
                 })()}
@@ -735,6 +737,10 @@ export default function App() {
                       onUpdateState={handleUpdateState}
                       viewMode={vvipViewMode}
                       onViewModeChange={setVvipViewMode}
+                      onNavigateToAdmin={(studentName: string) => {
+                        setPendingAdminStudentSearch(studentName);
+                        setActiveTab("admin");
+                      }}
                       onLoginAs={(user) => {
                         const now = new Date().toISOString();
                         handleUpdateState("users", "edit", { username: user.username, lastActive: now });
