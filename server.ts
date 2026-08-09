@@ -1872,7 +1872,7 @@ app.post("/api/state/update", (req, res) => {
       }
 
       if (action === "update_status") {
-        const { id, status, class: className, prefecture, city, company, latitude, longitude, profilePicture, sensei, statusPendaftaran, graduationYear, phone, name, currentChapter } = payload;
+        const { id, status, class: className, prefecture, city, company, latitude, longitude, profilePicture, sensei, statusPendaftaran, graduationYear, phone, name, currentChapter, keterangan } = payload;
         const index = state.activeStudents.findIndex(s => s.id === id);
         if (index !== -1) {
           if (status) {
@@ -1979,7 +1979,10 @@ app.post("/api/state/update", (req, res) => {
           if (currentChapter !== undefined) {
             state.activeStudents[index].currentChapter = currentChapter;
           }
-          
+          if (keterangan !== undefined) {
+            state.activeStudents[index].keterangan = keterangan;
+          }
+
           const actStudent = state.activeStudents[index];
           const regIndex = state.registeredStudents.findIndex(rs => rs.id === id || rs.name.trim().toLowerCase() === actStudent.name.trim().toLowerCase());
 

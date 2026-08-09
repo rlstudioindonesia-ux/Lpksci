@@ -2785,6 +2785,23 @@ export default function AdminView({
                                     />
                                   </div>
                                 )}
+                                <input
+                                  type="text"
+                                  placeholder="Keterangan: mitra SO/TSK, lokasi kerja..."
+                                  value={s.keterangan || ""}
+                                  onChange={async (e) => {
+                                    await onUpdateState(
+                                      "activeStudents",
+                                      "update_status",
+                                      {
+                                        id: s.id,
+                                        keterangan: e.target.value,
+                                      },
+                                    );
+                                  }}
+                                  title="Nama mitra SO/TSK & lokasi kerja siswa"
+                                  className="text-[10px] font-medium text-slate-600 bg-white border border-dashed border-slate-250 rounded px-1.5 py-0.5 w-full outline-none focus:border-indigo-400 focus:border-solid placeholder:text-slate-400 placeholder:italic"
+                                />
                               </div>
                             </td>
                             <td className="md:p-4 p-1.5 py-2 text-center align-middle">
@@ -3282,12 +3299,29 @@ export default function AdminView({
                               </select>
                             </div>
                           )}
+                          <input
+                            type="text"
+                            placeholder="Keterangan: mitra SO/TSK, lokasi kerja..."
+                            value={s.keterangan || ""}
+                            onChange={async (e) => {
+                              await onUpdateState(
+                                "activeStudents",
+                                "update_status",
+                                {
+                                  id: s.id,
+                                  keterangan: e.target.value,
+                                },
+                              );
+                            }}
+                            title="Nama mitra SO/TSK & lokasi kerja siswa"
+                            className="text-[9.5px] font-medium text-slate-600 bg-white border border-dashed border-slate-250 rounded px-1.5 py-1 w-full outline-none focus:border-indigo-400 focus:border-solid placeholder:text-slate-400 placeholder:italic"
+                          />
                         </div>
                       ))}
                   </div>
                 )}
               </div>
-              
+
               {/* Pagination Controls */}
               {siswaTab !== "rekap" && siswaTab !== "sensei" && siswaTotalPages > 1 && (
                 <div className="flex items-center justify-between border-t border-slate-200 bg-white px-4 py-3 sm:px-6 rounded-2xl shadow-sm mt-4">
