@@ -863,6 +863,12 @@ app.post("/api/state/update", (req, res) => {
             existingUser.studentId = assignedStudentId;
             existingUser.profilePicture = match.docFoto ? (match.docFoto.includes('|') ? match.docFoto.split('|')[1] : match.docFoto) : (existingUser.profilePicture || "");
             if (match.statusPendaftaran === "Alumni") existingUser.role = "Alumni";
+            // Backfill the password the student set at registration if the
+            // account somehow ended up with none - otherwise approval leaves
+            // them with an account that exists but can never log in.
+            if (!existingUser.password) {
+              existingUser.password = isHashedPassword(match.password) ? match.password : hashPassword(match.password || "123456");
+            }
             syncEntityToFirestore("users", existingUser.username, existingUser);
           }
         } else {
@@ -1735,7 +1741,7 @@ app.post("/api/state/update", (req, res) => {
               username: usernameVal,
               name: studentName,
               email: "",
-              password: "",
+              password: hashPassword("123456"),
               role: "Alumni" as const,
               status: "Active" as const,
               studentId: studentId,
@@ -2705,7 +2711,7 @@ async function startServer() {
                   username: usernameVal,
                   name: student.name,
                   email: "",
-                  password: "",
+                  password: hashPassword("123456"),
                   role: "Alumni" as const,
                   status: "Active" as const,
                   studentId: student.id,
