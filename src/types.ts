@@ -271,6 +271,8 @@ export interface AttendanceRecord {
   photo?: string | null;
   year?: string;
   role?: string;
+  time?: string;
+  hasPermission?: boolean;
 }
 
 export interface PaymentRecord {
