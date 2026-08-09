@@ -3424,12 +3424,28 @@ export default function MobileDashboardView({
                   {(() => {
                     const allRegs = systemState.registeredStudents || [];
                     const allActives = systemState.activeStudents || [];
-                    
+
+                    // The "Kode Referral" field on the registration form is free
+                    // text and optional - some applicants fill it with their own
+                    // email or name instead of leaving it blank, and since a
+                    // student's login username is set to their own email at
+                    // approval, that later resolves to a "referral" that is
+                    // really just themselves. Exclude those so they don't
+                    // inflate an alumni's referral count.
+                    const isSelfReferral = (s: { id: string; name: string; email?: string }, ref: string) => {
+                      const r = (ref || "").trim().toLowerCase();
+                      if (!r) return false;
+                      if (s.name && s.name.trim().toLowerCase() === r) return true;
+                      if (s.email && s.email.trim().toLowerCase() === r) return true;
+                      const ownUser = (systemState.users || []).find(u => u.studentId === s.id || u.name === s.name);
+                      return !!ownUser && ownUser.username.trim().toLowerCase() === r;
+                    };
+
                     // Group referrals by referrer username/email
                     const statsByReferrer: { [key: string]: { name: string, regs: number, actives: number } } = {};
-                    
+
                     allRegs.forEach(s => {
-                      if (s.referrer) {
+                      if (s.referrer && !isSelfReferral(s, s.referrer)) {
                         const refKey = s.referrer.trim().toLowerCase();
                         if (!statsByReferrer[refKey]) {
                           statsByReferrer[refKey] = { name: s.referrer, regs: 0, actives: 0 };
@@ -3439,7 +3455,7 @@ export default function MobileDashboardView({
                     });
 
                     allActives.forEach(s => {
-                      if (s.referrer) {
+                      if (s.referrer && !isSelfReferral(s, s.referrer)) {
                         const refKey = s.referrer.trim().toLowerCase();
                         if (!statsByReferrer[refKey]) {
                           statsByReferrer[refKey] = { name: s.referrer, regs: 0, actives: 0 };
@@ -3495,10 +3511,18 @@ export default function MobileDashboardView({
                              r === currentUser?.email?.toLowerCase().trim() ||
                              r === currentUser?.name?.toLowerCase().trim();
                     };
+                    // A student cannot refer themselves - some applicants type
+                    // their own email/name into the optional "Kode Referral"
+                    // field on the registration form, which later resolves back
+                    // to their own account. Never show that as a referral.
+                    const isSelfReferral = (s: { name: string }, ref: string) => {
+                      const r = (ref || "").toLowerCase().trim();
+                      return !!r && s.name.toLowerCase().trim() === r;
+                    };
 
                     const myReferrals = [
                       ...(systemState.registeredStudents || [])
-                        .filter(s => s.referrer && (isAdminOrVip || isReferrerMatch(s.referrer)))
+                        .filter(s => s.referrer && !isSelfReferral(s, s.referrer) && (isAdminOrVip || isReferrerMatch(s.referrer)))
                         .map(s => ({
                           id: s.id,
                           name: s.name,
@@ -3508,7 +3532,7 @@ export default function MobileDashboardView({
                           referrer: s.referrer
                         })),
                       ...(systemState.activeStudents || [])
-                        .filter(s => s.referrer && (isAdminOrVip || isReferrerMatch(s.referrer)))
+                        .filter(s => s.referrer && !isSelfReferral(s, s.referrer) && (isAdminOrVip || isReferrerMatch(s.referrer)))
                         .map(s => ({
                           id: s.id,
                           name: s.name,

@@ -64,6 +64,13 @@ export default function AdminKelasSegment({
     const newName = renamingValue.trim();
     if (targetIdx !== -1) {
       oldName = updatedClasses[targetIdx].name;
+      if (
+        newName.toLowerCase() !== oldName.toLowerCase() &&
+        updatedClasses.some((c: any, i: number) => i !== targetIdx && c.name.toLowerCase() === newName.toLowerCase())
+      ) {
+        alert(`Kelas dengan nama "${newName}" sudah terdaftar.`);
+        return;
+      }
       updatedClasses[targetIdx] = {
         ...updatedClasses[targetIdx],
         name: newName
@@ -71,7 +78,7 @@ export default function AdminKelasSegment({
     } else {
       return;
     }
-    
+
     await onUpdateState("customization", "update", {
       ...systemState?.customization,
       lmsClasses: updatedClasses,
@@ -151,8 +158,13 @@ export default function AdminKelasSegment({
                       const pYear = formData.get("classPeriodYear") as string;
                       const period = `${pMonth} ${pYear}`;
                       if (!name) return;
-                      // Check duplicate
-                      if (allClasses.some(c => c.name.toLowerCase() === name.toLowerCase())) {
+                      // Check duplicate against both name AND id: a class's id is
+                      // permanently set to its name at creation and never changes
+                      // on rename, so a renamed-away name is still "in use" as an
+                      // id. Allowing it to be reused would create two classes
+                      // sharing the same lmsClasses/{id} Firestore document,
+                      // silently corrupting whichever one loses the write race.
+                      if (allClasses.some(c => c.name.toLowerCase() === name.toLowerCase() || c.id.toLowerCase() === name.toLowerCase())) {
                         alert(`Kelas dengan nama "${name}" sudah terdaftar.`);
                         return;
                       }

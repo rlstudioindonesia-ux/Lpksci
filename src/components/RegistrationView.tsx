@@ -77,12 +77,18 @@ const [referrer, setReferrer] = useState(() => {
   return "";
 });
 
+const isSelfReferralCode = useMemo(() => {
+  if (!referrer.trim()) return false;
+  const r = referrer.trim().toLowerCase();
+  return r === email.trim().toLowerCase() || (!!name.trim() && r === name.trim().toLowerCase());
+}, [referrer, email, name]);
+
 const matchedReferrer = useMemo(() => {
-  if (!referrer) return null;
-  return (systemState?.users || []).find((u: any) => 
+  if (!referrer || isSelfReferralCode) return null;
+  return (systemState?.users || []).find((u: any) =>
     u.username.toLowerCase().trim() === referrer.toLowerCase().trim()
   );
-}, [referrer, systemState?.users]);
+}, [referrer, systemState?.users, isSelfReferralCode]);
 
 useEffect(() => {
   if (typeof window !== "undefined") {
@@ -159,7 +165,13 @@ useEffect(() => {
       docPraMCU: docPraMCU,
       docVaksin: docVaksin,
       docKontrak: docKontrak,
-      referrer: referrer.trim(),
+      // A student cannot refer themselves - guard against applicants who
+      // misunderstand the optional field and type their own email/name.
+      referrer:
+        referrer.trim().toLowerCase() === email.trim().toLowerCase() ||
+        referrer.trim().toLowerCase() === name.trim().toLowerCase()
+          ? ""
+          : referrer.trim(),
     };
     const result = await onRegisterSubmit(payload);
     if (result) {
@@ -386,7 +398,16 @@ useEffect(() => {
             />
             {referrer && (
               <div className="mt-1 flex items-start gap-1.5 animate-fade-in">
-                {matchedReferrer ? (
+                {isSelfReferralCode ? (
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-[10px] text-rose-700 bg-rose-100/80 px-2 py-0.5 rounded-lg border border-rose-200/50 font-bold">
+                      ⚠️ Kode Referral Tidak Boleh Nama/Email Anda Sendiri
+                    </span>
+                    <span className="text-[9.5px] text-slate-500 ml-1">
+                      Kolom ini untuk username Alumni/Siswa lain yang mengajak Anda. Kosongkan jika tidak ada.
+                    </span>
+                  </div>
+                ) : matchedReferrer ? (
                   <div className="flex flex-col gap-0.5">
                     <span className="text-[10px] text-emerald-800 bg-emerald-100/80 px-2 py-0.5 rounded-lg border border-emerald-200/50 font-bold flex items-center gap-1">
                       <span>✓ Kode Referral Cocok!</span>

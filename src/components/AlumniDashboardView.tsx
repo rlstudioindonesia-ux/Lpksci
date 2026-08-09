@@ -69,9 +69,16 @@ export default function AlumniDashboardView({
     setTimeout(() => setQuestionSent(false), 5000);
   };
 
-  // Calculate referral stats
+  // Calculate referral stats. Registration stores the code the applicant
+  // typed as `referrer` (not `referrerCode` - that field is never written
+  // anywhere), and a student cannot be counted as their own referral: some
+  // applicants fill the optional "Kode Referral" field with their own email
+  // or name, which later resolves back to their own account once their
+  // username (their email) exists.
   const myReferrals = systemState?.activeStudents?.filter(
-    (s: any) => s.referrerCode?.toLowerCase() === referralCode.toLowerCase()
+    (s: any) =>
+      s.referrer?.toLowerCase().trim() === referralCode.toLowerCase().trim() &&
+      s.name?.toLowerCase().trim() !== referralCode.toLowerCase().trim()
   ) || [];
 
   const activeCount = myReferrals.filter((s: any) => s.status === "Aktif").length;

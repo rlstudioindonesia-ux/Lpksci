@@ -778,7 +778,8 @@ app.post("/api/state/update", (req, res) => {
         date: payload.date || new Date().toISOString().split("T")[0],
         description: payload.description || "",
         inAmount: Number(payload.inAmount) || 0,
-        outAmount: Number(payload.outAmount) || 0
+        outAmount: Number(payload.outAmount) || 0,
+        createdAt: payload.createdAt || new Date().toISOString()
       };
       state.cashLedger.push(newLedger);
       syncEntityToFirestore("cashLedger", newLedger.id, newLedger);
