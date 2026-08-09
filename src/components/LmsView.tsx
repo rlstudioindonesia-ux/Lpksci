@@ -5505,7 +5505,7 @@ export default function LmsView({
                                               studentName: student.name,
                                               chapterNumber: Number(selectedTugas.chapterNumber || 1),
                                               title: selectedTugas.title,
-                                              status: "Sudah Dinilai",
+                                              status: "Telah Dinilai",
                                               subject: selectedTugas.subject,
                                               lessonId: selectedTugas.id,
                                               score: scoreNum,

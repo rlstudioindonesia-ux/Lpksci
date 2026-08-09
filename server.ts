@@ -863,6 +863,12 @@ app.post("/api/state/update", (req, res) => {
             existingUser.studentId = assignedStudentId;
             existingUser.profilePicture = match.docFoto ? (match.docFoto.includes('|') ? match.docFoto.split('|')[1] : match.docFoto) : (existingUser.profilePicture || "");
             if (match.statusPendaftaran === "Alumni") existingUser.role = "Alumni";
+            // Backfill the password the student set at registration if the
+            // account somehow ended up with none - otherwise approval leaves
+            // them with an account that exists but can never log in.
+            if (!existingUser.password) {
+              existingUser.password = isHashedPassword(match.password) ? match.password : hashPassword(match.password || "123456");
+            }
             syncEntityToFirestore("users", existingUser.username, existingUser);
           }
         } else {
@@ -1735,7 +1741,7 @@ app.post("/api/state/update", (req, res) => {
               username: usernameVal,
               name: studentName,
               email: "",
-              password: "",
+              password: hashPassword("123456"),
               role: "Alumni" as const,
               status: "Active" as const,
               studentId: studentId,
@@ -1872,7 +1878,7 @@ app.post("/api/state/update", (req, res) => {
       }
 
       if (action === "update_status") {
-        const { id, status, class: className, prefecture, city, company, latitude, longitude, profilePicture, sensei, statusPendaftaran, graduationYear, phone, name, currentChapter } = payload;
+        const { id, status, class: className, prefecture, city, company, latitude, longitude, profilePicture, sensei, statusPendaftaran, graduationYear, phone, name, currentChapter, keterangan } = payload;
         const index = state.activeStudents.findIndex(s => s.id === id);
         if (index !== -1) {
           if (status) {
@@ -1979,7 +1985,10 @@ app.post("/api/state/update", (req, res) => {
           if (currentChapter !== undefined) {
             state.activeStudents[index].currentChapter = currentChapter;
           }
-          
+          if (keterangan !== undefined) {
+            state.activeStudents[index].keterangan = keterangan;
+          }
+
           const actStudent = state.activeStudents[index];
           const regIndex = state.registeredStudents.findIndex(rs => rs.id === id || rs.name.trim().toLowerCase() === actStudent.name.trim().toLowerCase());
 
@@ -2702,7 +2711,7 @@ async function startServer() {
                   username: usernameVal,
                   name: student.name,
                   email: "",
-                  password: "",
+                  password: hashPassword("123456"),
                   role: "Alumni" as const,
                   status: "Active" as const,
                   studentId: student.id,

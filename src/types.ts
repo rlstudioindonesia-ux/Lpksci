@@ -122,6 +122,7 @@ export interface ActiveStudent {
   prefecture?: string; // If 'Di Jepang', which Japanese Prefecture (e.g., Tokyo, Osaka, Hokkaido)
   city?: string;
   company?: string;
+  keterangan?: string; // Catatan admin: nama mitra SO/TSK, lokasi kerja siswa saat proses job matching
   latitude?: number;
   longitude?: number;
   tb?: number; // Tinggi Badan

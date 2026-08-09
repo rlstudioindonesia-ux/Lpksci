@@ -4416,8 +4416,10 @@ export default function VvipView({
                                     <td className="px-5 py-4">
                                       <div className="space-y-1">
                                         <span className={`text-[10px] font-black border rounded-lg px-2.5 py-1 tracking-wider inline-block shadow-3xs ${
-                                          student.status === "Di Jepang" 
-                                            ? "bg-emerald-50 text-emerald-800 border-emerald-200" 
+                                          student.status === "Dikeluarkan"
+                                            ? "bg-rose-100 text-rose-800 border-rose-300 font-extrabold"
+                                            : student.status === "Di Jepang"
+                                            ? "bg-emerald-50 text-emerald-800 border-emerald-200"
                                             : student.status === "Lulus"
                                               ? "bg-indigo-50 text-indigo-800 border-indigo-200"
                                               : student.status === "Diklat SO"
@@ -4524,7 +4526,9 @@ export default function VvipView({
                                       STATUS BELAJAR:
                                     </span>
                                     <span className={`text-[9.5px] font-black border rounded-lg px-2.5 py-1 tracking-wider shadow-3xs ${
-                                      student.status === "Di Jepang"
+                                      student.status === "Dikeluarkan"
+                                        ? "bg-rose-100 text-rose-800 border-rose-300 font-extrabold"
+                                        : student.status === "Di Jepang"
                                         ? "bg-emerald-50 text-emerald-800 border-emerald-200"
                                         : student.status === "Lulus"
                                           ? "bg-indigo-50 text-indigo-800 border-indigo-200"
