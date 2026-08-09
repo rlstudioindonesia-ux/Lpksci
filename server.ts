@@ -429,6 +429,9 @@ app.post("/api/register", (req, res) => {
         status: "Di Jepang",
         kategoriPendaftaran: "Alumni",
         referrer: referrer || "",
+        birthDate: birthDate || "",
+        phone: phone || "",
+        email: email || "",
         profilePicture: docFoto ? (docFoto.includes('|') ? docFoto.split('|')[1] : docFoto) : ""
       };
       state.activeStudents.unshift(newActiveStudent);
@@ -977,6 +980,12 @@ app.post("/api/state/update", (req, res) => {
         const existingActive = state.activeStudents.find(s => s.name === match.name);
         if (existingActive) {
           assignedStudentId = existingActive.id;
+          existingActive.birthDate = existingActive.birthDate || match.birthDate;
+          existingActive.gender = existingActive.gender || match.gender;
+          existingActive.district = existingActive.district || match.district;
+          existingActive.school = existingActive.school || match.school;
+          existingActive.phone = existingActive.phone || match.phone;
+          existingActive.email = existingActive.email || match.email;
           existingActive.docAkta = match.docAkta || existingActive.docAkta;
           existingActive.docFoto = match.docFoto || existingActive.docFoto;
           existingActive.profilePicture = match.docFoto ? (match.docFoto.includes('|') ? match.docFoto.split('|')[1] : match.docFoto) : existingActive.profilePicture;
@@ -1011,6 +1020,12 @@ app.post("/api/state/update", (req, res) => {
             status: "Belajar",
             kategoriPendaftaran: match.statusPendaftaran || "Siswa Baru",
             referrer: match.referrer || "",
+            birthDate: match.birthDate || "",
+            gender: match.gender || undefined,
+            district: match.district || "",
+            school: match.school || "",
+            phone: match.phone || "",
+            email: match.email || "",
             profilePicture: match.docFoto ? (match.docFoto.includes('|') ? match.docFoto.split('|')[1] : match.docFoto) : "",
             graduationYear: match.graduationYear || "",
             docAkta: match.docAkta || "",
