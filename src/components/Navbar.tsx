@@ -121,10 +121,10 @@ export default function Navbar({
                 ? "bg-slate-950/90 backdrop-blur-md border-b border-white/10 shadow-[0_4px_30px_rgba(0,0,0,0.5)] py-2"
                 : "bg-gradient-to-b from-slate-950/80 to-transparent border-b border-transparent py-4"
             }`
-          : "sticky top-2 z-40 w-[96%] max-w-7xl mx-auto rounded-3xl border border-slate-200/50 bg-white/70 backdrop-blur-md shadow-[0_8px_30px_rgba(15,23,42,0.06)] transition-all duration-300 my-2.5 text-slate-900"
+          : "sticky top-0 z-40 w-full border-b border-slate-200/70 bg-white/85 backdrop-blur-md shadow-[0_2px_16px_rgba(15,23,42,0.05)] transition-all duration-300 text-slate-900"
       }
     >
-      <div className={`mx-auto flex flex-col transition-all duration-300 ${isOverlay ? 'px-4 sm:px-8 max-w-[1400px]' : 'px-3 sm:px-6'}`}>
+      <div className={`mx-auto flex flex-col transition-all duration-300 ${isOverlay ? 'px-4 sm:px-8 max-w-[1400px]' : 'px-3 sm:px-6 lg:px-8 max-w-[1800px]'}`}>
         
         {/* Top bar: Brand & Authentication */}
         <div className={`flex items-center justify-between w-full transition-all duration-300 ${isOverlay && !scrolled ? 'h-20' : 'h-16'}`}>

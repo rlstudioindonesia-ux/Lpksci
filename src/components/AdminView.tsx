@@ -1582,10 +1582,10 @@ export default function AdminView({
     <div className="flex flex-row gap-3 sm:gap-6 py-4 sm:py-6 relative items-start">
       {/* Left Sidebar Menu (Minimizable) - Hidden on Mobile */}
       <div
-        className={`hidden sm:flex shrink-0 ${isMenuMinimized ? "w-16" : "w-56"} transition-all duration-300 ease-in-out sticky top-4 max-h-[calc(100vh-2rem)] overflow-y-auto pr-1`}
+        className={`hidden sm:flex shrink-0 ${isMenuMinimized ? "w-16" : "w-56"} transition-all duration-300 ease-in-out sticky top-0 max-h-screen overflow-y-auto`}
         style={{ scrollbarWidth: "thin" }}
       >
-        <div className="bg-gradient-to-b from-indigo-50/90 via-slate-100/80 to-blue-50/90 p-1.5 sm:p-2 rounded-2xl border border-indigo-100 flex flex-col gap-1 w-full shadow-sm shadow-indigo-100/40">
+        <div className="bg-gradient-to-b from-indigo-50/90 via-slate-100/80 to-blue-50/90 p-1.5 sm:p-2 rounded-r-2xl border-r border-y border-indigo-100 flex flex-col gap-1 w-full">
           <div className="flex items-center justify-between mb-2 px-1 sm:px-2 pt-1 border-b border-indigo-100/50 pb-1.5">
             {!isMenuMinimized && (
               <span className="font-black text-[10px] sm:text-xs text-indigo-700 uppercase tracking-wider truncate">
@@ -6481,9 +6481,19 @@ export default function AdminView({
 
                     (custLandingConfig.alumniClasses || []).forEach((cls: any) => {
                       const className = `Kelas Alumni ${cls.title || "VIP"}`;
-                      const existingIndex = updatedLmsClasses.findIndex(
-                        (c: any) => c.name.toLowerCase() === className.toLowerCase() || c.id.toLowerCase() === className.toLowerCase()
-                      );
+                      // Match the linked lmsClasses entry by the landing-config
+                      // item's own stable id (sourceLandingId) first - this
+                      // survives renaming "Judul Kelas" later. Older entries
+                      // saved before this field existed are found once via the
+                      // legacy name/id match and get backfilled with it, so a
+                      // title rename never again orphans the old class and
+                      // creates a same-named duplicate in Manajemen Kelas.
+                      let existingIndex = updatedLmsClasses.findIndex((c: any) => c.sourceLandingId === cls.id);
+                      if (existingIndex === -1) {
+                        existingIndex = updatedLmsClasses.findIndex(
+                          (c: any) => c.name.toLowerCase() === className.toLowerCase() || c.id.toLowerCase() === className.toLowerCase()
+                        );
+                      }
 
                       if (existingIndex === -1) {
                         updatedLmsClasses.push({
@@ -6493,14 +6503,17 @@ export default function AdminView({
                           type: "alumni",
                           method: cls.method || "Offline",
                           period: cls.duration || "Juni 2026",
+                          sourceLandingId: cls.id,
                           chapters: CHAPTERS_LIST.map((ch: any) => ({ ...ch, isActive: ch.number === 1 }))
                         });
                       } else {
                         updatedLmsClasses[existingIndex] = {
                           ...updatedLmsClasses[existingIndex],
+                          name: className,
                           type: "alumni",
                           method: cls.method || updatedLmsClasses[existingIndex].method || "Offline",
                           period: cls.duration || updatedLmsClasses[existingIndex].period || "Juni 2026",
+                          sourceLandingId: cls.id,
                         };
                       }
                     });
@@ -8118,9 +8131,25 @@ export default function AdminView({
             </div>
 
             {(() => {
+              // The "Kode Referral" field on the registration form is free text
+              // and optional - some applicants fill it with their own email or
+              // name instead of leaving it blank, and since a student's login
+              // username is set to their own email at approval, that later
+              // resolves to a "referral" that is really just themselves. Filter
+              // those out everywhere so they never inflate an alumni's referral
+              // count or reward stats.
+              const isSelfReferral = (s: { id: string; name: string; email?: string }, ref: string) => {
+                const r = (ref || "").trim().toLowerCase();
+                if (!r) return false;
+                if (s.name && s.name.trim().toLowerCase() === r) return true;
+                if (s.email && s.email.trim().toLowerCase() === r) return true;
+                const ownUser = (systemState.users || []).find(u => u.studentId === s.id || u.name === s.name);
+                return !!ownUser && ownUser.username.trim().toLowerCase() === r;
+              };
+
               // Get all referred students
               const allReferred = [
-                ...(systemState.registeredStudents || []).filter(s => s.referrer).map(s => ({
+                ...(systemState.registeredStudents || []).filter(s => s.referrer && !isSelfReferral(s, s.referrer)).map(s => ({
                   id: s.id,
                   name: s.name,
                   status: s.status,
@@ -8128,7 +8157,7 @@ export default function AdminView({
                   date: s.date || "-",
                   type: 'registered' as const
                 })),
-                ...(systemState.activeStudents || []).filter(s => s.referrer).map(s => ({
+                ...(systemState.activeStudents || []).filter(s => s.referrer && !isSelfReferral(s, s.referrer)).map(s => ({
                   id: s.id,
                   name: s.name,
                   status: s.status,
