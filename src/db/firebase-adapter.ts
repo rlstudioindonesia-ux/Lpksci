@@ -140,11 +140,11 @@ export async function loadStateFromFirestore(fallbackState: any) {
 
   try {
     const collections = [
-      'registeredStudents', 'activeStudents', 'attendance', 
+      'registeredStudents', 'activeStudents', 'attendance',
       'payments', 'inventory', 'taxes', 'lmsLessons', 'lmsQuizzes',
       'chapterAssessments', 'jobOrders', 'users', 'events',
       'salaries', 'cashLedger', 'messages', 'logs', 'lmsClasses',
-      'lmsComments'
+      'lmsComments', 'teacherLeaves', 'teacherReports', 'teacherContracts'
     ];
     
     let loadedState: any = {};

@@ -140,6 +140,9 @@ let state: any = {
   salaries: [],
   cashLedger: [],
   logs: [],
+  teacherLeaves: [],
+  teacherReports: [],
+  teacherContracts: [],
   jobOrders: [
     {
       id: "JOB-001",
@@ -690,7 +693,16 @@ app.post("/api/state/update", (req, res) => {
         date: payload.date || new Date().toISOString().split("T")[0],
         status: payload.status,
         subject: payload.subject,
-        notes: payload.notes || ""
+        notes: payload.notes || "",
+        class: payload.class || "",
+        sensei: payload.sensei || "",
+        type: payload.type || "",
+        location: payload.location || "",
+        photo: payload.photo || "",
+        year: payload.year || "",
+        role: payload.role || "",
+        time: payload.time || "",
+        hasPermission: !!payload.hasPermission
       };
       state.attendance.unshift(newAtt);
       syncEntityToFirestore("attendance", newAtt.id, newAtt);
@@ -785,6 +797,106 @@ app.post("/api/state/update", (req, res) => {
       state.cashLedger = state.cashLedger.filter((c: any) => c.id !== id);
       if (id) deleteEntityFromFirestore("cashLedger", id);
       return res.json({ success: true, id });
+    }
+
+    if (dataType === "teacherLeaves") {
+      if (!state.teacherLeaves) state.teacherLeaves = [];
+      if (action === "add") {
+        const newLeave = {
+          id: payload.id || `LEAVE-${Date.now()}`,
+          teacherName: payload.teacherName,
+          startDate: payload.startDate,
+          endDate: payload.endDate,
+          reason: payload.reason || "",
+          status: "Pending",
+          requestDate: payload.requestDate || new Date().toISOString()
+        };
+        state.teacherLeaves.unshift(newLeave);
+        syncEntityToFirestore("teacherLeaves", newLeave.id, newLeave);
+        return res.json({ success: true, item: newLeave });
+      }
+      if (action === "update") {
+        const { id, status } = payload;
+        const index = state.teacherLeaves.findIndex((l: any) => l.id === id);
+        if (index !== -1) {
+          state.teacherLeaves[index].status = status;
+          syncEntityToFirestore("teacherLeaves", id, state.teacherLeaves[index]);
+          return res.json({ success: true, item: state.teacherLeaves[index] });
+        }
+        return res.status(404).json({ error: "Leave request not found" });
+      }
+      if (action === "delete") {
+        const { id } = payload;
+        state.teacherLeaves = state.teacherLeaves.filter((l: any) => l.id !== id);
+        if (id) deleteEntityFromFirestore("teacherLeaves", id);
+        return res.json({ success: true, id });
+      }
+    }
+
+    if (dataType === "teacherReports") {
+      if (!state.teacherReports) state.teacherReports = [];
+      if (action === "add") {
+        const newReport = {
+          id: payload.id || `REP-${Date.now()}`,
+          teacherName: payload.teacherName,
+          type: payload.type || "Agenda",
+          content: payload.content || "",
+          link: payload.link || "",
+          fileUrl: payload.fileUrl || "",
+          submittedDate: payload.submittedDate || payload.date || new Date().toISOString().split("T")[0]
+        };
+        state.teacherReports.unshift(newReport);
+        syncEntityToFirestore("teacherReports", newReport.id, newReport);
+        return res.json({ success: true, item: newReport });
+      }
+      if (action === "delete") {
+        const { id } = payload;
+        state.teacherReports = state.teacherReports.filter((r: any) => r.id !== id);
+        if (id) deleteEntityFromFirestore("teacherReports", id);
+        return res.json({ success: true, id });
+      }
+    }
+
+    if (dataType === "teacherContracts") {
+      if (!state.teacherContracts) state.teacherContracts = [];
+      if (action === "add") {
+        const newContract = {
+          id: payload.id || `CONTRACT-${Date.now()}`,
+          teacherName: payload.teacherName,
+          content: payload.content || "",
+          status: payload.status || "Menunggu TTD"
+        };
+        state.teacherContracts.unshift(newContract);
+        syncEntityToFirestore("teacherContracts", newContract.id, newContract);
+        return res.json({ success: true, item: newContract });
+      }
+      if (action === "update") {
+        const { id } = payload;
+        const index = state.teacherContracts.findIndex((c: any) => c.id === id);
+        if (index !== -1) {
+          state.teacherContracts[index] = { ...state.teacherContracts[index], ...payload };
+          syncEntityToFirestore("teacherContracts", state.teacherContracts[index].id, state.teacherContracts[index]);
+          return res.json({ success: true, item: state.teacherContracts[index] });
+        }
+        return res.status(404).json({ error: "Contract not found" });
+      }
+      if (action === "sign") {
+        const { teacherName, date } = payload;
+        const index = state.teacherContracts.findIndex((c: any) => c.teacherName === teacherName);
+        if (index !== -1) {
+          state.teacherContracts[index].status = "Disetujui";
+          state.teacherContracts[index].signedDate = date || new Date().toISOString();
+          syncEntityToFirestore("teacherContracts", state.teacherContracts[index].id, state.teacherContracts[index]);
+          return res.json({ success: true, item: state.teacherContracts[index] });
+        }
+        return res.status(404).json({ error: "Contract not found for this teacher" });
+      }
+      if (action === "delete") {
+        const { id } = payload;
+        state.teacherContracts = state.teacherContracts.filter((c: any) => c.id !== id);
+        if (id) deleteEntityFromFirestore("teacherContracts", id);
+        return res.json({ success: true, id });
+      }
     }
 
     if (dataType === "registeredStudents" && action === "approve") {
