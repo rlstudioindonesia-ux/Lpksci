@@ -1,7 +1,0 @@
-temp.tsx(93,11): error TS1005: ')' expected.
-temp.tsx(93,13): error TS17015: Expected corresponding closing tag for JSX fragment.
-temp.tsx(94,9): error TS1109: Expression expected.
-temp.tsx(96,11): error TS1128: Declaration or statement expected.
-temp.tsx(96,13): error TS1109: Expression expected.
-temp.tsx(97,1): error TS1109: Expression expected.
-temp.tsx(98,1): error TS1128: Declaration or statement expected.
