@@ -734,6 +734,36 @@ app.post("/api/state/update", (req, res) => {
       return res.json({ success: true, item: newAtt });
     }
 
+    if (dataType === "attendance" && action === "delete") {
+      const { id } = payload;
+      state.attendance = state.attendance.filter((a: any) => a.id !== id);
+      if (id) deleteEntityFromFirestore("attendance", id);
+      return res.json({ success: true, id });
+    }
+
+    if (dataType === "attendance" && action === "edit") {
+      const index = state.attendance.findIndex((a: any) => a.id === payload.id);
+      if (index !== -1) {
+        state.attendance[index] = { ...state.attendance[index], ...payload };
+        syncEntityToFirestore("attendance", state.attendance[index].id, state.attendance[index]);
+
+        // Recompute the student's attendanceScore in case status changed.
+        const studentId = state.attendance[index].studentId;
+        if (studentId) {
+          const student = state.activeStudents.find(s => s.id === studentId);
+          if (student) {
+            const stRecords = state.attendance.filter(a => a.studentId === studentId);
+            const presentCount = stRecords.filter(a => a.status === "Hadir").length;
+            const totalRecords = stRecords.length;
+            student.attendanceScore = totalRecords > 0 ? Math.round((presentCount / totalRecords) * 100) : 0;
+            syncEntityToFirestore("activeStudents", student.id, student);
+          }
+        }
+        return res.json({ success: true, item: state.attendance[index] });
+      }
+      return res.status(404).json({ error: "Attendance record not found" });
+    }
+
     if (dataType === "salaries" && action === "add") {
       if (!state.salaries) state.salaries = [];
       const newSalary = {
@@ -749,6 +779,26 @@ app.post("/api/state/update", (req, res) => {
       state.salaries.unshift(newSalary);
       syncEntityToFirestore("salaries", newSalary.id, newSalary);
       return res.json({ success: true, item: newSalary });
+    }
+
+    if (dataType === "salaries" && action === "edit") {
+      if (!state.salaries) state.salaries = [];
+      const index = state.salaries.findIndex((s: any) => s.id === payload.id);
+      if (index !== -1) {
+        state.salaries[index] = {
+          ...state.salaries[index],
+          staffName: payload.staffName ?? state.salaries[index].staffName,
+          role: payload.role ?? state.salaries[index].role,
+          amount: payload.amount !== undefined ? Number(payload.amount) : state.salaries[index].amount,
+          monthString: payload.monthString ?? state.salaries[index].monthString,
+          paymentDate: payload.paymentDate ?? state.salaries[index].paymentDate,
+          status: payload.status ?? state.salaries[index].status,
+          notes: payload.notes ?? state.salaries[index].notes,
+        };
+        syncEntityToFirestore("salaries", state.salaries[index].id, state.salaries[index]);
+        return res.json({ success: true, item: state.salaries[index] });
+      }
+      return res.status(404).json({ error: "Salary record not found" });
     }
 
     if (dataType === "salaries" && action === "status") {
@@ -1974,7 +2024,7 @@ app.post("/api/state/update", (req, res) => {
         return res.json({ success: true, item: newStudent });
       }
 
-      if (action === "update") {
+      if (action === "update" || action === "edit") {
          const { id } = payload;
          const index = state.activeStudents.findIndex(s => s.id === id);
          if (index !== -1) {

@@ -51,18 +51,15 @@ export default function AlumniDashboardView({
     e.preventDefault();
     if (!questionText.trim()) return;
 
-    const newMessage = {
-      id: "MSG-" + Date.now(),
-      senderId: currentUser?.username || "alumni_user",
-      senderName: currentUser?.name || "Alumni",
-      receiverId: "admin_shared",
-      content: `[PERTANYAAN ALUMNI] ${questionText}`,
-      timestamp: new Date().toISOString(),
-      isRead: false,
-    };
-
     if (onUpdateState) {
-      await onUpdateState("messages", "add", newMessage);
+      await onUpdateState("messages", "send", {
+        senderId: currentUser?.username || "alumni_user",
+        senderName: currentUser?.name || "Alumni",
+        senderRole: currentUser?.role || "Alumni",
+        receiverId: "admin_shared",
+        text: `[PERTANYAAN ALUMNI] ${questionText}`,
+        isRead: false,
+      });
     }
     setQuestionText("");
     setQuestionSent(true);
