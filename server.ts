@@ -502,6 +502,15 @@ app.post("/api/state/update", (req, res) => {
          }
       } else if (state[dataType] || dataType === "registeredStudents") {
          if (dataType === "galleries" || dataType === "slideshows") return; // Handled manually
+         // "users" responses always have the password stripped for security
+         // (stripPassword()) before being sent to the client. Auto-syncing that
+         // stripped response body here would immediately overwrite the correct,
+         // full record each users/* handler already writes explicitly itself -
+         // wiping every account's password moments after it was saved (this is
+         // exactly what happened on every login, since login updates lastActive
+         // via users/edit). Every users/* action already syncs itself correctly,
+         // so this dataType must never be auto-synced from the response body.
+         if (dataType === "users") return;
          const data = res.locals.responseData;
          if (data?.item) {
              const id = data.item.id || data.item.username;
