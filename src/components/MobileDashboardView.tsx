@@ -2027,12 +2027,14 @@ export default function MobileDashboardView({
                       ? "gaji"
                       : activeSubpage === "vvip_sensei"
                         ? "sensei"
-                        : "siswa"
+                        : activeSubpage === "vvip_ebenkyou" || activeSubpage === "vvip_lms"
+                          ? "materi"
+                          : "siswa"
                   }
                   viewMode={
                     activeSubpage === "vvip_gaji"
                       ? "gaji"
-                      : activeSubpage === "vvip_eval"
+                      : activeSubpage === "vvip_eval" || activeSubpage === "vvip_ebenkyou" || activeSubpage === "vvip_lms"
                         ? "eval"
                         : activeSubpage === "vvip_pajak"
                           ? "pajak"
@@ -2042,9 +2044,7 @@ export default function MobileDashboardView({
                               ? "exec"
                               : activeSubpage === "vvip_akun" || activeSubpage === "vvip_security"
                                 ? "security"
-                                : activeSubpage === "vvip_ebenkyou" || activeSubpage === "vvip_lms"
-                                  ? "lms"
-                                  : activeSubpage === "vvip_afiliasi"
+                                : activeSubpage === "vvip_afiliasi"
                                     ? "afiliasi"
                                     : "full"
                   }
@@ -4429,7 +4429,6 @@ export default function MobileDashboardView({
                   { id: "security", name: "Keamanan Akun", icon: ShieldCheck, color: "slate", colorClass: "from-slate-500 to-slate-700", access: true, isVvipOnly: true },
                   { id: "gaji", name: "Keuangan LPK", icon: DollarSign, color: "purple", colorClass: "from-purple-500 to-purple-700", access: true },
                   { id: "eval", name: "Monitoring Kelas", icon: Users, color: "sky", colorClass: "from-sky-500 to-sky-700", access: true },
-                  { id: "lms", name: "E-Benkyou LMS", icon: BookOpen, color: "sky", colorClass: "from-sky-500 to-sky-700", access: true },
                   { id: "kalender", name: "Jadwal LPK", icon: Calendar, color: "indigo", colorClass: "from-indigo-500 to-indigo-700", access: true, isSubpage: true },
                   { id: "afiliasi", name: "Afiliasi SCI", icon: Share2, color: "rose", colorClass: "from-rose-500 to-rose-700", access: true, isSubpage: true },
                   { id: "exec", name: "Overview Executive", icon: BarChart3, color: "amber", colorClass: "from-amber-500 to-amber-700", access: true },

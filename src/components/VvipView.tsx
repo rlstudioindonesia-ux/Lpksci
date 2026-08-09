@@ -93,8 +93,8 @@ interface VvipViewProps {
     action: string,
     payload: any,
   ) => Promise<boolean>;
-  initialMonitorTab?: "siswa" | "sensei" | "gaji" | "afiliasi";
-  viewMode?: "full" | "gaji" | "exec" | "eval" | "pajak" | "ai" | "security" | "lms" | "kalender" | "afiliasi";
+  initialMonitorTab?: "siswa" | "sensei" | "gaji" | "afiliasi" | "materi";
+  viewMode?: "full" | "gaji" | "exec" | "eval" | "pajak" | "ai" | "security" | "kalender" | "afiliasi";
   isMobile?: boolean;
   onViewModeChange?: (viewMode: any) => void;
   onLoginAs?: (user: any) => void;
@@ -112,7 +112,7 @@ export default function VvipView({
   onLoginAs,
   onNavigateToAdmin,
 }: VvipViewProps) {
-  const [currentViewMode, setCurrentViewMode] = useState<"full" | "gaji" | "exec" | "eval" | "pajak" | "ai" | "security" | "lms" | "kalender" | "afiliasi">(propViewMode as any);
+  const [currentViewMode, setCurrentViewMode] = useState<"full" | "gaji" | "exec" | "eval" | "pajak" | "ai" | "security" | "kalender" | "afiliasi">(propViewMode as any);
   const [showLoginAsModal, setShowLoginAsModal] = useState(false);
   const [loginAsSearch, setLoginAsSearch] = useState("");
   const [loginAsRole, setLoginAsRole] = useState("Semua");
@@ -152,7 +152,7 @@ export default function VvipView({
     await onUpdateState("users", "delete", { username });
     setActiveUserMenu(null);
   };
-  const [monitorTab, setMonitorTab] = useState<"siswa" | "sensei" | "gaji" | "afiliasi" | "rekap_siswa">(
+  const [monitorTab, setMonitorTab] = useState<"siswa" | "sensei" | "gaji" | "afiliasi" | "rekap_siswa" | "materi" | "hr">(
     initialMonitorTab || "siswa",
   );
 
@@ -282,9 +282,10 @@ export default function VvipView({
       }
     } else if (
       initialMonitorTab === "siswa" ||
-      initialMonitorTab === "sensei"
+      initialMonitorTab === "sensei" ||
+      initialMonitorTab === "materi"
     ) {
-      setMonitorTab(initialMonitorTab);
+      setMonitorTab(initialMonitorTab as any);
       const monEl = document.getElementById("vvip-monitoring-section");
       if (monEl) {
         monEl.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -3105,289 +3106,6 @@ export default function VvipView({
         </div>
       )}
 
-      {/* VVIP LMS MONITORING: LMS VIEW MODE */}
-      {currentViewMode === "lms" && (
-        <div className="space-y-6 animate-fade-in">
-          {/* Header */}
-          <div className="bg-sky-900 text-white p-8 rounded-[2.5rem] relative overflow-hidden border border-white/5 shadow-xl shadow-sky-500/10">
-            <div className="absolute top-0 right-0 w-32 h-32 bg-sky-400/10 rounded-full blur-3xl -mr-16 -mt-16" />
-            <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-              <div className="space-y-2">
-                <div className="inline-flex items-center gap-2 bg-sky-400/10 text-sky-300 px-3 py-1 rounded-full border border-sky-400/20 text-[10px] font-black uppercase tracking-widest">
-                  <BookOpen className="h-4 w-4" />
-                  <span>E-Benkyou LMS Monitoring</span>
-                </div>
-                <h1 className="text-2xl font-black">Dasbor Pemantauan LMS</h1>
-                <p className="text-xs text-sky-200/70 font-medium max-w-xl">
-                  Pantau seluruh aktivitas pembelajaran, progres materi per kelas, serta performa bimbingan Sensei di platform E-Benkyou LPK SCI.
-                </p>
-              </div>
-              <div className="flex gap-4 w-full md:w-auto">
-                <div className="flex-1 bg-white/5 p-4 rounded-2xl border border-white/10 text-center min-w-[100px]">
-                  <p className="text-[9px] font-bold text-sky-300 uppercase mb-1">Materi Aktif</p>
-                  <p className="text-2xl font-black text-white">{systemState.lmsLessons?.length || 0}</p>
-                </div>
-                <div className="flex-1 bg-white/5 p-4 rounded-2xl border border-white/10 text-center min-w-[100px]">
-                  <p className="text-[9px] font-bold text-sky-300 uppercase mb-1">Total Kuis</p>
-                  <p className="text-2xl font-black text-white">{systemState.lmsQuizzes?.length || 0}</p>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Stats Bar (Real Data) */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-            {[
-              { 
-                label: "Siswa Belajar", 
-                val: (systemState.activeStudents || []).filter(s => !["Lulus", "Di Jepang"].includes(s.status || "")).length, 
-                ic: Users, col: "text-blue-600", bg: "bg-blue-50" 
-              },
-              { 
-                label: "Sensei Aktif", 
-                val: (systemState.users || []).filter(u => ["Pengajar", "Admin", "Admin Biasa", "Admin Super", "Staf"].includes(u.role)).length || 0, 
-                ic: GraduationCap, col: "text-indigo-600", bg: "bg-indigo-50" 
-              },
-              { 
-                label: "Avg. Skor Kuis", 
-                val: (() => {
-                  const allScores: number[] = [];
-                  const activeSiswaOnly = (systemState.activeStudents || []).filter(s => !["Lulus", "Di Jepang"].includes(s.status || ""));
-                  activeSiswaOnly.forEach(s => {
-                    if (s.scores) Object.values(s.scores).forEach((v: any) => allScores.push(v));
-                  });
-                  return allScores.length > 0 ? (allScores.reduce((a, b) => a + b, 0) / allScores.length).toFixed(1) : "0.0";
-                })(), 
-                ic: Award, col: "text-emerald-600", bg: "bg-emerald-50" 
-              },
-              { 
-                label: "Progress Batch", 
-                val: (() => {
-                  const activeSiswaOnly = (systemState.activeStudents || []).filter(s => !["Lulus", "Di Jepang"].includes(s.status || ""));
-                  if (activeSiswaOnly.length === 0) return "0%";
-                  const studentProgressList = activeSiswaOnly.map(student => {
-                    const studentAsss = (systemState.chapterAssessments || []).filter((c: any) => c.studentId === student.id);
-                    const completedBab = studentAsss.filter((c: any) => c.status === "Telah Dinilai").length;
-                    if (completedBab > 0) {
-                      const maxCh = getClassMaxBab(student.class || "") || 25;
-                      return maxCh > 0 ? (completedBab / maxCh) * 100 : 0;
-                    }
-                    return student.progress || (((student.currentChapter || 1) / (getClassMaxBab(student.class || "") || 25)) * 100) || 0;
-                  });
-                  const avg = studentProgressList.reduce((acc, p) => acc + p, 0) / studentProgressList.length;
-                  return Math.round(avg) + "%";
-                })(), 
-                ic: TrendingUp, col: "text-sky-600", bg: "bg-sky-50" 
-              },
-            ].map((stat, i) => (
-              <div key={i} className="bg-white border border-slate-200 p-4 rounded-2xl flex items-center gap-3 shadow-xs">
-                <div className={`h-10 w-10 rounded-xl ${stat.bg} ${stat.col} flex items-center justify-center shrink-0`}>
-                  <stat.ic className="h-5 w-5" />
-                </div>
-                <div>
-                  <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tight">{stat.label}</p>
-                  <p className="text-lg font-black text-slate-900 leading-none mt-0.5">{stat.val}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <div className="grid md:grid-cols-12 gap-6">
-            {/* Aktivitas Kelas Terpusat */}
-            <div className="md:col-span-8 space-y-6">
-              <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-xs space-y-4 overflow-hidden">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                  <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 shrink-0 bg-sky-50 text-sky-600 rounded-xl flex items-center justify-center">
-                      <Activity className="h-5 w-5" />
-                    </div>
-                    <div>
-                      <h3 className="font-bold text-slate-900 text-sm">Monitoring Aktivitas Kelas</h3>
-                      <p className="text-[10px] text-slate-500">Pantau interaksi siswa dengan materi dan kuis per kelas.</p>
-                    </div>
-                  </div>
-                  <select 
-                    value={lmsClassFilter} 
-                    onChange={(e) => setLmsClassFilter(e.target.value)}
-                    className="text-[10px] font-bold bg-slate-50 border border-slate-200 p-1.5 rounded-lg outline-none focus:ring-1 focus:ring-sky-500"
-                  >
-                    <option value="all">Semua Kelas</option>
-                    {(systemState.customization?.lmsClasses || []).filter(c => c.isActive !== false).map(c => (
-                      <option key={c.name} value={c.name}>Kelas {c.name}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="overflow-x-auto rounded-2xl border border-slate-150 max-h-[500px] overflow-y-auto custom-scrollbar">
-                  <table className="w-full min-w-[560px] text-left border-collapse">
-                    <thead className="sticky top-0 z-10">
-                      <tr className="bg-slate-50 text-[9px] uppercase tracking-wider text-slate-500 font-black border-b border-slate-150">
-                        <th className="px-3 sm:px-4 py-3">Kelas</th>
-                        <th className="px-3 py-3 text-center">Siswa</th>
-                        <th className="px-3 py-3 text-center">Sensei</th>
-                        <th className="px-3 py-3">Materi Terakhir</th>
-                        <th className="px-3 py-3 text-right">Progres Rata-rata</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                  {(systemState.customization?.lmsClasses || [])
-                  .filter(c => c.isActive !== false)
-                  .map(c => c.name)
-                  .filter(c => lmsClassFilter === "all" || c === lmsClassFilter)
-                  .map((className, i) => {
-                    const classUsers = (systemState.users || []).filter(u => u.assignedClass === className);
-                    const classStudents = (systemState.activeStudents || []).filter(s => (s.class === className || s.assignedClass === className) && !["Lulus", "Di Jepang"].includes(s.status || ""));
-                    const classSensei = classUsers.filter(u => ["Pengajar", "Admin", "Admin Biasa", "Admin Super", "Staf"].includes(u.role));
-
-                    // Calculate Average Progress dynamically based on chapter assessments
-                    const studentProgressList = classStudents.map(student => {
-                      const studentAsss = (systemState.chapterAssessments || []).filter((c: any) => c.studentId === student.id);
-                      const completedBab = studentAsss.filter((c: any) => c.status === "Telah Dinilai").length;
-                      if (completedBab > 0) {
-                        const maxCh = getClassMaxBab(student.class || "") || 25;
-                        return maxCh > 0 ? (completedBab / maxCh) * 100 : 0;
-                      }
-                      return student.progress || (((student.currentChapter || 1) / (getClassMaxBab(student.class || "") || 25)) * 100) || 0;
-                    });
-
-                    const avgProgress = studentProgressList.length > 0
-                      ? Math.round(studentProgressList.reduce((acc, p) => acc + p, 0) / studentProgressList.length)
-                      : 0;
-
-                    const displayBab = (() => {
-                      const classObj = (systemState.customization?.lmsClasses || []).find((c: any) => c.name.toLowerCase() === className.toLowerCase() || c.id === className);
-                      const activeBab = classObj?.activeChapterNum || 1;
-                      const maxGraded = Math.max(...classStudents.map(s => s.currentChapter || 0), 0);
-                      return Math.min(maxGraded || activeBab, activeBab);
-                    })();
-
-                    return (
-                      <tr key={i} className="hover:bg-slate-50/70 transition-colors group">
-                        <td className="px-3 sm:px-4 py-3 whitespace-nowrap">
-                          <div className="flex items-center gap-2">
-                            <div className="h-7 w-7 shrink-0 bg-sky-500 text-white rounded-lg flex items-center justify-center text-[10px] font-black">
-                              {className.charAt(0)}
-                            </div>
-                            <span className="text-xs font-black text-slate-800">Kelas {className}</span>
-                          </div>
-                        </td>
-                        <td className="px-3 py-3 text-center font-bold text-slate-700 text-xs">{classStudents.length}</td>
-                        <td className="px-3 py-3 text-center font-bold text-slate-700 text-xs">{classSensei.length}</td>
-                        <td className="px-3 py-3 text-[10px] text-slate-500 whitespace-nowrap">
-                          Chapter <span className="font-bold text-slate-700">{displayBab}</span>
-                        </td>
-                        <td className="px-3 py-3">
-                          <div className="flex items-center justify-end gap-2">
-                            <span className="text-[10px] font-black text-slate-800">{avgProgress}%</span>
-                            <div className="w-16 sm:w-20 h-1.5 bg-slate-200 rounded-full overflow-hidden shrink-0">
-                              <div className="h-full bg-sky-500 rounded-full group-hover:animate-pulse" style={{ width: `${avgProgress}%` }} />
-                            </div>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              {/* Detail Progres Chapter (Real Data) */}
-              <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-xs space-y-6">
-                <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center">
-                    <TrendingUp className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <h3 className="font-bold text-slate-900 text-sm">Analitik Capaian Chapter</h3>
-                    <p className="text-[10px] text-slate-500">Persebaran pemahaman materi siswa (Chapter 1 - 25).</p>
-                  </div>
-                </div>
-                <div className="h-[200px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <BarChart data={[
-                      { ch: "Ch 1-5", val: (systemState.activeStudents || []).filter((s: any) => !["Lulus", "Di Jepang"].includes(s.status || "") && s.currentChapter >= 1 && s.currentChapter <= 5).length },
-                      { ch: "Ch 6-10", val: (systemState.activeStudents || []).filter((s: any) => !["Lulus", "Di Jepang"].includes(s.status || "") && s.currentChapter >= 6 && s.currentChapter <= 10).length },
-                      { ch: "Ch 11-15", val: (systemState.activeStudents || []).filter((s: any) => !["Lulus", "Di Jepang"].includes(s.status || "") && s.currentChapter >= 11 && s.currentChapter <= 15).length },
-                      { ch: "Ch 16-20", val: (systemState.activeStudents || []).filter((s: any) => !["Lulus", "Di Jepang"].includes(s.status || "") && s.currentChapter >= 16 && s.currentChapter <= 20).length },
-                      { ch: "Ch 21-25", val: (systemState.activeStudents || []).filter((s: any) => !["Lulus", "Di Jepang"].includes(s.status || "") && s.currentChapter >= 21).length },
-                    ]}>
-                      <XAxis dataKey="ch" fontSize={10} axisLine={false} tickLine={false} />
-                      <YAxis fontSize={10} axisLine={false} tickLine={false} hide />
-                      <Tooltip />
-                      <Bar dataKey="val" radius={[4, 4, 0, 0]} fill="#0ea5e9">
-                        {[0,1,2,3,4].map((e,i) => <Cell key={i} fill={["#0ea5e9", "#38bdf8", "#7dd3fc", "#bae6fd", "#f0f9ff"][i]} />)}
-                      </Bar>
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-                <p className="text-[10px] text-center text-slate-400 font-medium">Grafik menunjukkan jumlah siswa yang berada pada rentang chapter tersebut.</p>
-              </div>
-            </div>
-
-            {/* Sidebar Monitoring Sensei (Real Data) */}
-            <div className="md:col-span-4 space-y-6">
-              <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-xs space-y-4">
-                <h4 className="font-black text-[10px] text-slate-400 uppercase tracking-[0.2em]">Kinerja Sensei (LMS)</h4>
-                <div className="space-y-3">
-                  {(systemState.logs || [])
-                    .filter((l: any) => (l.action || "").toLowerCase().includes("penilaian") || (l.action || "").toLowerCase().includes("review"))
-                    .slice(0, 5)
-                    .map((s: any, i: number) => (
-                    <div key={i} className="flex items-center justify-between gap-2 p-3 bg-slate-50 rounded-xl">
-                      <div className="min-w-0 flex-1">
-                        <p className="text-[11px] font-black text-slate-800 truncate">{s.user}</p>
-                        <p className="text-[10px] text-slate-500 truncate">{s.action}</p>
-                      </div>
-                      <span className="text-[9px] font-bold text-slate-400 whitespace-nowrap">{new Date(s.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                    </div>
-                  ))}
-                  {(!systemState.logs || systemState.logs.length === 0) && (
-                    <p className="text-center py-4 text-[10px] text-slate-400">Belum ada aktivitas kuis terdeteksi.</p>
-                  )}
-                </div>
-                <button className="w-full py-2 bg-slate-100 hover:bg-slate-200 text-slate-600 text-[10px] font-black rounded-lg uppercase tracking-widest transition">Detail Laporan Sensei</button>
-              </div>
-
-              <div className="bg-sky-600 text-white rounded-3xl p-6 shadow-lg shadow-sky-200 space-y-4">
-                <div className="h-10 w-10 bg-white/20 rounded-xl flex items-center justify-center">
-                  <Activity className="h-6 w-6 text-white" />
-                </div>
-                <h4 className="font-bold text-sm">Target Belajar Global</h4>
-                <div className="space-y-4">
-                  {(() => {
-                    const activeSiswaOnly = (systemState.activeStudents || []).filter(s => !["Lulus", "Di Jepang"].includes(s.status || ""));
-                    let globalAvg = 0;
-                    if (activeSiswaOnly.length > 0) {
-                      const studentProgressList = activeSiswaOnly.map(student => {
-                        const studentAsss = (systemState.chapterAssessments || []).filter((c: any) => c.studentId === student.id);
-                        const completedBab = studentAsss.filter((c: any) => c.status === "Telah Dinilai").length;
-                        if (completedBab > 0) {
-                          const maxCh = getClassMaxBab(student.class || "") || 25;
-                          return maxCh > 0 ? (completedBab / maxCh) * 100 : 0;
-                        }
-                        return student.progress || (((student.currentChapter || 1) / (getClassMaxBab(student.class || "") || 25)) * 100) || 0;
-                      });
-                      globalAvg = Math.round(studentProgressList.reduce((acc, p) => acc + p, 0) / studentProgressList.length);
-                    }
-                    return (
-                      <div className="space-y-1.5">
-                        <div className="flex justify-between text-[10px] font-bold">
-                          <span className="text-sky-100 uppercase">Rata-rata Progress Siswa</span>
-                          <span>{globalAvg}%</span>
-                        </div>
-                        <div className="h-1.5 bg-white/20 rounded-full overflow-hidden">
-                          <div className="h-full bg-white rounded-full shadow-[0_0_8px_rgba(255,255,255,0.6)]" style={{ width: `${globalAvg}%` }} />
-                        </div>
-                      </div>
-                    );
-                  })()}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
       {currentViewMode === "kalender" && (
         <section className="bg-white border border-slate-200/60 rounded-[2rem] p-5 sm:p-8 space-y-8 animate-fade-in text-slate-800 shadow-xs" id="vvip-kalender-section">
           <div className="border-b border-slate-100 pb-5">
@@ -3458,6 +3176,18 @@ export default function VvipView({
             >
               <BookOpen className="h-3.5 w-3.5" />
               <span>Pantau Sensei ({systemState.users?.filter(u => ["Pengajar", "Admin", "Admin Biasa", "Admin Super", "Staf"].includes(u.role)).length || 0})</span>
+            </button>
+            <button
+              id="vvip-mon-tab-materi"
+              onClick={() => setMonitorTab("materi" as any)}
+              className={`px-5 py-2.5 rounded-xl text-xs font-black transition-all flex items-center gap-2 cursor-pointer whitespace-nowrap duration-150 ${
+                monitorTab === ("materi" as any)
+                  ? "bg-white text-sky-600 shadow-md font-black"
+                  : "text-slate-600 hover:text-slate-900 hover:bg-slate-55"
+              }`}
+            >
+              <Activity className="h-3.5 w-3.5" />
+              <span>Monitoring Materi</span>
             </button>
             <button
               id="vvip-mon-tab-hr"
@@ -5018,8 +4748,256 @@ export default function VvipView({
           </div>
         )}
 
+        {/* TAB: MONITORING MATERI (LMS E-Benkyou progress, merged from the old standalone LMS monitoring page) */}
+        {monitorTab === ("materi" as any) && (() => {
+          const activeSiswaOnly = (systemState.activeStudents || []).filter(s => !["Lulus", "Di Jepang"].includes(s.status || ""));
+          const senseiCount = (systemState.users || []).filter(u => ["Pengajar", "Admin", "Admin Biasa", "Admin Super", "Staf"].includes(u.role)).length || 0;
+          const allScores: number[] = [];
+          activeSiswaOnly.forEach(s => {
+            if ((s as any).scores) Object.values((s as any).scores).forEach((v: any) => allScores.push(v));
+          });
+          const avgQuizScore = allScores.length > 0 ? (allScores.reduce((a, b) => a + b, 0) / allScores.length).toFixed(1) : "0.0";
+          const studentProgress = (list: typeof activeSiswaOnly) => list.map(student => {
+            const studentAsss = (systemState.chapterAssessments || []).filter((c: any) => c.studentId === student.id);
+            const completedBab = studentAsss.filter((c: any) => c.status === "Telah Dinilai").length;
+            if (completedBab > 0) {
+              const maxCh = getClassMaxBab(student.class || "") || 25;
+              return maxCh > 0 ? (completedBab / maxCh) * 100 : 0;
+            }
+            return (student as any).progress || ((((student as any).currentChapter || 1) / (getClassMaxBab(student.class || "") || 25)) * 100) || 0;
+          });
+          const globalProgressList = studentProgress(activeSiswaOnly);
+          const globalAvgProgress = globalProgressList.length > 0 ? Math.round(globalProgressList.reduce((a, b) => a + b, 0) / globalProgressList.length) : 0;
+
+          return (
+          <div className="space-y-6 animate-fade-in text-left">
+            {/* Hero summary strip */}
+            <div className="bg-gradient-to-br from-sky-900 via-sky-800 to-slate-900 text-white p-6 sm:p-8 rounded-[2rem] relative overflow-hidden border border-white/5 shadow-xl shadow-sky-500/10">
+              <div className="absolute top-0 right-0 w-40 h-40 bg-sky-400/10 rounded-full blur-3xl -mr-16 -mt-16" />
+              <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+                <div className="space-y-2 max-w-xl">
+                  <div className="inline-flex items-center gap-2 bg-sky-400/10 text-sky-300 px-3 py-1 rounded-full border border-sky-400/20 text-[10px] font-black uppercase tracking-widest">
+                    <BookOpen className="h-3.5 w-3.5" />
+                    <span>E-Benkyou LMS Monitoring</span>
+                  </div>
+                  <h3 className="text-xl sm:text-2xl font-black">Progres Materi & Aktivitas Belajar</h3>
+                  <p className="text-xs text-sky-200/70 font-medium leading-relaxed">
+                    Pantau progres materi per kelas, capaian chapter, dan performa bimbingan Sensei di platform E-Benkyou secara real-time.
+                  </p>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 w-full lg:w-auto">
+                  {[
+                    { label: "Materi Aktif", val: systemState.lmsLessons?.length || 0 },
+                    { label: "Total Kuis", val: systemState.lmsQuizzes?.length || 0 },
+                    { label: "Avg. Skor Kuis", val: avgQuizScore },
+                    { label: "Progres Global", val: `${globalAvgProgress}%` },
+                  ].map((s, i) => (
+                    <div key={i} className="bg-white/5 p-3.5 rounded-2xl border border-white/10 text-center min-w-[92px]">
+                      <p className="text-[8.5px] font-bold text-sky-300 uppercase mb-1 tracking-wide">{s.label}</p>
+                      <p className="text-xl font-black text-white">{s.val}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="grid lg:grid-cols-12 gap-6">
+              {/* Per-class activity table */}
+              <div className="lg:col-span-8 space-y-6">
+                <div className="bg-white border border-slate-200 rounded-3xl p-5 sm:p-6 shadow-xs space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 shrink-0 bg-sky-50 text-sky-600 rounded-xl flex items-center justify-center">
+                        <Activity className="h-5 w-5" />
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-slate-900 text-sm">Monitoring Materi per Kelas</h4>
+                        <p className="text-[10px] text-slate-500">Chapter terakhir & progres rata-rata setiap kelas aktif.</p>
+                      </div>
+                    </div>
+                    <select
+                      value={lmsClassFilter}
+                      onChange={(e) => setLmsClassFilter(e.target.value)}
+                      className="text-[10px] font-bold bg-slate-50 border border-slate-200 p-2 rounded-lg outline-none focus:ring-1 focus:ring-sky-500 cursor-pointer"
+                    >
+                      <option value="all">Semua Kelas</option>
+                      {(systemState.customization?.lmsClasses || []).filter(c => c.isActive !== false).map(c => (
+                        <option key={c.name} value={c.name}>Kelas {c.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="overflow-x-auto rounded-2xl border border-slate-150 max-h-[420px] overflow-y-auto custom-scrollbar">
+                    <table className="w-full min-w-[560px] text-left border-collapse">
+                      <thead className="sticky top-0 z-10">
+                        <tr className="bg-slate-50 text-[9px] uppercase tracking-wider text-slate-500 font-black border-b border-slate-150">
+                          <th className="px-3 sm:px-4 py-3">Kelas</th>
+                          <th className="px-3 py-3 text-center">Siswa</th>
+                          <th className="px-3 py-3 text-center">Sensei</th>
+                          <th className="px-3 py-3">Materi Terakhir</th>
+                          <th className="px-3 py-3 text-right">Progres Rata-rata</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {(systemState.customization?.lmsClasses || [])
+                          .filter(c => c.isActive !== false)
+                          .map(c => c.name)
+                          .filter(c => lmsClassFilter === "all" || c === lmsClassFilter)
+                          .map((className, i) => {
+                            const classUsers = (systemState.users || []).filter(u => u.assignedClass === className);
+                            const classStudents = (systemState.activeStudents || []).filter(s => (s.class === className || (s as any).assignedClass === className) && !["Lulus", "Di Jepang"].includes(s.status || ""));
+                            const classSensei = classUsers.filter(u => ["Pengajar", "Admin", "Admin Biasa", "Admin Super", "Staf"].includes(u.role));
+                            const classProgressList = studentProgress(classStudents);
+                            const avgProgress = classProgressList.length > 0 ? Math.round(classProgressList.reduce((a, b) => a + b, 0) / classProgressList.length) : 0;
+                            const displayBab = (() => {
+                              const classObj = (systemState.customization?.lmsClasses || []).find((c: any) => c.name.toLowerCase() === className.toLowerCase() || c.id === className);
+                              const activeBab = (classObj as any)?.activeChapterNum || 1;
+                              const maxGraded = Math.max(...classStudents.map(s => (s as any).currentChapter || 0), 0);
+                              return Math.min(maxGraded || activeBab, activeBab);
+                            })();
+
+                            if (classStudents.length === 0 && lmsClassFilter === "all") return null;
+
+                            return (
+                              <tr key={i} className="hover:bg-slate-50/70 transition-colors group">
+                                <td className="px-3 sm:px-4 py-3 whitespace-nowrap">
+                                  <div className="flex items-center gap-2">
+                                    <div className="h-7 w-7 shrink-0 bg-sky-500 text-white rounded-lg flex items-center justify-center text-[10px] font-black">
+                                      {className.charAt(0)}
+                                    </div>
+                                    <span className="text-xs font-black text-slate-800">Kelas {className}</span>
+                                  </div>
+                                </td>
+                                <td className="px-3 py-3 text-center font-bold text-slate-700 text-xs">{classStudents.length}</td>
+                                <td className="px-3 py-3 text-center font-bold text-slate-700 text-xs">{classSensei.length}</td>
+                                <td className="px-3 py-3 text-[10px] text-slate-500 whitespace-nowrap">
+                                  Chapter <span className="font-bold text-slate-700">{displayBab}</span>
+                                </td>
+                                <td className="px-3 py-3">
+                                  <div className="flex items-center justify-end gap-2">
+                                    <span className="text-[10px] font-black text-slate-800">{avgProgress}%</span>
+                                    <div className="w-16 sm:w-20 h-1.5 bg-slate-200 rounded-full overflow-hidden shrink-0">
+                                      <div className={`h-full rounded-full group-hover:animate-pulse ${avgProgress >= 70 ? "bg-emerald-500" : avgProgress >= 40 ? "bg-sky-500" : "bg-amber-500"}`} style={{ width: `${avgProgress}%` }} />
+                                    </div>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Chapter distribution chart */}
+                <div className="bg-white border border-slate-200 rounded-3xl p-5 sm:p-6 shadow-xs space-y-6">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 bg-indigo-50 text-indigo-600 rounded-xl flex items-center justify-center">
+                      <TrendingUp className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-slate-900 text-sm">Analitik Capaian Chapter</h4>
+                      <p className="text-[10px] text-slate-500">Persebaran chapter yang sedang dipelajari siswa (Chapter 1 - 25).</p>
+                    </div>
+                  </div>
+                  <div className="h-[200px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={(() => {
+                        // Bucket each student by the highest chapter they've been
+                        // graded on ("Telah Dinilai"/"Sudah Dinilai" in
+                        // chapterAssessments) - the activeStudents.currentChapter
+                        // field itself is never actually populated by any write
+                        // path, so reading it directly here always yielded an
+                        // empty chart.
+                        const maxGradedChapter = (studentId: string) => {
+                          const graded = (systemState.chapterAssessments || []).filter(
+                            (c: any) => c.studentId === studentId && (c.status === "Telah Dinilai" || c.status === "Sudah Dinilai")
+                          );
+                          return graded.reduce((max, c: any) => Math.max(max, c.chapterNumber || 0), 0);
+                        };
+                        const buckets = [
+                          { ch: "Ch 1-5", min: 1, max: 5, val: 0 },
+                          { ch: "Ch 6-10", min: 6, max: 10, val: 0 },
+                          { ch: "Ch 11-15", min: 11, max: 15, val: 0 },
+                          { ch: "Ch 16-20", min: 16, max: 20, val: 0 },
+                          { ch: "Ch 21-25", min: 21, max: 999, val: 0 },
+                        ];
+                        activeSiswaOnly.forEach(s => {
+                          const chapter = maxGradedChapter(s.id);
+                          if (chapter < 1) return;
+                          const bucket = buckets.find(b => chapter >= b.min && chapter <= b.max);
+                          if (bucket) bucket.val += 1;
+                        });
+                        return buckets;
+                      })()}>
+                        <XAxis dataKey="ch" fontSize={10} axisLine={false} tickLine={false} />
+                        <YAxis fontSize={10} axisLine={false} tickLine={false} hide />
+                        <Tooltip />
+                        <Bar dataKey="val" radius={[4, 4, 0, 0]} fill="#0ea5e9">
+                          {[0, 1, 2, 3, 4].map((e, i) => <Cell key={i} fill={["#0ea5e9", "#38bdf8", "#7dd3fc", "#bae6fd", "#f0f9ff"][i]} />)}
+                        </Bar>
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <p className="text-[10px] text-center text-slate-400 font-medium">Grafik menunjukkan jumlah siswa yang berada pada rentang chapter tersebut.</p>
+                </div>
+              </div>
+
+              {/* Sidebar: recent grading activity + global target */}
+              <div className="lg:col-span-4 space-y-6">
+                <div className="bg-white border border-slate-200 rounded-3xl p-5 sm:p-6 shadow-xs space-y-4">
+                  <h4 className="font-black text-[10px] text-slate-400 uppercase tracking-[0.2em]">Aktivitas Penilaian Sensei</h4>
+                  <div className="space-y-3">
+                    {(systemState.logs || [])
+                      .filter((l: any) => (l.action || "").toLowerCase().includes("penilaian") || (l.action || "").toLowerCase().includes("review"))
+                      .slice(0, 5)
+                      .map((s: any, i: number) => (
+                        <div key={i} className="flex items-center justify-between gap-2 p-3 bg-slate-50 rounded-xl">
+                          <div className="min-w-0 flex-1">
+                            <p className="text-[11px] font-black text-slate-800 truncate">{s.user}</p>
+                            <p className="text-[10px] text-slate-500 truncate">{s.action}</p>
+                          </div>
+                          <span className="text-[9px] font-bold text-slate-400 whitespace-nowrap">{new Date(s.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                        </div>
+                      ))}
+                    {(!systemState.logs || systemState.logs.filter((l: any) => (l.action || "").toLowerCase().includes("penilaian") || (l.action || "").toLowerCase().includes("review")).length === 0) && (
+                      <p className="text-center py-4 text-[10px] text-slate-400">Belum ada aktivitas penilaian terdeteksi.</p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="bg-gradient-to-br from-sky-600 to-sky-700 text-white rounded-3xl p-5 sm:p-6 shadow-lg shadow-sky-200 space-y-4">
+                  <div className="h-10 w-10 bg-white/20 rounded-xl flex items-center justify-center">
+                    <Activity className="h-6 w-6 text-white" />
+                  </div>
+                  <h4 className="font-bold text-sm">Target Belajar Global</h4>
+                  <div className="space-y-1.5">
+                    <div className="flex justify-between text-[10px] font-bold">
+                      <span className="text-sky-100 uppercase">Rata-rata Progress Siswa</span>
+                      <span>{globalAvgProgress}%</span>
+                    </div>
+                    <div className="h-1.5 bg-white/20 rounded-full overflow-hidden">
+                      <div className="h-full bg-white rounded-full shadow-[0_0_8px_rgba(255,255,255,0.6)]" style={{ width: `${globalAvgProgress}%` }} />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3 pt-2 border-t border-white/10">
+                    <div>
+                      <p className="text-[9px] text-sky-200 uppercase font-bold">Siswa Belajar</p>
+                      <p className="text-lg font-black">{activeSiswaOnly.length}</p>
+                    </div>
+                    <div>
+                      <p className="text-[9px] text-sky-200 uppercase font-bold">Sensei Aktif</p>
+                      <p className="text-lg font-black">{senseiCount}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          );
+        })()}
+
         {monitorTab === ("hr" as any) && (
-          <div className="space-y-6 animate-fade-in text-left"> 
+          <div className="space-y-6 animate-fade-in text-left">
             <h3 className="font-bold text-slate-800">Pemantauan Absensi & HR (Pengajar & Staf)</h3> 
             <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200">
               <div className="flex items-center justify-between mb-3">
