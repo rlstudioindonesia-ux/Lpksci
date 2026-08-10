@@ -2825,19 +2825,21 @@ export default function AdminView({
                                 )}
                                 <input
                                   type="text"
-                                  placeholder="Keterangan: mitra SO/TSK, lokasi kerja..."
-                                  value={s.keterangan || ""}
-                                  onChange={async (e) => {
-                                    await onUpdateState(
-                                      "activeStudents",
-                                      "update_status",
-                                      {
-                                        id: s.id,
-                                        keterangan: e.target.value,
-                                      },
-                                    );
+                                  placeholder="Catatan bebas (isi Mitra SO/Job1/Bulan Lulus lewat tombol Edit)"
+                                  defaultValue={s.keterangan || ""}
+                                  onBlur={async (e) => {
+                                    if (e.target.value !== (s.keterangan || "")) {
+                                      await onUpdateState(
+                                        "activeStudents",
+                                        "update_status",
+                                        {
+                                          id: s.id,
+                                          keterangan: e.target.value,
+                                        },
+                                      );
+                                    }
                                   }}
-                                  title="Nama mitra SO/TSK & lokasi kerja siswa"
+                                  title="Catatan bebas. Untuk Mitra SO/TSK, Job 1, dan Bulan Lulus gunakan tombol Edit (Edit Data Lengkap Siswa)."
                                   className="text-[10px] font-medium text-slate-600 bg-white border border-dashed border-slate-250 rounded px-1.5 py-0.5 w-full outline-none focus:border-indigo-400 focus:border-solid placeholder:text-slate-400 placeholder:italic"
                                 />
                               </div>
@@ -3339,19 +3341,21 @@ export default function AdminView({
                           )}
                           <input
                             type="text"
-                            placeholder="Keterangan: mitra SO/TSK, lokasi kerja..."
-                            value={s.keterangan || ""}
-                            onChange={async (e) => {
-                              await onUpdateState(
-                                "activeStudents",
-                                "update_status",
-                                {
-                                  id: s.id,
-                                  keterangan: e.target.value,
-                                },
-                              );
+                            placeholder="Catatan bebas (isi Mitra SO/Job1/Bulan Lulus lewat tombol Edit)"
+                            defaultValue={s.keterangan || ""}
+                            onBlur={async (e) => {
+                              if (e.target.value !== (s.keterangan || "")) {
+                                await onUpdateState(
+                                  "activeStudents",
+                                  "update_status",
+                                  {
+                                    id: s.id,
+                                    keterangan: e.target.value,
+                                  },
+                                );
+                              }
                             }}
-                            title="Nama mitra SO/TSK & lokasi kerja siswa"
+                            title="Catatan bebas. Untuk Mitra SO/TSK, Job 1, dan Bulan Lulus gunakan tombol Edit (Edit Data Lengkap Siswa)."
                             className="text-[9.5px] font-medium text-slate-600 bg-white border border-dashed border-slate-250 rounded px-1.5 py-1 w-full outline-none focus:border-indigo-400 focus:border-solid placeholder:text-slate-400 placeholder:italic"
                           />
                         </div>

@@ -30,6 +30,7 @@ const [name, setName] = useState("");
 const [email, setEmail] = useState("");
 const [phone, setPhone] = useState("");
 const [birthDate, setBirthDate] = useState("");
+const [gender, setGender] = useState("");
 const [education, setEducation] = useState("SMK");
 const [statusPendaftaran, setStatusPendaftaran] =
   useState("Siswa Baru");
@@ -137,6 +138,7 @@ useEffect(() => {
       password: password || "123456",
       phone: phone,
       birthDate: birthDate || "2003-01-01",
+      gender: gender || undefined,
       education: education,
       statusPendaftaran: statusPendaftaran,
       program: program,
@@ -462,6 +464,21 @@ useEffect(() => {
                 <option value="MA">MA / Pesantren</option>
                 <option value="D3">Diploma III</option>
                 <option value="S1">Sarjana S1</option>
+              </select>
+            </div>
+            <div className="space-y-1 col-span-2">
+              <label className="text-[9px] font-mono font-black text-slate-500 uppercase tracking-wider block">
+                JENIS KELAMIN
+              </label>
+              <select
+                required
+                value={gender}
+                onChange={(e) => setGender(e.target.value)}
+                className="w-full text-xs rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5 block focus:border-blue-500 focus:bg-white outline-none transition cursor-pointer"
+              >
+                <option value="">-- Pilih Jenis Kelamin --</option>
+                <option value="Laki-laki">Laki-laki</option>
+                <option value="Perempuan">Perempuan</option>
               </select>
             </div>
           </div>
