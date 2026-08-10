@@ -356,8 +356,8 @@ app.post("/api/login", (req, res) => {
 // Student sign up from the landing page with integrated Midtrans Sandbox Payment
 
 app.post("/api/register", (req, res) => {
-  const { 
-    name, email, password, phone, birthDate, education, program, japaneseLevel, paymentAmount, paymentMethod, proofOfPayment,
+  const {
+    name, email, password, phone, birthDate, gender, education, program, japaneseLevel, paymentAmount, paymentMethod, proofOfPayment,
     docAkta, docFoto, docIjazahSD, docIjazahSMP, docIjazahSMA, docKK, docKTP, docTranskip, docPraMCU, docVaksin, docKontrak,
     referrer, statusPendaftaran
   } = req.body;
@@ -378,6 +378,7 @@ app.post("/api/register", (req, res) => {
     password: hashPassword(rawPassword),
     phone,
     birthDate: birthDate || "2003-01-01",
+    gender: gender || undefined,
     education: education || "SMA",
     program: program || "Tokutei Ginou (SSW)",
     japaneseLevel: japaneseLevel || "Belum Belajar",
@@ -430,6 +431,7 @@ app.post("/api/register", (req, res) => {
         kategoriPendaftaran: "Alumni",
         referrer: referrer || "",
         birthDate: birthDate || "",
+        gender: gender || undefined,
         phone: phone || "",
         email: email || "",
         profilePicture: docFoto ? (docFoto.includes('|') ? docFoto.split('|')[1] : docFoto) : ""
