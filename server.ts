@@ -41,6 +41,23 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.get("/api/health", (req, res) => res.json({ status: "ok" }));
 
+// Lets the HTTP server start accepting connections (and serve the static frontend)
+// immediately on boot, instead of waiting ~20-30s for the full Firestore sync below.
+// Only /api/* requests (besides /api/health) wait for that sync, so no request can
+// ever observe a race-condition empty state - they just wait a bit longer instead of
+// the whole server being unreachable while Firestore loads.
+let resolveFirestoreReady: () => void;
+const firestoreReadyPromise = new Promise<void>((resolve) => {
+  resolveFirestoreReady = resolve;
+});
+app.use((req, res, next) => {
+  if (req.path.startsWith("/api/") && req.path !== "/api/health") {
+    firestoreReadyPromise.then(next);
+  } else {
+    next();
+  }
+});
+
 app.get("/robots.txt", (req, res) => {
   res.type("text/plain");
   res.send(
@@ -2815,10 +2832,15 @@ async function startServer() {
     });
   }
 
-  // Wait for Firebase before listening to avoid race conditions returning empty states on cold starts
-    try {
+  // Start accepting connections right away (static assets / SPA shell load instantly);
+  // /api/* requests are held by the readiness gate above until the sync below finishes.
+  app.listen(PORT, "0.0.0.0", () => {
+    console.log(`Server fully operational on http://localhost:${PORT} under environment: ${process.env.NODE_ENV || 'development'}`);
+  });
+
+  try {
       testConnection(); // Run in the background to avoid blocking server boot and speed up cold starts
-      
+
       // Load state from Firestore overlaying the default memory mock state!
       console.log("Synchronizing memory state with Firebase Firestore...");
       const loadedState = await loadStateFromFirestore(state);
@@ -3016,11 +3038,11 @@ async function startServer() {
       console.log("🔥 Memory state loaded successfully!");
     } catch (err) {
       console.error("Error during background Firestore sync:", err);
+    } finally {
+      // Unblock any /api/* requests held by the readiness gate, whether the sync
+      // succeeded or failed (falling back to the in-memory default state).
+      resolveFirestoreReady();
     }
-    
-    app.listen(PORT, "0.0.0.0", () => {
-      console.log(`Server fully operational on http://localhost:${PORT} under environment: ${process.env.NODE_ENV || 'development'}`);
-    });
 }
 
 startServer();
