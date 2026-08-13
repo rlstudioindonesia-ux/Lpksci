@@ -2371,7 +2371,7 @@ app.post("/api/state/update", (req, res) => {
         return res.json({ success: true, item: stripPassword(newUser) });
       }
       if (action === "edit") {
-        const { username, name, email, role, studentId, profilePicture, assignedClass, password, status, bankAccount, faceRegistered, faceBiometricData, lastActive, japaneseLevel, kecakapanSensei, docCV, docIjazah, docSertifikat, docKTP } = payload;
+        const { username, name, email, role, studentId, profilePicture, assignedClass, password, status, bankAccount, faceRegistered, faceBiometricData, lastActive, japaneseLevel, kecakapanSensei, docCV, docIjazah, docSertifikat, docKTP, birthDate } = payload;
         const index = state.users.findIndex(u => u.username === username);
         if (index !== -1) {
           const oldData = state.users[index];
@@ -2383,6 +2383,7 @@ app.post("/api/state/update", (req, res) => {
             studentId: studentId !== undefined ? studentId : state.users[index].studentId,
             profilePicture: profilePicture !== undefined ? profilePicture : state.users[index].profilePicture,
             assignedClass: assignedClass !== undefined ? assignedClass : state.users[index].assignedClass,
+            birthDate: birthDate !== undefined ? birthDate : state.users[index].birthDate,
             password: password !== undefined ? (isHashedPassword(password) ? password : hashPassword(password)) : state.users[index].password,
             status: status !== undefined ? status : (state.users[index].status || "Active"),
             bankAccount: bankAccount !== undefined ? bankAccount : state.users[index].bankAccount,
@@ -2442,9 +2443,19 @@ app.post("/api/state/update", (req, res) => {
               (currentUserObj.email && (rs.email || "").trim().toLowerCase() === (currentUserObj.email || "").trim().toLowerCase()) ||
               (rs.name || "").trim().toLowerCase() === (currentUserObj.name || "").trim().toLowerCase()
             );
-            if (regIndex !== -1 && currentUserObj.profilePicture && state.registeredStudents[regIndex].docFoto !== currentUserObj.profilePicture) {
-              state.registeredStudents[regIndex].docFoto = currentUserObj.profilePicture;
-              syncEntityToFirestore("registeredStudents", state.registeredStudents[regIndex].id, state.registeredStudents[regIndex]);
+            if (regIndex !== -1) {
+              let updatedReg = false;
+              if (currentUserObj.profilePicture && state.registeredStudents[regIndex].docFoto !== currentUserObj.profilePicture) {
+                state.registeredStudents[regIndex].docFoto = currentUserObj.profilePicture;
+                updatedReg = true;
+              }
+              if (currentUserObj.birthDate && state.registeredStudents[regIndex].birthDate !== currentUserObj.birthDate) {
+                state.registeredStudents[regIndex].birthDate = currentUserObj.birthDate;
+                updatedReg = true;
+              }
+              if (updatedReg) {
+                syncEntityToFirestore("registeredStudents", state.registeredStudents[regIndex].id, state.registeredStudents[regIndex]);
+              }
             }
 
             const actIndex = state.activeStudents.findIndex(s => 
@@ -2463,6 +2474,10 @@ app.post("/api/state/update", (req, res) => {
               }
               if (currentUserObj.assignedClass && state.activeStudents[actIndex].class !== currentUserObj.assignedClass) {
                 state.activeStudents[actIndex].class = currentUserObj.assignedClass;
+                updatedAct = true;
+              }
+              if (currentUserObj.birthDate && state.activeStudents[actIndex].birthDate !== currentUserObj.birthDate) {
+                state.activeStudents[actIndex].birthDate = currentUserObj.birthDate;
                 updatedAct = true;
               }
               if (updatedAct) {

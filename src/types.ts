@@ -374,6 +374,7 @@ export interface UserAccount {
   status?: "Active" | "Suspended";
   studentId?: string; // If Siswa, points to ActiveStudent
   profilePicture?: string;
+  birthDate?: string;
   assignedClass?: string; // Plotted class (from Management Kelas)
   japaneseLevel?: string; // Optional Japanese level for teachers/users
   bankAccount?: string; // e.g. "Bank BCA - 123456789"

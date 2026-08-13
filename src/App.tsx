@@ -47,6 +47,7 @@ import {
 import PrivacyPolicyModal from "./components/PrivacyPolicyModal";
 import LoginModal from "./components/LoginModal";
 import ChangePasswordPrompt from "./components/ChangePasswordPrompt";
+import StudentProfilePrompt from "./components/StudentProfilePrompt";
 import ResetPasswordView from "./components/ResetPasswordView";
 import PembayaranSiswaView from "./components/PembayaranSiswaView";
 import JobsView from "./components/JobsView";
@@ -232,7 +233,8 @@ export default function App() {
     }
   }, [currentUser, activeTab]);
   const [isPrivacyOpen, setIsPrivacyOpen] = useState<boolean>(false);
-  const [showChangePasswordPrompt, setShowChangePasswordPrompt] = useState<boolean>(false);
+  const [showStudentProfilePrompt, setShowStudentProfilePrompt] = useState<boolean>(false);
+  const [isDefaultPasswordPrompt, setIsDefaultPasswordPrompt] = useState<boolean>(false);
   const [pendingAdminStudentSearch, setPendingAdminStudentSearch] = useState<string>("");
   const [adminSegment, setAdminSegment] = useState<
     | "siswa"
@@ -268,6 +270,62 @@ export default function App() {
   });
 
   const [isLoadingState, setIsLoadingState] = useState<boolean>(true);
+
+  // Check profile completeness & default password for student users
+  const checkAndShowStudentProfilePrompt = (user: UserAccount | null, isDefaultPass: boolean = false) => {
+    if (!user) return;
+
+    const isStudent = user.role === "Siswa" || user.role === "Alumni";
+
+    // Check suppression in localStorage
+    let isSuppressed = false;
+    if (typeof window !== "undefined") {
+      isSuppressed = localStorage.getItem(`suppress_student_profile_prompt_${user.username}`) === "true";
+    }
+
+    // Check if birthDate is missing
+    let isMissingBirthDate = false;
+    if (isStudent) {
+      const studentObj =
+        systemState?.activeStudents?.find(
+          (s) =>
+            (user.studentId && s.id === user.studentId) ||
+            (user.username && s.id === user.username) ||
+            (user.name && s.name?.toLowerCase() === user.name?.toLowerCase()) ||
+            (user.email && s.email?.toLowerCase() === user.email?.toLowerCase())
+        ) ||
+        systemState?.registeredStudents?.find(
+          (r) =>
+            (user.studentId && r.id === user.studentId) ||
+            (user.username && r.id === user.username) ||
+            (user.name && r.name?.toLowerCase() === user.name?.toLowerCase()) ||
+            (user.email && r.email?.toLowerCase() === user.email?.toLowerCase())
+        );
+
+      const existingBirthDate =
+        studentObj?.birthDate ||
+        (studentObj as any)?.tanggalLahir ||
+        (studentObj as any)?.tglLahir ||
+        user?.birthDate ||
+        "";
+
+      isMissingBirthDate = !existingBirthDate || existingBirthDate === "-" || existingBirthDate.trim() === "";
+    }
+
+    if (isDefaultPass || (isStudent && isMissingBirthDate)) {
+      if (isSuppressed && !isDefaultPass) {
+        return;
+      }
+      setIsDefaultPasswordPrompt(isDefaultPass);
+      setShowStudentProfilePrompt(true);
+    }
+  };
+
+  useEffect(() => {
+    if (currentUser && !isLoadingState) {
+      checkAndShowStudentProfilePrompt(currentUser, false);
+    }
+  }, [currentUser?.username, isLoadingState]);
 
   // Load backend state on initialization
   const fetchState = async () => {
@@ -1180,8 +1238,9 @@ export default function App() {
               onLoginSuccess={(user, isDefaultPassword) => {
                 const now = new Date().toISOString();
                 handleUpdateState("users", "edit", { username: user.username, lastActive: now });
-                setCurrentUser({ ...user, lastActive: now });
-                if (isDefaultPassword) setShowChangePasswordPrompt(true);
+                const updatedUser = { ...user, lastActive: now };
+                setCurrentUser(updatedUser);
+                checkAndShowStudentProfilePrompt(updatedUser, !!isDefaultPassword);
                 if (user.role === "Siswa" || user.role === "Pengajar")
                   setActiveTab("lms");
                 if (user.role === "Admin" || user.role === "Admin Super" || user.role === "Admin Biasa") setActiveTab("admin");
@@ -1213,10 +1272,11 @@ export default function App() {
           systemState={systemState}
           onClose={() => setIsLoginOpen(false)}
           onLoginSuccess={(user, isDefaultPassword) => {
-                const now = new Date().toISOString();
-                handleUpdateState("users", "edit", { username: user.username, lastActive: now });
-                setCurrentUser({ ...user, lastActive: now });
-                if (isDefaultPassword) setShowChangePasswordPrompt(true);
+            const now = new Date().toISOString();
+            handleUpdateState("users", "edit", { username: user.username, lastActive: now });
+            const updatedUser = { ...user, lastActive: now };
+            setCurrentUser(updatedUser);
+            checkAndShowStudentProfilePrompt(updatedUser, !!isDefaultPassword);
             // Auto redirect to authorized view for exceptional onboarding experience!
             if (user.role === "Siswa" || user.role === "Pengajar")
               setActiveTab("lms");
@@ -1226,11 +1286,13 @@ export default function App() {
         />
       )}
 
-      {showChangePasswordPrompt && currentUser && (
-        <ChangePasswordPrompt
+      {showStudentProfilePrompt && currentUser && (
+        <StudentProfilePrompt
           user={currentUser}
+          systemState={systemState}
           onUpdateState={handleUpdateState}
-          onClose={() => setShowChangePasswordPrompt(false)}
+          isDefaultPasswordPrompt={isDefaultPasswordPrompt}
+          onClose={() => setShowStudentProfilePrompt(false)}
         />
       )}
 
