@@ -1059,6 +1059,24 @@ export default function MobileDashboardView({
     myActiveStudent?.statusPendaftaran === "Alumni";
   const isUserSiswa = currentUser?.role === "Siswa";
 
+  // Reminder popup: prompt the student to complete missing core biodata.
+  // Auto-hides once the missing fields are filled in (no dismissal needed).
+  const [profilePopupDismissed, setProfilePopupDismissed] = useState(false);
+  const profileMissingFields = myActiveStudent
+    ? ([
+        !myActiveStudent.birthDate && "Tanggal Lahir",
+        !myActiveStudent.gender && "Jenis Kelamin",
+        !myActiveStudent.phone && "Nomor Telepon",
+        !myActiveStudent.address && "Alamat",
+      ].filter(Boolean) as string[])
+    : [];
+  const showProfileReminderPopup =
+    (isUserSiswa || isUserAlumni) &&
+    !!myActiveStudent &&
+    profileMissingFields.length > 0 &&
+    !profilePopupDismissed &&
+    activeSubpage !== "cv";
+
   const isMainSubpage = activeSubpage && [
     "kalender",
     "ebenkyou",
@@ -4740,6 +4758,58 @@ export default function MobileDashboardView({
         document.body
       )}
 
+      {/* PROFILE COMPLETION REMINDER POPUP - shown to Siswa/Alumni with missing core biodata */}
+      {showProfileReminderPopup && createPortal(
+        <div className="fixed inset-0 z-[110] bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4 animate-fade-in">
+          <div className="bg-white rounded-[28px] w-full max-w-sm shadow-2xl border border-white/20 overflow-hidden animate-in zoom-in-95 duration-300">
+            <div className="bg-gradient-to-r from-indigo-700 to-blue-800 p-5 text-white relative">
+              <button
+                onClick={() => setProfilePopupDismissed(true)}
+                className="absolute top-3 right-3 h-7 w-7 rounded-full bg-white/15 hover:bg-white/25 flex items-center justify-center transition cursor-pointer"
+                title="Tutup sementara"
+              >
+                <span className="text-xs font-bold">✕</span>
+              </button>
+              <div className="h-11 w-11 rounded-2xl bg-white/15 flex items-center justify-center mb-2">
+                <AlertCircle className="h-5 w-5" />
+              </div>
+              <h3 className="font-black text-sm pr-8">Lengkapi Data Profil Anda</h3>
+              <p className="text-[11px] text-indigo-100 mt-1 leading-relaxed">
+                Beberapa data biodata Anda masih kosong dan dibutuhkan untuk CV, Rapor, dan kelengkapan berkas LPK.
+              </p>
+            </div>
+            <div className="p-5 space-y-4">
+              <div className="flex flex-wrap gap-1.5">
+                {profileMissingFields.map((f) => (
+                  <span
+                    key={f}
+                    className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200"
+                  >
+                    {f}
+                  </span>
+                ))}
+              </div>
+              <button
+                onClick={() => {
+                  setProfilePopupDismissed(true);
+                  handleCategoryAction("cv");
+                }}
+                className="w-full bg-indigo-700 hover:bg-indigo-800 text-white font-black text-xs py-3.5 rounded-2xl transition flex items-center justify-center gap-2 cursor-pointer"
+              >
+                <FileText className="h-4 w-4" />
+                Lengkapi Profil Sekarang
+              </button>
+              <button
+                onClick={() => setProfilePopupDismissed(true)}
+                className="w-full text-slate-400 hover:text-slate-600 font-bold text-[10px] py-1 cursor-pointer"
+              >
+                Ingatkan saya nanti
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
 
     </div>
   );

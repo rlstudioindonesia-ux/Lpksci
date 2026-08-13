@@ -81,7 +81,7 @@ import {
   Edit,
 } from "lucide-react";
 import { SystemState, UserAccount, RegisteredStudent } from "../types";
-import { CHAPTERS_LIST } from "../chapters";
+import { CHAPTERS_LIST, MATH_CHAPTERS_LIST } from "../chapters";
 import CalendarView from "./CalendarView";
 import LmsView from "./LmsView";
 
@@ -642,10 +642,29 @@ export default function VvipView({
     };
   }, [systemState.payments, systemState.cashLedger]);
 
-  const getClassMaxBab = (cls: string) => {
-    const classDef = systemState.customization?.lmsClasses?.find((c: any) => c.name === cls);
-    const chapters = classDef?.chapters || CHAPTERS_LIST;
-    return chapters.filter((ch: any) => ch.isActive !== false).length;
+  const cleanClassName = (s: string) =>
+    (s || "").trim().toLowerCase().replace(/^kelas[:\s]*/i, "");
+
+  const findClassDef = (cls: string) => {
+    const target = cleanClassName(cls);
+    return systemState.customization?.lmsClasses?.find(
+      (c: any) => cleanClassName(c.name) === target,
+    );
+  };
+
+  const getClassChapters = (cls: string, subject?: string) => {
+    const classDef = findClassDef(cls);
+    const isMath = subject === "SSW";
+    const chapters = isMath
+      ? classDef?.mathChapters || MATH_CHAPTERS_LIST
+      : classDef?.chapters || CHAPTERS_LIST;
+    return chapters;
+  };
+
+  const getClassMaxBab = (cls: string, subject?: string) => {
+    return getClassChapters(cls, subject).filter(
+      (ch: any) => ch.isActive !== false,
+    ).length;
   };
 
   const paidPayments = useMemo(() => {
@@ -5423,12 +5442,20 @@ export default function VvipView({
             systemState.chapterAssessments || []
           ).filter((ass) => ass.studentId === student.id);
 
-          // Fallback simulated records if none, synchronized with 25 chapters from CHAPTERS_LIST
+          // Synchronized with the student's actual class curriculum (LMS E-Benkyou),
+          // not the generic template, and subject-aware (Bahasa Jepang vs SSW/Matematika)
           const displayAssessments =
             actualAssessments.length > 0
               ? actualAssessments.map((ass) => {
-                  // Attempt to match with chapters list
-                  const ch = CHAPTERS_LIST.find(
+                  const classChapters = getClassChapters(
+                    student.class || "",
+                    ass.subject,
+                  );
+                  const fallbackList =
+                    ass.subject === "SSW" ? MATH_CHAPTERS_LIST : CHAPTERS_LIST;
+                  const ch = classChapters.find(
+                    (c: any) => c.number === ass.chapterNumber,
+                  ) || fallbackList.find(
                     (c) => c.number === ass.chapterNumber,
                   ) || { title: `Bab ${ass.chapterNumber} LPK` };
                   return {
@@ -5680,7 +5707,10 @@ export default function VvipView({
                           </h5>
                           <div className="space-y-2 max-h-[200px] overflow-y-auto pr-1">
                             {(() => {
-                              const records = (systemState.attendance || []).filter(a => a.studentId === student.id || a.studentName === student.name);
+                              const records = (systemState.attendance || [])
+                                .filter(a => a.studentId === student.id || a.studentName === student.name)
+                                .slice()
+                                .sort((a, b) => (b.date || "").localeCompare(a.date || ""));
                               if (records.length === 0) return <p className="text-[10px] text-slate-400 italic">Tidak ada data presensi.</p>;
                               return records.map(r => (
                                 <div key={r.id} className="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl text-[10px]">
