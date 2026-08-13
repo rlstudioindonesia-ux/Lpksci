@@ -1982,6 +1982,16 @@ export default function StudentCvView({
           header, footer, nav, button, .flex, .bg-slate-300, .bg-amber-50 {
             display: none !important;
           }
+          /* Restore layout for flex rows that live inside the printable CV pages
+             (the broad .flex hide rule above would otherwise blank out the
+             birth date row, gender checkboxes, and signature block) */
+          #rirekisho-page-1 .flex, #rirekisho-page-1 .flex *,
+          #rirekisho-page-2 .flex, #rirekisho-page-2 .flex * {
+            visibility: visible !important;
+          }
+          #rirekisho-page-1 .flex, #rirekisho-page-2 .flex {
+            display: flex !important;
+          }
         }
       `}</style>
     </div>
