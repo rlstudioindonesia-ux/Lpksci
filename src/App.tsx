@@ -451,10 +451,19 @@ export default function App() {
   useEffect(() => {
     fetchState();
 
-    // Refresh state periodically with a responsive 25s interval
+    // Refresh state periodically. /api/state currently returns the full
+    // synchronized dataset (several MB, since uploaded photos/documents are
+    // embedded as base64 rather than living in Storage) - every open tab
+    // re-downloading and re-serializing that on a tight interval directly
+    // drives up Cloud Run CPU-time and egress cost. Widening the interval to
+    // 60s, and skipping the tick entirely while the tab is in the background,
+    // cuts that recurring cost substantially; focus/visibility/online
+    // listeners below still refetch immediately when the tab becomes active.
     const intervalId = setInterval(() => {
-      fetchState();
-    }, 25000);
+      if (document.visibilityState === "visible") {
+        fetchState();
+      }
+    }, 60000);
 
     const triggerDebouncedFetch = () => {
       const now = Date.now();
