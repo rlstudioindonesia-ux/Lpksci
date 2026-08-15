@@ -80,7 +80,7 @@ export const db = hasConfig && app
 
 export const storage = hasConfig && app
   ? (firebaseConfig.storageBucket
-      ? getStorage(app, firebaseConfig.storageBucket)
+      ? getStorage(app, firebaseConfig.storageBucket.startsWith("gs://") ? firebaseConfig.storageBucket : `gs://${firebaseConfig.storageBucket}`)
       : getStorage(app))
   : null;
 
@@ -212,7 +212,13 @@ export async function getUserFromFirestore(identifier: string): Promise<any | nu
   return null;
 }
 
-async function fetchSafeDoc(docPath: { coll: string; id: string }, retries = 1): Promise<any> {
+// retries=1 (a single retry) was too thin for a cold Cloud Run container: ~24
+// collection/doc reads all fire in parallel the moment Firestore finishes
+// connecting, and a brief hiccup there used to make a collection come back
+// empty for the rest of that boot - looking exactly like "the database isn't
+// there". A couple more attempts with a bit more backoff gives the connection
+// room to settle without meaningfully slowing down the normal (working) path.
+async function fetchSafeDoc(docPath: { coll: string; id: string }, retries = 3): Promise<any> {
   if (!db) return null;
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
@@ -220,7 +226,7 @@ async function fetchSafeDoc(docPath: { coll: string; id: string }, retries = 1):
       return snap;
     } catch (err: any) {
       if (attempt < retries) {
-        await new Promise(r => setTimeout(r, 200 * (attempt + 1)));
+        await new Promise(r => setTimeout(r, 400 * (attempt + 1)));
         continue;
       }
       handleFirestoreError(err, OperationType.GET, `${docPath.coll}/${docPath.id}`);
@@ -230,7 +236,7 @@ async function fetchSafeDoc(docPath: { coll: string; id: string }, retries = 1):
   return null;
 }
 
-async function fetchSafeCollection(collName: string, retries = 1): Promise<{ collName: string; docs: any[] }> {
+async function fetchSafeCollection(collName: string, retries = 3): Promise<{ collName: string; docs: any[] }> {
   if (!db) return { collName, docs: [] };
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
@@ -241,7 +247,7 @@ async function fetchSafeCollection(collName: string, retries = 1): Promise<{ col
       return { collName, docs: [] };
     } catch (err: any) {
       if (attempt < retries) {
-        await new Promise(r => setTimeout(r, 250 * (attempt + 1)));
+        await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
         continue;
       }
       handleFirestoreError(err, OperationType.LIST, collName);
@@ -421,6 +427,27 @@ export async function loadStateFromFirestore(fallbackState: any) {
 // In-memory write cache to prevent redundant writes and avoid RESOURCE_EXHAUSTED errors
 export const writeCache = new Map<string, string>();
 
+// Transient network hiccups (common right after a cold start, or brief Firestore
+// throttling) used to cause a write to be dropped after a single failed attempt -
+// the in-memory state still looked correct, but the change silently never reached
+// Firestore, so it would vanish again on the next server restart. Retrying a few
+// times with backoff before giving up makes writes survive those brief blips.
+async function setDocWithRetry(docRef: any, sanitized: any, cacheKey: string, opType: OperationType, retries = 3): Promise<void> {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      await setDoc(docRef, sanitized);
+      return;
+    } catch (e) {
+      if (attempt < retries) {
+        await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
+        continue;
+      }
+      try { handleFirestoreError(e, opType, cacheKey); } catch (logged) {}
+      writeCache.delete(cacheKey);
+    }
+  }
+}
+
 export function syncEntityToFirestore(collectionName: string, id: string, data: any) {
   if (!db || !id) return;
   try {
@@ -431,12 +458,8 @@ export function syncEntityToFirestore(collectionName: string, id: string, data: 
       return;
     }
     writeCache.set(cacheKey, serialized);
-    setDoc(doc(db, collectionName, id), sanitized).catch(e => {
-      // Fire-and-forget write: log the structured error but never let it become
-      // an unhandled rejection, which would crash the whole Node process.
-      try { handleFirestoreError(e, OperationType.WRITE, cacheKey); } catch (logged) {}
-      writeCache.delete(cacheKey);
-    });
+    // Fire-and-forget from the caller's perspective, but retried internally.
+    setDocWithRetry(doc(db, collectionName, id), sanitized, cacheKey, OperationType.WRITE);
   } catch(e) {
     console.error(e);
   }
@@ -453,10 +476,7 @@ export function syncCustomizationToFirestore(data: any) {
       return;
     }
     writeCache.set(cacheKey, serialized);
-    setDoc(doc(db, 'system', 'customization'), sanitized).catch(e => {
-      try { handleFirestoreError(e, OperationType.WRITE, cacheKey); } catch (logged) {}
-      writeCache.delete(cacheKey);
-    });
+    setDocWithRetry(doc(db, 'system', 'customization'), sanitized, cacheKey, OperationType.WRITE);
   } catch(e) {
     console.error(e);
   }
@@ -472,10 +492,7 @@ export function syncLmsClassToFirestore(lmsClass: any) {
       return;
     }
     writeCache.set(cacheKey, serialized);
-    setDoc(doc(db, 'lmsClasses', lmsClass.id), sanitized).catch(e => {
-      try { handleFirestoreError(e, OperationType.WRITE, cacheKey); } catch (logged) {}
-      writeCache.delete(cacheKey);
-    });
+    setDocWithRetry(doc(db, 'lmsClasses', lmsClass.id), sanitized, cacheKey, OperationType.WRITE);
   } catch(e) {
     console.error(e);
   }
@@ -486,9 +503,20 @@ export function deleteEntityFromFirestore(collectionName: string, id: string) {
   try {
     const cacheKey = `${collectionName}/${id}`;
     writeCache.delete(cacheKey);
-    deleteDoc(doc(db, collectionName, id)).catch(e => {
-      try { handleFirestoreError(e, OperationType.DELETE, cacheKey); } catch (logged) {}
-    });
+    (async () => {
+      for (let attempt = 0; attempt <= 2; attempt++) {
+        try {
+          await deleteDoc(doc(db, collectionName, id));
+          return;
+        } catch (e) {
+          if (attempt < 2) {
+            await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
+            continue;
+          }
+          try { handleFirestoreError(e, OperationType.DELETE, cacheKey); } catch (logged) {}
+        }
+      }
+    })();
   } catch(e) {
     console.error(e);
   }
