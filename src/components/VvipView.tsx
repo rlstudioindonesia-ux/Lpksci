@@ -2221,7 +2221,14 @@ export default function VvipView({
                 <div className="space-y-2 max-h-[600px] overflow-y-auto pr-1 sm:pr-2 custom-scrollbar">
                   {(systemState.users || [])
                     .filter(u => securityFilter === "all" || (u.role || "").includes(securityFilter))
-                    .sort((a, b) => a.name.localeCompare(b.name))
+                    .sort((a, b) => {
+                      // Most recently logged-in accounts first; accounts that
+                      // have never logged in sink to the bottom.
+                      const aTime = a.lastActive ? new Date(a.lastActive).getTime() : 0;
+                      const bTime = b.lastActive ? new Date(b.lastActive).getTime() : 0;
+                      if (aTime !== bTime) return bTime - aTime;
+                      return a.name.localeCompare(b.name);
+                    })
                     .map(user => (
                       <div key={user.username} className="flex flex-col sm:flex-row sm:items-center justify-between p-3 bg-slate-50 hover:bg-white border border-slate-150 rounded-2xl transition gap-3 group text-left">
                         <div className="flex items-center gap-3 min-w-0">

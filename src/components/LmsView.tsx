@@ -900,7 +900,12 @@ export default function LmsView({
   const [toastMessage, setToastMessage] = React.useState<string | null>(null);
   const [notifiedLessonIds, setNotifiedLessonIds] = React.useState<Set<string>>(new Set());
   const [pdfViewerUrl, setPdfViewerUrl] = React.useState<string | null>(null);
-  const [useGoogleDocs, setUseGoogleDocs] = React.useState(true);
+  // Default to the browser's own native PDF rendering rather than Google's
+  // gview embed - gview frequently fails to load (blank iframe) for URLs
+  // it can't freely crawl (private buckets, data: URIs, etc.), and modern
+  // browsers render PDFs in an <iframe> natively just fine. Google Docs
+  // Viewer stays available as a manual fallback for the rare non-PDF file.
+  const [useGoogleDocs, setUseGoogleDocs] = React.useState(false);
   const [blobPdfUrl, setBlobPdfUrl] = React.useState<string | null>(null);
 
   React.useEffect(() => {
@@ -2547,13 +2552,13 @@ export default function LmsView({
              <span className="text-base shrink-0">💡</span>
              <div className="flex flex-col min-w-0">
                <span className="truncate">
-                 {pdfViewerUrl.startsWith("data:") 
-                   ? "Dokumen terenkripsi lokal (Base64). Direndisikan langsung menggunakan engine browser." 
-                   : `Mode aktif: ${useGoogleDocs ? "Google Docs Viewer (Disarankan untuk HP & Safari)" : "Penampil Langsung Browser"}`}
+                 {pdfViewerUrl.startsWith("data:")
+                   ? "Dokumen terenkripsi lokal (Base64). Direndisikan langsung menggunakan engine browser."
+                   : `Mode aktif: ${useGoogleDocs ? "Google Docs Viewer" : "Penampil Langsung Browser (Disarankan)"}`}
                </span>
-               {useGoogleDocs && !pdfViewerUrl.startsWith("data:") && (window.location.hostname.includes("run.app") || window.location.hostname.includes("localhost")) && (
+               {useGoogleDocs && !pdfViewerUrl.startsWith("data:") && (
                  <span className="text-[10px] text-amber-700 mt-0.5 font-semibold leading-tight">
-                   ⚠️ Di lingkungan preview/dev, Google Docs tidak dapat mengakses file ini secara langsung. Jika kosong, ganti ke <strong>Penampil Langsung</strong> atau klik <strong>Tab Baru / Unduh PDF</strong>.
+                   ⚠️ Google Docs Viewer terkadang gagal memuat file (halaman kosong). Jika kosong, ganti ke <strong>Penampil Langsung</strong> atau klik <strong>Tab Baru / Unduh PDF</strong>.
                  </span>
                )}
              </div>

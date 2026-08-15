@@ -9,7 +9,10 @@ interface DocumentPreviewModalProps {
 }
 
 export function DocumentPreviewModal({ url, name, onClose }: DocumentPreviewModalProps) {
-  const [useGoogleDocs, setUseGoogleDocs] = useState(true);
+  // Default to native browser PDF rendering - Google's gview embed frequently
+  // fails (blank iframe) for URLs it can't freely crawl. It stays available
+  // as a manual fallback toggle for the rare case native rendering can't cope.
+  const [useGoogleDocs, setUseGoogleDocs] = useState(false);
   const isPdf = url.includes('.pdf') || name.toLowerCase().endsWith('.pdf') || url.includes('application/pdf');
   const isImage = url.startsWith('data:image') || url.includes('.jpg') || url.includes('.jpeg') || url.includes('.png') || url.includes('.webp');
 
@@ -67,9 +70,9 @@ export function DocumentPreviewModal({ url, name, onClose }: DocumentPreviewModa
                         {useGoogleDocs ? "Menggunakan Penampil Google Docs." : "Menggunakan Penampil Langsung Browser."}
                       </span>
                     </div>
-                    {useGoogleDocs && (window.location.hostname.includes("run.app") || window.location.hostname.includes("localhost")) && (
+                    {useGoogleDocs && (
                       <span className="text-[10px] text-amber-700 font-semibold leading-tight mt-0.5 ml-6">
-                        ⚠️ Di lingkungan preview/dev, Google Docs tidak dapat mengakses file ini secara langsung. Jika kosong, ganti ke <strong>Penampil Langsung</strong> atau klik <strong>Tab Baru</strong>.
+                        ⚠️ Google Docs Viewer terkadang gagal memuat file (halaman kosong). Jika kosong, ganti ke <strong>Penampil Langsung</strong> atau klik <strong>Tab Baru</strong>.
                       </span>
                     )}
                   </div>
