@@ -373,20 +373,77 @@ export async function downloadFile(url: string, defaultFilename?: string): Promi
 }
 
 /**
+ * Generates an instant, zero-latency offline SVG data URI avatar.
+ * Eliminates 3rd-party CDN blockages/failures on mobile/restricted networks.
+ */
+export function createSvgAvatar(name: string = "User", customBg?: string): string {
+  const cleanName = (name || "User").trim();
+  const initials = cleanName
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map(w => w[0].toUpperCase())
+    .join("") || "U";
+
+  // Deterministic color palette
+  const colors = [
+    { bg: "#4f46e5", text: "#ffffff" }, // indigo
+    { bg: "#2563eb", text: "#ffffff" }, // blue
+    { bg: "#0d9488", text: "#ffffff" }, // teal
+    { bg: "#059669", text: "#ffffff" }, // emerald
+    { bg: "#d97706", text: "#ffffff" }, // amber
+    { bg: "#e11d48", text: "#ffffff" }, // rose
+    { bg: "#7c3aed", text: "#ffffff" }, // violet
+    { bg: "#0891b2", text: "#ffffff" }, // cyan
+  ];
+  
+  let hash = 0;
+  for (let i = 0; i < cleanName.length; i++) {
+    hash = cleanName.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const color = customBg ? { bg: customBg, text: "#ffffff" } : colors[Math.abs(hash) % colors.length];
+
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+    <rect width="128" height="128" fill="${color.bg}" rx="64"/>
+    <text x="50%" y="54%" dominant-baseline="middle" text-anchor="middle" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="48" font-weight="bold" fill="${color.text}" letter-spacing="1">
+      ${initials}
+    </text>
+  </svg>`;
+
+  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+}
+
+/**
  * Ensures photo URLs (profile pictures, docFoto) render safely without broken image icons.
  */
 export function getSafePhotoUrl(rawPhotoUrl?: string, defaultName: string = 'User'): string {
   if (!rawPhotoUrl || rawPhotoUrl === 'NONE' || rawPhotoUrl === 'pasfoto_default.jpg' || rawPhotoUrl.trim() === '') {
-    return `https://ui-avatars.com/api/?name=${encodeURIComponent(defaultName)}&background=e2e8f0&color=334155`;
+    return createSvgAvatar(defaultName);
   }
   let str = rawPhotoUrl.trim();
   if (str.includes('|')) {
     const parts = str.split('|');
     str = parts[1] || parts[0];
   }
-  if (str.startsWith('data:') || str.startsWith('http://') || str.startsWith('https://')) {
+  if (str.startsWith('data:') || str.startsWith('http://') || str.startsWith('https://') || str.startsWith('/') || str.startsWith('blob:')) {
     return str;
   }
-  return `https://ui-avatars.com/api/?name=${encodeURIComponent(defaultName)}&background=e2e8f0&color=334155`;
+  return createSvgAvatar(defaultName);
 }
+
+/**
+ * Safe image onError handler to gracefully fallback to SVG Avatar or default logo
+ */
+export function handleImageFallback(e: React.SyntheticEvent<HTMLImageElement, Event>, fallbackNameOrUrl: string = "User") {
+  const target = e.currentTarget;
+  if (!target) return;
+  if (fallbackNameOrUrl.startsWith("/") || fallbackNameOrUrl.startsWith("data:") || fallbackNameOrUrl.startsWith("http")) {
+    if (target.src !== fallbackNameOrUrl) {
+      target.src = fallbackNameOrUrl;
+    }
+  } else {
+    target.src = createSvgAvatar(fallbackNameOrUrl);
+  }
+}
+
 

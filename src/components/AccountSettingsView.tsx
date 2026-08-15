@@ -36,7 +36,7 @@ import {
   Loader2,
   Info,
 } from "lucide-react";
-import { uploadFileToFirebase, getEmbeddablePdfUrl, getSafePhotoUrl } from "../lib/storageHelper";
+import { uploadFileToFirebase, getEmbeddablePdfUrl, getSafePhotoUrl, createSvgAvatar } from "../lib/storageHelper";
 import { UserAccount, SystemState } from "../types";
 import { ConfirmForm } from "./ConfirmForm";
 import { ConfirmButton } from "./ConfirmButton";
@@ -597,7 +597,7 @@ export default function AccountSettingsView({
                   className="h-16 w-16 rounded-2xl object-cover border-2 border-white/20 shadow-inner shrink-0"
                   onError={(e) => {
                     e.currentTarget.onerror = null;
-                    e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(currentUser?.name || 'User')}&background=e2e8f0&color=334155`;
+                    e.currentTarget.src = createSvgAvatar(currentUser?.name || 'User');
                   }}
                 />
                 <div className="flex-1 min-w-0 w-full">
@@ -746,7 +746,7 @@ export default function AccountSettingsView({
                       referrerPolicy="no-referrer"
                       onError={(e) => {
                         e.currentTarget.onerror = null;
-                        e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(name || 'User')}&background=e2e8f0&color=334155`;
+                        e.currentTarget.src = createSvgAvatar(name || 'User');
                       }}
                     />
                     <label className={`bg-slate-50 border border-slate-200 hover:bg-white text-slate-600 px-4 py-2 rounded-xl text-xs font-bold cursor-pointer transition flex items-center justify-center gap-2 ${uploadingAvatar ? 'opacity-50 pointer-events-none' : ''}`}>
@@ -1647,7 +1647,7 @@ export default function AccountSettingsView({
                                   referrerPolicy="no-referrer"
                                   onError={(e) => {
                                     e.currentTarget.onerror = null;
-                                    e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=e2e8f0&color=334155`;
+                                    e.currentTarget.src = createSvgAvatar(user.name || 'User');
                                   }}
                                 />
                                 <div className={`absolute -bottom-1 -right-1 h-3 w-3 sm:h-4 sm:w-4 rounded-full border-2 border-white shadow-xs flex items-center justify-center ${user.status === 'Suspended' ? 'bg-rose-500' : 'bg-emerald-500'}`}>

@@ -79,8 +79,8 @@ export const db = hasConfig && app
   : null;
 
 export const storage = hasConfig && app
-  ? (firebaseConfig.storageBucket 
-      ? getStorage(app, firebaseConfig.storageBucket.startsWith("gs://") ? firebaseConfig.storageBucket : `gs://${firebaseConfig.storageBucket}`)
+  ? (firebaseConfig.storageBucket
+      ? getStorage(app, firebaseConfig.storageBucket)
       : getStorage(app))
   : null;
 
@@ -212,7 +212,7 @@ export async function getUserFromFirestore(identifier: string): Promise<any | nu
   return null;
 }
 
-async function fetchSafeDoc(docPath: { coll: string; id: string }, retries = 2): Promise<any> {
+async function fetchSafeDoc(docPath: { coll: string; id: string }, retries = 1): Promise<any> {
   if (!db) return null;
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
@@ -220,7 +220,7 @@ async function fetchSafeDoc(docPath: { coll: string; id: string }, retries = 2):
       return snap;
     } catch (err: any) {
       if (attempt < retries) {
-        await new Promise(r => setTimeout(r, 400 * (attempt + 1)));
+        await new Promise(r => setTimeout(r, 200 * (attempt + 1)));
         continue;
       }
       handleFirestoreError(err, OperationType.GET, `${docPath.coll}/${docPath.id}`);
@@ -230,7 +230,7 @@ async function fetchSafeDoc(docPath: { coll: string; id: string }, retries = 2):
   return null;
 }
 
-async function fetchSafeCollection(collName: string, retries = 3): Promise<{ collName: string; docs: any[] }> {
+async function fetchSafeCollection(collName: string, retries = 1): Promise<{ collName: string; docs: any[] }> {
   if (!db) return { collName, docs: [] };
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
@@ -241,7 +241,7 @@ async function fetchSafeCollection(collName: string, retries = 3): Promise<{ col
       return { collName, docs: [] };
     } catch (err: any) {
       if (attempt < retries) {
-        await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
+        await new Promise(r => setTimeout(r, 250 * (attempt + 1)));
         continue;
       }
       handleFirestoreError(err, OperationType.LIST, collName);

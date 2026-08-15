@@ -723,88 +723,75 @@ export default function FrontendView({
 
           {/* Right Gallery: Overlapping Cards styled from Screenshot 1 */}
           <div className="md:col-span-3 grid grid-cols-3 gap-3 relative items-center">
-            {customization?.landingConfig?.opportunityImages && customization.landingConfig.opportunityImages.length >= 3 ? (
-              <>
-                <div className="transform hover:scale-105 transition duration-300 rounded-xl overflow-hidden shadow-lg border border-white/10 bg-slate-950 flex flex-col">
-                  <div className="relative w-full h-32 md:h-44 flex items-center justify-center overflow-hidden">
-                    
-                    <img
-                      src={customization.landingConfig.opportunityImages[0].url}
-                      alt={customization.landingConfig.opportunityImages[0].label}
-                      className="w-full h-full object-cover relative z-10"
-                      referrerPolicy="no-referrer"
-                    />
+            {(() => {
+              const defaultOppImages = [
+                { url: "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=400&q=80", label: "Pelatihan Teori" },
+                { url: "https://images.unsplash.com/photo-1523240795612-9a054b0db644?auto=format&fit=crop&w=400&q=80", label: "Penyerahan Sertifikat" },
+                { url: "https://images.unsplash.com/photo-1524178232363-1fb2b075b655?auto=format&fit=crop&w=400&q=80", label: "Foto Bersama Alumni" }
+              ];
+              const customList = customization?.landingConfig?.opportunityImages || [];
+              const displayList = [
+                customList[0]?.url ? customList[0] : defaultOppImages[0],
+                customList[1]?.url ? customList[1] : defaultOppImages[1],
+                customList[2]?.url ? customList[2] : defaultOppImages[2],
+              ];
+
+              return (
+                <>
+                  <div className="transform hover:scale-105 transition duration-300 rounded-xl overflow-hidden shadow-lg border border-white/10 bg-slate-950 flex flex-col">
+                    <div className="relative w-full h-32 md:h-44 flex items-center justify-center overflow-hidden">
+                      <img
+                        src={displayList[0].url}
+                        alt={displayList[0].label}
+                        className="w-full h-full object-cover relative z-10"
+                        referrerPolicy="no-referrer"
+                        onError={(e) => {
+                          e.currentTarget.onerror = null;
+                          e.currentTarget.src = defaultOppImages[0].url;
+                        }}
+                      />
+                    </div>
+                    <div className="p-2 text-center text-[10px] font-sans font-bold text-slate-300 bg-slate-900/90 border-t border-white/5 truncate">
+                      {displayList[0].label}
+                    </div>
                   </div>
-                  <div className="p-2 text-center text-[10px] font-sans font-bold text-slate-300 bg-slate-900/90 border-t border-white/5">
-                    {customization.landingConfig.opportunityImages[0].label}
+                  <div className="transform hover:scale-105 transition duration-300 -translate-y-4 rounded-xl overflow-hidden shadow-2xl border-2 border-cyan-400 bg-slate-950 z-10 flex flex-col">
+                    <div className="relative w-full h-36 md:h-52 flex items-center justify-center overflow-hidden">
+                      <img
+                        src={displayList[1].url}
+                        alt={displayList[1].label}
+                        className="w-full h-full object-cover relative z-10"
+                        referrerPolicy="no-referrer"
+                        onError={(e) => {
+                          e.currentTarget.onerror = null;
+                          e.currentTarget.src = defaultOppImages[1].url;
+                        }}
+                      />
+                    </div>
+                    <div className="p-2.5 text-center text-[10px] sm:text-xs font-sans font-black text-cyan-300 bg-slate-900/95 border-t border-white/10 truncate">
+                      {displayList[1].label}
+                    </div>
                   </div>
-                </div>
-                <div className="transform hover:scale-105 transition duration-300 -translate-y-4 rounded-xl overflow-hidden shadow-2xl border-2 border-cyan-400 bg-slate-950 z-10 flex flex-col">
-                  <div className="relative w-full h-36 md:h-52 flex items-center justify-center overflow-hidden">
-                    
-                    <img
-                      src={customization.landingConfig.opportunityImages[1].url}
-                      alt={customization.landingConfig.opportunityImages[1].label}
-                      className="w-full h-full object-cover relative z-10"
-                      referrerPolicy="no-referrer"
-                    />
+                  <div className="transform hover:scale-105 transition duration-300 rounded-xl overflow-hidden shadow-lg border border-white/10 bg-slate-950 flex flex-col">
+                    <div className="relative w-full h-32 md:h-44 flex items-center justify-center overflow-hidden">
+                      <img
+                        src={displayList[2].url}
+                        alt={displayList[2].label}
+                        className="w-full h-full object-cover relative z-10"
+                        referrerPolicy="no-referrer"
+                        onError={(e) => {
+                          e.currentTarget.onerror = null;
+                          e.currentTarget.src = defaultOppImages[2].url;
+                        }}
+                      />
+                    </div>
+                    <div className="p-2 text-center text-[10px] font-sans font-bold text-slate-300 bg-slate-900/90 border-t border-white/5 truncate">
+                      {displayList[2].label}
+                    </div>
                   </div>
-                  <div className="p-2.5 text-center text-[10px] sm:text-xs font-sans font-black text-cyan-300 bg-slate-900/95 border-t border-white/10">
-                    {customization.landingConfig.opportunityImages[1].label}
-                  </div>
-                </div>
-                <div className="transform hover:scale-105 transition duration-300 rounded-xl overflow-hidden shadow-lg border border-white/10 bg-slate-950 flex flex-col">
-                  <div className="relative w-full h-32 md:h-44 flex items-center justify-center overflow-hidden">
-                    
-                    <img
-                      src={customization.landingConfig.opportunityImages[2].url}
-                      alt={customization.landingConfig.opportunityImages[2].label}
-                      className="w-full h-full object-cover relative z-10"
-                      referrerPolicy="no-referrer"
-                    />
-                  </div>
-                  <div className="p-2 text-center text-[10px] font-sans font-bold text-slate-300 bg-slate-900/90 border-t border-white/5">
-                    {customization.landingConfig.opportunityImages[2].label}
-                  </div>
-                </div>
-              </>
-            ) : (
-              <>
-                <div className="transform hover:scale-105 transition duration-300 rounded-xl overflow-hidden shadow-lg border border-white/10 bg-slate-900">
-                  <img
-                    src="https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=400&q=80"
-                    alt="Pelatihan Teori"
-                    className="w-full h-32 md:h-44 object-cover"
-                    referrerPolicy="no-referrer"
-                  />
-                  <div className="p-2 text-center text-[10px] font-sans font-bold text-slate-300 bg-slate-900/90 border-t border-white/5">
-                    Pelatihan Teori
-                  </div>
-                </div>
-                <div className="transform hover:scale-105 transition duration-300 -translate-y-4 rounded-xl overflow-hidden shadow-2xl border-2 border-cyan-400 bg-slate-900 z-10">
-                  <img
-                    src="https://images.unsplash.com/photo-1523240795612-9a054b0db644?auto=format&fit=crop&w=400&q=80"
-                    alt="Pemberian Sertifikat"
-                    className="w-full h-36 md:h-52 object-cover"
-                    referrerPolicy="no-referrer"
-                  />
-                  <div className="p-2.5 text-center text-[10px] sm:text-xs font-sans font-black text-cyan-300 bg-slate-900/95 border-t border-white/10">
-                    Penyerahan Sertifikat
-                  </div>
-                </div>
-                <div className="transform hover:scale-105 transition duration-300 rounded-xl overflow-hidden shadow-lg border border-white/10 bg-slate-900">
-                  <img
-                    src="https://images.unsplash.com/photo-1524178232363-1fb2b075b655?auto=format&fit=crop&w=400&q=80"
-                    alt="Foto Bersama"
-                    className="w-full h-32 md:h-44 object-cover"
-                    referrerPolicy="no-referrer"
-                  />
-                  <div className="p-2 text-center text-[10px] font-sans font-bold text-slate-300 bg-slate-900/90 border-t border-white/5">
-                    Foto Bersama Alumni
-                  </div>
-                </div>
-              </>
-            )}
+                </>
+              );
+            })()}
           </div>
         </div>
 

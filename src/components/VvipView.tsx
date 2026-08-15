@@ -6,7 +6,7 @@
 import React, { useState, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { ConfirmButton } from "./ConfirmButton";
-import { getSafePhotoUrl } from "../lib/storageHelper";
+import { getSafePhotoUrl, createSvgAvatar } from "../lib/storageHelper";
 import { calculateAge } from "../lib/dateUtils";
 import {
   ResponsiveContainer,
@@ -2233,7 +2233,7 @@ export default function VvipView({
                               referrerPolicy="no-referrer"
                               onError={(e) => {
                                 e.currentTarget.onerror = null;
-                                e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=e2e8f0&color=334155`;
+                                e.currentTarget.src = createSvgAvatar(user.name || 'User');
                               }}
                             />
                           </div>
@@ -4150,7 +4150,7 @@ export default function VvipView({
                                           referrerPolicy="no-referrer"
                                           onError={(e) => {
                                             e.currentTarget.onerror = null;
-                                            e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(student.name || 'Siswa')}&background=e0e7ff&color=3730a3`;
+                                            e.currentTarget.src = createSvgAvatar(student.name || 'Siswa', '#4338ca');
                                           }}
                                         />
                                         <div className="min-w-0">
@@ -6712,7 +6712,7 @@ export default function VvipView({
                               className="h-full w-full object-cover"
                               onError={(e) => {
                                 e.currentTarget.onerror = null;
-                                e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=e2e8f0&color=334155`;
+                                e.currentTarget.src = createSvgAvatar(user.name || 'User');
                               }}
                             />
                           </div>

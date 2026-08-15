@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { UserAccount, SystemState, ChatMessage } from "../types";
 import { ArrowLeft, SendHorizontal, User, Search, Paperclip, File, Loader2, Users, Download, CheckCircle2, MessageSquare, Trash2, Check, CheckCheck } from "lucide-react";
-import { uploadFileToFirebase, getSafePhotoUrl } from "../lib/storageHelper";
+import { uploadFileToFirebase, getSafePhotoUrl, createSvgAvatar } from "../lib/storageHelper";
 import { getLocalMedia, downloadAndSaveMedia } from "../lib/localMedia";
 import { ConfirmButton } from "./ConfirmButton";
 
@@ -251,7 +251,7 @@ export default function ChatView({ currentUser, systemState, onUpdateState, onCl
           name: groupName,
           role: "Grup Kelas",
           isGroup: true,
-          profilePicture: `https://ui-avatars.com/api/?name=${encodeURIComponent(groupName)}&background=3b82f6&color=fff`
+          profilePicture: createSvgAvatar(groupName, "#2563eb")
         });
       }
     }
@@ -452,7 +452,7 @@ export default function ChatView({ currentUser, systemState, onUpdateState, onCl
                       referrerPolicy="no-referrer"
                       onError={(e) => {
                         e.currentTarget.onerror = null;
-                        e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(contact.name || 'User')}&background=e2e8f0&color=334155`;
+                        e.currentTarget.src = createSvgAvatar(contact.name || 'User');
                       }}
                     />
                     <div className="min-w-0 flex-1">
@@ -526,7 +526,7 @@ export default function ChatView({ currentUser, systemState, onUpdateState, onCl
                   referrerPolicy="no-referrer"
                   onError={(e) => {
                     e.currentTarget.onerror = null;
-                    e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(activeChatUser.name || 'User')}&background=e2e8f0&color=334155`;
+                    e.currentTarget.src = createSvgAvatar(activeChatUser.name || 'User');
                   }}
                 />
                 <div>

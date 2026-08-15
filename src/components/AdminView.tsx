@@ -76,7 +76,7 @@ import {
   Area,
   CartesianGrid
 } from "recharts";
-import { uploadFileToFirebase, getEmbeddablePdfUrl, getSafePhotoUrl } from "../lib/storageHelper";
+import { uploadFileToFirebase, getEmbeddablePdfUrl, getSafePhotoUrl, createSvgAvatar } from "../lib/storageHelper";
 import {
   SystemState,
   RegisteredStudent,
@@ -2639,7 +2639,7 @@ export default function AdminView({
                                   referrerPolicy="no-referrer"
                                   onError={(e) => {
                                     e.currentTarget.onerror = null;
-                                    e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(s.name || 'Siswa')}&background=e2e8f0&color=334155`;
+                                    e.currentTarget.src = createSvgAvatar(s.name || 'Siswa');
                                   }}
                                 />
                                 <div>
@@ -3161,7 +3161,7 @@ export default function AdminView({
                               referrerPolicy="no-referrer"
                               onError={(e) => {
                                 e.currentTarget.onerror = null;
-                                e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(s.name || 'Siswa')}&background=e2e8f0&color=334155`;
+                                e.currentTarget.src = createSvgAvatar(s.name || 'Siswa');
                               }}
                             />
                             <div className="space-y-1.5 pt-0.5 w-full overflow-hidden">
@@ -3462,7 +3462,7 @@ export default function AdminView({
                           className="w-10 h-10 rounded-full object-cover border border-slate-200"
                           onError={(e) => {
                             e.currentTarget.onerror = null;
-                            e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(student.name || 'Siswa')}&background=e2e8f0&color=334155`;
+                            e.currentTarget.src = createSvgAvatar(student.name || 'Siswa');
                           }}
                         />
                         <div>
@@ -4679,14 +4679,14 @@ export default function AdminView({
                                         <div key={stId} className="bg-indigo-50/40 p-2.5 border border-indigo-150 rounded-lg text-[9.5px] space-y-2">
                                           <div className="flex justify-between items-center font-bold">
                                             <div className="flex items-center gap-2">
-                                              <img
+                                                <img
                                                 src={getSafePhotoUrl(stData.profilePicture || (stData as any).docFoto, stData.name)}
                                                 alt={stData.name}
                                                 referrerPolicy="no-referrer"
                                                 className="w-6 h-6 rounded-full object-cover border border-slate-200"
                                                 onError={(e) => {
                                                   e.currentTarget.onerror = null;
-                                                  e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(stData.name || 'Siswa')}&background=e2e8f0&color=334155`;
+                                                  e.currentTarget.src = createSvgAvatar(stData.name || 'Siswa');
                                                 }}
                                               />
                                               <span className="text-slate-800">{stData.name}</span>
@@ -10157,7 +10157,7 @@ export default function AdminView({
                         className="h-16 w-16 rounded-2xl object-cover border-2 border-white shadow-xs bg-slate-200 shrink-0"
                         onError={(e) => {
                           e.currentTarget.onerror = null;
-                          e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(adminRegData.name || 'Siswa')}&background=e2e8f0&color=334155`;
+                          e.currentTarget.src = createSvgAvatar(adminRegData.name || 'Siswa');
                         }}
                       />
                       <div>

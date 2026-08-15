@@ -1,5 +1,5 @@
 import { InlineLoginPanel } from "./InlineLoginPanel";
-import { getSafePhotoUrl } from "../lib/storageHelper";
+import { getSafePhotoUrl, createSvgAvatar } from "../lib/storageHelper";
 import { auth } from "../firebaseClient";
 import { signInWithPopup, GoogleAuthProvider, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth";
 import React, { useState, useEffect, useRef } from "react";
@@ -3820,7 +3820,7 @@ export default function MobileDashboardView({
                     referrerPolicy="no-referrer"
                     onError={(e) => {
                       e.currentTarget.onerror = null;
-                      e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(currentUser.name || 'User')}&background=e2e8f0&color=334155`;
+                      e.currentTarget.src = createSvgAvatar(currentUser.name || 'User');
                     }}
                   />
                 </div>
@@ -4750,7 +4750,7 @@ export default function MobileDashboardView({
                               className="h-full w-full object-cover"
                               onError={(e) => {
                                 e.currentTarget.onerror = null;
-                                e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(user.name || 'User')}&background=e2e8f0&color=334155`;
+                                e.currentTarget.src = createSvgAvatar(user.name || 'User');
                               }}
                             />
                           </div>

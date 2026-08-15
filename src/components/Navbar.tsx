@@ -10,7 +10,7 @@ import {
   UserPlus, Share2, LayoutGrid, Menu, Smartphone, Download, Apple
 } from "lucide-react";
 import { UserAccount, SystemState } from "../types";
-import { getSafePhotoUrl } from "../lib/storageHelper";
+import { getSafePhotoUrl, createSvgAvatar } from "../lib/storageHelper";
 
 // Dynamic Icon Lookup
 const getLogoIcon = (iconName: string) => {
@@ -144,6 +144,10 @@ export default function Navbar({
                     src={logoUrl} 
                     alt="Logo" 
                     referrerPolicy="no-referrer" 
+                    onError={(e) => {
+                      e.currentTarget.onerror = null;
+                      e.currentTarget.src = "/logo.png";
+                    }}
                     className="h-full w-full object-contain p-1 bg-white rounded-2xl" 
                   />
                 ) : (
@@ -487,7 +491,7 @@ export default function Navbar({
                     referrerPolicy="no-referrer" 
                     onError={(e) => {
                       e.currentTarget.onerror = null;
-                      e.currentTarget.src = `https://ui-avatars.com/api/?name=${encodeURIComponent(currentUser.name || 'User')}&background=e2e8f0&color=334155`;
+                      e.currentTarget.src = createSvgAvatar(currentUser.name || 'User');
                     }}
                   />
                 </div>
