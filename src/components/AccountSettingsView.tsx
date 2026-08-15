@@ -541,7 +541,14 @@ export default function AccountSettingsView({
       }
       return true;
     })
-    .sort((a, b) => a.name.localeCompare(b.name));
+    .sort((a, b) => {
+      // Most recently logged-in accounts first; accounts that have never
+      // logged in (no lastActive) sink to the bottom, alphabetical among ties.
+      const aTime = a.lastActive ? new Date(a.lastActive).getTime() : 0;
+      const bTime = b.lastActive ? new Date(b.lastActive).getTime() : 0;
+      if (aTime !== bTime) return bTime - aTime;
+      return a.name.localeCompare(b.name);
+    });
 
   const USERS_PER_PAGE = 10;
   const totalUserPages = Math.ceil(filteredUsers.length / USERS_PER_PAGE) || 1;
