@@ -61,11 +61,11 @@ export default function ChatView({ currentUser, systemState, onUpdateState, onCl
       }
       setIsMobileScreen(window.innerWidth < 768);
     };
-    
+
     window.visualViewport?.addEventListener('resize', handleResize);
     window.addEventListener('resize', handleResize);
     handleResize();
-    
+
     return () => {
       window.visualViewport?.removeEventListener('resize', handleResize);
       window.removeEventListener('resize', handleResize);
@@ -514,7 +514,19 @@ export default function ChatView({ currentUser, systemState, onUpdateState, onCl
         </div>
       ) : (
         // ACTIVE CHAT ROOM
-        <div className="flex flex-col h-full bg-slate-100 absolute inset-0 z-20 overflow-hidden">
+        // On mobile this uses position: fixed (not absolute) so it pins to
+        // the real device viewport instead of whatever height its scrollable
+        // ancestor happens to have, with height bound directly to
+        // visualViewport.height so the input bar stays above the on-screen
+        // keyboard (matching WhatsApp) instead of being pushed off-screen
+        // when the layout viewport doesn't shrink with it. On desktop this
+        // stays "absolute" so it's contained within its bounded parent panel
+        // (e.g. the 600px chat card on the desktop "Chat Terpadu" tab)
+        // instead of covering the whole browser window edge-to-edge.
+        <div
+          className={`flex flex-col bg-slate-100 z-20 overflow-hidden ${isMobileScreen ? "fixed inset-0" : "absolute inset-0"}`}
+          style={{ height: isMobileScreen ? viewportHeight : "100%" }}
+        >
           <div className="bg-indigo-900 text-white p-3 flex items-center justify-between drop-shadow-md z-20 shrink-0">
             <div className="flex items-center gap-3">
               <button onClick={() => setActiveChatUser(null)} className="p-1.5 bg-white/10 hover:bg-white/20 rounded-lg text-slate-200 transition"><ArrowLeft className="h-4 w-4" /></button>
