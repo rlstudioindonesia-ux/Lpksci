@@ -2658,20 +2658,25 @@ export default function MobileDashboardView({
 
           {/* 17. ALUMNI: PILIH KELAS BAHASA JEPANG */}
           {activeSubpage === "pilih_kelas" && (() => {
+            // Matches by exact class name first, falling back to a shared
+            // JLPT-level token (N1-N5, "native") extracted from the target
+            // name - avoids a hardcoded n1/n2/n3/native allow-list that
+            // silently matched nothing for levels like N4/N5 that weren't in
+            // it, hiding real students from the monitoring/quota count.
+            const classMatches = (candidate: string, target: string) => {
+              const c = candidate.toLowerCase();
+              const t = target.toLowerCase();
+              if (!c) return false;
+              if (c === t) return true;
+              const levelToken = t.match(/\bn[1-5]\b/)?.[0] || (t.includes("native") ? "native" : null);
+              return !!levelToken && c.includes(levelToken);
+            };
             const getStudentsInClass = (className: string) => {
               const students = (systemState.activeStudents || []).filter(
-                (s: any) => {
-                  const c = (s.assignedClass || s.class || "").toLowerCase();
-                  const target = className.toLowerCase();
-                  return c === target || (target.includes("n3") && c.includes("n3")) || (target.includes("n2") && c.includes("n2")) || (target.includes("n1") && c.includes("n1")) || (target.includes("native") && c.includes("native"));
-                }
+                (s: any) => classMatches(s.assignedClass || s.class || "", className)
               );
               const usersWithClass = (systemState.users || []).filter(
-                (u: any) => {
-                  const c = (u.assignedClass || "").toLowerCase();
-                  const target = className.toLowerCase();
-                  return c === target || (target.includes("n3") && c.includes("n3")) || (target.includes("n2") && c.includes("n2")) || (target.includes("n1") && c.includes("n1")) || (target.includes("native") && c.includes("native"));
-                }
+                (u: any) => classMatches(u.assignedClass || "", className)
               );
               
               const seen = new Set();
@@ -2885,11 +2890,23 @@ export default function MobileDashboardView({
 
                     const t = themeMap[colorTheme] || themeMap.blue;
                     const isLongLevel = cls.level?.length > 3;
-                    const registeredCount = cls.registered !== undefined ? cls.registered : 8;
+                    // The real class name students actually get assigned to
+                    // (matches what the "Manajemen Kelas Alumni" admin panel
+                    // creates in lmsClasses: `Kelas Alumni ${title}`) - the
+                    // old `Alumni ${level}` name never matched any real
+                    // student, so the "Pendaftar" count (and Pemantauan
+                    // Kelas below) always showed 0 regardless of the manual
+                    // quota numbers typed into the CMS.
+                    const alumniClassName = `Kelas Alumni ${cls.title || cls.level}`;
+                    const realEnrolledCount = getStudentsInClass(alumniClassName).length;
+                    // Prefer the real, synced count; only fall back to a
+                    // manually-typed number (still editable in the admin CMS)
+                    // when there's genuinely no student assigned yet, e.g.
+                    // for pre-launch marketing display.
+                    const registeredCount = realEnrolledCount > 0 ? realEnrolledCount : (cls.registered !== undefined ? cls.registered : 0);
                     const quotaLimit = cls.quota !== undefined ? cls.quota : 10;
                     const remaining = Math.max(0, quotaLimit - registeredCount);
                     const hasAccess = isUserAlumni || ["Admin", "Admin Super", "Admin Biasa", "VVIP"].includes(currentUser?.role || "");
-                    const alumniClassName = `Alumni ${cls.level}`;
 
                     return (
                       <div key={cls.id || cidx} className="bg-white rounded-[24px] md:rounded-[2.5rem] p-3 md:p-6 border border-slate-100/90 shadow-xs hover:shadow-[0_8px_30px_rgb(0,0,0,0.04)] transition-all duration-300 flex flex-col relative overflow-hidden">
