@@ -46,13 +46,11 @@ import {
 } from "lucide-react";
 import PrivacyPolicyModal from "./components/PrivacyPolicyModal";
 import LoginModal from "./components/LoginModal";
-import ChangePasswordPrompt from "./components/ChangePasswordPrompt";
 import StudentProfilePrompt from "./components/StudentProfilePrompt";
 import ResetPasswordView from "./components/ResetPasswordView";
 import PembayaranSiswaView from "./components/PembayaranSiswaView";
 import JobsView from "./components/JobsView";
 import EksplorasiView from "./components/EksplorasiView";
-import MobileDashboardView from "./components/MobileDashboardView";
 
 function safeLazy<T extends React.ComponentType<any>>(
   factory: () => Promise<{ default: T }>
@@ -89,6 +87,11 @@ const PrivacyPolicyView = safeLazy(() => import("./components/PrivacyPolicyView"
 const AlumniDashboardView = safeLazy(() => import("./components/AlumniDashboardView"));
 const SenseiDashboardView = safeLazy(() => import("./components/SenseiDashboardView"));
 const IosInstallView = safeLazy(() => import("./components/IosInstallView"));
+// The mobile app shell is a very large component (dashboard, admin/VVIP panels,
+// chat, calendar, LMS, CV editor, etc.) - lazy-loading it keeps the initial
+// bundle small for every first-time mobile visitor, not just logged-in ones.
+// It already renders inside a <React.Suspense> boundary at its call site below.
+const MobileDashboardView = safeLazy(() => import("./components/MobileDashboardView"));
 
 export default function App() {
   const [activeTab, setActiveTabState] = useState<string>(() => {

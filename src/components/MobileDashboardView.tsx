@@ -953,8 +953,17 @@ export default function MobileDashboardView({
       return count;
     };
 
-    setNotifBadge(displayEvents.length + getSynchronizedCount());
-  }, [currentUser, systemState.events, systemState.lmsLessons, systemState.chapterAssessments, systemState.registeredStudents]);
+    // Unread chat messages count towards the badge too (mirrors ChatView's own
+    // inbox id logic), so the bell stays in sync with real chat activity.
+    const myChatId = currentUser
+      ? (["Admin", "Admin Super", "Admin Biasa"].includes(currentUser.role) ? "admin_shared" : currentUser.username)
+      : null;
+    const unreadMessagesCount = myChatId
+      ? (systemState.messages || []).filter((m) => m.receiverId === myChatId && !m.isRead).length
+      : 0;
+
+    setNotifBadge(displayEvents.length + getSynchronizedCount() + unreadMessagesCount);
+  }, [currentUser, systemState.events, systemState.lmsLessons, systemState.chapterAssessments, systemState.registeredStudents, systemState.messages]);
 
   // Simulated class selection for staff logbook
   const [selectedClassLog, setSelectedClassLog] = useState<string | null>(null);
@@ -2079,6 +2088,25 @@ export default function MobileDashboardView({
                   }
 
                   const list: any[] = [];
+
+                  // Unread chat messages (kept in sync with Chat tab's own inbox id logic)
+                  // so new chat activity actually shows up in the notification feed.
+                  const myChatId = ["Admin", "Admin Super", "Admin Biasa"].includes(currentUser.role)
+                    ? "admin_shared"
+                    : currentUser.username;
+                  const unreadMessages = (systemState.messages || [])
+                    .filter((m) => m.receiverId === myChatId && !m.isRead)
+                    .sort((a, b) => (b.timestamp || "").localeCompare(a.timestamp || ""));
+                  unreadMessages.forEach((m) => {
+                    list.push({
+                      id: `chat-${m.id}`,
+                      title: `💬 Pesan Baru dari ${m.senderName}`,
+                      body: m.fileUrl
+                        ? `Mengirim ${m.fileType === "image" ? "foto" : m.fileType === "video" ? "video" : "dokumen"}${m.text ? `: "${m.text}"` : "."}`
+                        : `"${m.text}"`,
+                      time: "Chat Baru",
+                    });
+                  });
 
                   if (currentUser.role === "Siswa") {
                     const studentId = currentUser.studentId || "SIS-001";

@@ -100,7 +100,7 @@ app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 let isStateReady = false;
 let stateInitPromise: Promise<void> | null = null;
 
-export async function ensureStateReady(maxWaitMs = 25000): Promise<void> {
+export async function ensureStateReady(maxWaitMs = 35000): Promise<void> {
   if (isStateReady) return;
   if (!stateInitPromise) return;
   const timeout = new Promise<void>((resolve) => setTimeout(resolve, maxWaitMs));
@@ -333,8 +333,10 @@ app.post("/api/reset-password", async (req, res) => {
 
 app.get("/api/state", async (req, res) => {
   try {
-    // Wait up to 15s if state is still initializing from Firestore on cold boot
-    await ensureStateReady(15000);
+    // Wait if state is still initializing from Firestore on cold boot. The full
+    // sync of ~20 collections consistently takes ~25-28s in practice, so 15s was
+    // cutting it short and causing requests to see partially-empty data.
+    await ensureStateReady(30000);
   } catch (e) {}
 
   // Strip excessive biometric photo base64 strings from generic logs to prevent multi-megabyte transfers
@@ -372,7 +374,9 @@ app.get("/api/state", async (req, res) => {
 // Server-side credential verification (bcrypt) - replaces the old client-side plaintext check.
 app.post("/api/login", async (req, res) => {
   try {
-    await ensureStateReady(15000);
+    // Same reasoning as /api/state: give the cold-start sync enough time so a
+    // real user with a real account isn't wrongly told "account not found".
+    await ensureStateReady(30000);
   } catch (e) {}
   const { username, password } = req.body || {};
   if (!username || !password) {
@@ -532,7 +536,7 @@ app.post("/api/login", async (req, res) => {
 // Lightweight session validation endpoint for Android/Web clients
 app.post("/api/auth/validate", async (req, res) => {
   try {
-    await ensureStateReady(15000);
+    await ensureStateReady(30000);
   } catch (e) {}
   const { username, email } = req.body || {};
   const target = (username || email || "").trim().toLowerCase();
@@ -564,7 +568,13 @@ app.post("/api/auth/validate", async (req, res) => {
 
 // Student sign up from the landing page with integrated Midtrans Sandbox Payment
 
-app.post("/api/register", (req, res) => {
+app.post("/api/register", async (req, res) => {
+  // Duplicate-detection (alumni auto-approve matching by name/email against
+  // activeStudents/users) needs the real data loaded, not the empty cold-start
+  // defaults, or a fresh registration could create a duplicate record.
+  try {
+    await ensureStateReady(30000);
+  } catch (e) {}
   const {
     name, email, password, phone, birthDate, gender, education, program, japaneseLevel, paymentAmount, paymentMethod, proofOfPayment,
     docAkta, docFoto, docIjazahSD, docIjazahSMP, docIjazahSMA, docKK, docKTP, docTranskip, docPraMCU, docVaksin, docKontrak,

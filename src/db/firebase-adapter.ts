@@ -118,7 +118,18 @@ export async function testConnection(): Promise<boolean> {
   }
 }
 
+// Retries the whole lookup once on a transient failure before accepting "not
+// found" - the queries below each swallow their own errors into null/empty,
+// so without this a brief connectivity hiccup during login looks identical to
+// a genuinely nonexistent account and rejects a real user.
 export async function getUserFromFirestore(identifier: string): Promise<any | null> {
+  const result = await getUserFromFirestoreOnce(identifier);
+  if (result) return result;
+  await new Promise(r => setTimeout(r, 400));
+  return getUserFromFirestoreOnce(identifier);
+}
+
+async function getUserFromFirestoreOnce(identifier: string): Promise<any | null> {
   if (!db || !identifier) return null;
   const clean = identifier.trim().toLowerCase();
   const raw = identifier.trim();
