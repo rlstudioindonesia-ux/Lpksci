@@ -35,3 +35,12 @@ createRoot(document.getElementById('root')!).render(
     </ErrorBoundary>
   </StrictMode>,
 );
+
+// Register PWA service worker for Chrome WebView & Add to Home Screen support
+if (typeof window !== 'undefined' && 'serviceWorker' in navigator && process.env.NODE_ENV === 'production') {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch((err) => {
+      console.log('Service Worker registration skipped or failed:', err);
+    });
+  });
+}

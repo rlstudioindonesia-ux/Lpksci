@@ -81,7 +81,7 @@ import {
   Edit,
 } from "lucide-react";
 import { SystemState, UserAccount, RegisteredStudent } from "../types";
-import { CHAPTERS_LIST, MATH_CHAPTERS_LIST } from "../chapters";
+import { CHAPTERS_LIST } from "../chapters";
 import CalendarView from "./CalendarView";
 import LmsView from "./LmsView";
 
@@ -642,29 +642,10 @@ export default function VvipView({
     };
   }, [systemState.payments, systemState.cashLedger]);
 
-  const cleanClassName = (s: string) =>
-    (s || "").trim().toLowerCase().replace(/^kelas[:\s]*/i, "");
-
-  const findClassDef = (cls: string) => {
-    const target = cleanClassName(cls);
-    return systemState.customization?.lmsClasses?.find(
-      (c: any) => cleanClassName(c.name) === target,
-    );
-  };
-
-  const getClassChapters = (cls: string, subject?: string) => {
-    const classDef = findClassDef(cls);
-    const isMath = subject === "SSW";
-    const chapters = isMath
-      ? classDef?.mathChapters || MATH_CHAPTERS_LIST
-      : classDef?.chapters || CHAPTERS_LIST;
-    return chapters;
-  };
-
-  const getClassMaxBab = (cls: string, subject?: string) => {
-    return getClassChapters(cls, subject).filter(
-      (ch: any) => ch.isActive !== false,
-    ).length;
+  const getClassMaxBab = (cls: string) => {
+    const classDef = systemState.customization?.lmsClasses?.find((c: any) => c.name === cls);
+    const chapters = classDef?.chapters || CHAPTERS_LIST;
+    return chapters.filter((ch: any) => ch.isActive !== false).length;
   };
 
   const paidPayments = useMemo(() => {
@@ -5442,20 +5423,12 @@ export default function VvipView({
             systemState.chapterAssessments || []
           ).filter((ass) => ass.studentId === student.id);
 
-          // Synchronized with the student's actual class curriculum (LMS E-Benkyou),
-          // not the generic template, and subject-aware (Bahasa Jepang vs SSW/Matematika)
+          // Fallback simulated records if none, synchronized with 25 chapters from CHAPTERS_LIST
           const displayAssessments =
             actualAssessments.length > 0
               ? actualAssessments.map((ass) => {
-                  const classChapters = getClassChapters(
-                    student.class || "",
-                    ass.subject,
-                  );
-                  const fallbackList =
-                    ass.subject === "SSW" ? MATH_CHAPTERS_LIST : CHAPTERS_LIST;
-                  const ch = classChapters.find(
-                    (c: any) => c.number === ass.chapterNumber,
-                  ) || fallbackList.find(
+                  // Attempt to match with chapters list
+                  const ch = CHAPTERS_LIST.find(
                     (c) => c.number === ass.chapterNumber,
                   ) || { title: `Bab ${ass.chapterNumber} LPK` };
                   return {
@@ -5707,10 +5680,7 @@ export default function VvipView({
                           </h5>
                           <div className="space-y-2 max-h-[200px] overflow-y-auto pr-1">
                             {(() => {
-                              const records = (systemState.attendance || [])
-                                .filter(a => a.studentId === student.id || a.studentName === student.name)
-                                .slice()
-                                .sort((a, b) => (b.date || "").localeCompare(a.date || ""));
+                              const records = (systemState.attendance || []).filter(a => a.studentId === student.id || a.studentName === student.name);
                               if (records.length === 0) return <p className="text-[10px] text-slate-400 italic">Tidak ada data presensi.</p>;
                               return records.map(r => (
                                 <div key={r.id} className="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl text-[10px]">
@@ -6667,6 +6637,47 @@ export default function VvipView({
                   defaultSystemAccounts.forEach((defAcc) => {
                     if (!combinedUsers.some(u => u.username === defAcc.username)) {
                       combinedUsers.push(defAcc);
+                    }
+                  });
+
+                  (systemState.activeStudents || []).forEach((st: any) => {
+                    const uname = st.email?.trim() || st.id || st.nik;
+                    if (uname && !combinedUsers.some(u => 
+                      (u.username || "").toLowerCase() === uname.toLowerCase() ||
+                      (u.email && st.email && u.email.toLowerCase() === st.email.toLowerCase()) ||
+                      (u.studentId && st.id && u.studentId === st.id)
+                    )) {
+                      const isAlumni = ["Lulus", "Di Jepang"].includes(st.status || "") || st.kategoriPendaftaran === "Alumni";
+                      combinedUsers.push({
+                        username: uname,
+                        name: st.name || "Siswa",
+                        email: st.email || `${st.id || 'siswa'}@lpksci.com`,
+                        role: isAlumni ? "Alumni" : "Siswa",
+                        status: "Active",
+                        studentId: st.id,
+                        assignedClass: st.class || "",
+                        profilePicture: st.profilePicture || "",
+                      });
+                    }
+                  });
+
+                  (systemState.registeredStudents || []).forEach((reg: any) => {
+                    const uname = reg.email?.trim() || reg.id || reg.nik;
+                    if (uname && !combinedUsers.some(u => 
+                      (u.username || "").toLowerCase() === uname.toLowerCase() ||
+                      (u.email && reg.email && u.email.toLowerCase() === reg.email.toLowerCase()) ||
+                      (u.studentId && reg.id && u.studentId === reg.id)
+                    )) {
+                      combinedUsers.push({
+                        username: uname,
+                        name: reg.name || "Pendaftar",
+                        email: reg.email || `${reg.id || 'reg'}@lpksci.com`,
+                        role: "Siswa",
+                        status: "Active",
+                        studentId: reg.id,
+                        assignedClass: "",
+                        profilePicture: reg.docFoto || "",
+                      });
                     }
                   });
 

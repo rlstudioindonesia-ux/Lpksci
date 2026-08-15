@@ -82,6 +82,8 @@ import {
   RefreshCw,
   Download,
   Maximize2,
+  Smartphone,
+  Apple,
 } from "lucide-react";
 import {
   SystemState,
@@ -176,6 +178,7 @@ const StudentCvView = safeLazy(() => import("./StudentCvView"));
 const RegistrationView = safeLazy(() => import("./RegistrationView"));
 const AlumniDashboardView = safeLazy(() => import("./AlumniDashboardView"));
 const SenseiDashboardView = safeLazy(() => import("./SenseiDashboardView"));
+const IosInstallView = safeLazy(() => import("./IosInstallView"));
 
 const isAndroidWebView = () => {
   if (typeof window === "undefined") return false;
@@ -255,6 +258,7 @@ interface MobileDashboardViewProps {
   onLoginSuccess?: (user: UserAccount, isDefaultPassword?: boolean) => void;
   onOpenPrivacy?: () => void;
   onLoginAs?: (user: UserAccount) => void;
+  onOpenDownloadModal?: () => void;
 }
 
 export default function MobileDashboardView({
@@ -269,6 +273,7 @@ export default function MobileDashboardView({
   onLoginSuccess,
   onOpenPrivacy,
   onLoginAs,
+  onOpenDownloadModal,
 }: MobileDashboardViewProps) {
   // Mobile navigation tabs: "beranda", "notifikasi", "chat", "kalender", "akun"
   const [mobileTab, setMobileTab] = useState<string>("beranda");
@@ -494,84 +499,36 @@ export default function MobileDashboardView({
   const handleManualLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoginErrorMsg("");
-    const normalizedUsername = loginUsername.trim().toLowerCase();
+
+    const normalizedUsername = loginUsername.trim();
     const cleanPassword = loginPassword.trim();
-    if (normalizedUsername === "admin" && cleanPassword === "adminadmin") {
-      onLoginSuccess?.({
-        username: "admin",
-        name: "Administrator",
-        email: "admin@lpk.id",
-        role: "Admin",
-        status: "Active",
-      });
+
+    if (!normalizedUsername || !cleanPassword) {
+      setLoginErrorMsg("Username dan password wajib diisi.");
       return;
     }
-    let existingUser = (systemState.unfilteredUsers || systemState.users || [])?.find(
-      (u) => (u.username || "").trim().toLowerCase() === normalizedUsername ||
-              (u.email || "").trim().toLowerCase() === normalizedUsername,
-    );
-    
-    if (!existingUser) {
-      if (["linggadhani79@gmail.com", "ekaichiro@gmail.com", "rlstudioindonesia@gmail.com"].includes(normalizedUsername) && cleanPassword === "adminadmin") {
-         existingUser = {
-            id: normalizedUsername,
-            username: normalizedUsername,
-            name: normalizedUsername.split("@")[0],
-            email: normalizedUsername,
-            role: "VVIP",
-            status: "Active",
-            password: "adminadmin",
-         } as any;
-      }
-    }
-    
-    if (existingUser) {
-      if (existingUser.status === "Suspended") {
-        setLoginErrorMsg(
-          "Akses Ditolak: Akun Anda telah disuspend oleh Admin atau Direktur.",
-        );
-        return;
-      }
-      if (existingUser.status !== "Active" && existingUser.role !== "Admin" && existingUser.role !== "VVIP") {
-        setLoginErrorMsg(
-          "Akses Tertunda: Akun Anda belum disetujui atau belum aktif. Silakan hubungi Admin.",
-        );
-        return;
-      }
-      
-      const isAdminAccount = ["linggadhani79@gmail.com", "ekaichiro@gmail.com", "rlstudioindonesia@gmail.com", "admin"].includes((existingUser.email || "").trim().toLowerCase()) || (existingUser.username || "").trim().toLowerCase() === "admin";
 
-      try {
-        if (existingUser.email) {
-           await signInWithEmailAndPassword(auth, existingUser.email, cleanPassword);
-           onLoginSuccess?.(existingUser, isDefaultPasswordLogin(existingUser, cleanPassword));
-           return;
+    try {
+      const loginRes = await fetch("/api/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: normalizedUsername, password: cleanPassword }),
+      });
+      const data = await loginRes.json();
+      if (loginRes.ok && data?.user) {
+        const verifiedUser = data.user;
+        if (verifiedUser.email) {
+          createUserWithEmailAndPassword(auth, verifiedUser.email, cleanPassword).catch(() => {});
         }
-      } catch (err) {}
-
-      if (isAdminAccount && cleanPassword === "adminadmin") {
-        onLoginSuccess?.(existingUser);
+        onLoginSuccess?.(verifiedUser, isDefaultPasswordLogin(verifiedUser, cleanPassword));
+        return;
+      } else {
+        setLoginErrorMsg(data?.error || "Username/Email atau password salah.");
         return;
       }
-
-      // Verify against the server-side (bcrypt-hashed) credential store.
-      try {
-        const loginRes = await fetch("/api/login", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ username: normalizedUsername, password: cleanPassword }),
-        });
-        if (loginRes.ok) {
-          const { user: verifiedUser } = await loginRes.json();
-          if (existingUser.email) {
-              createUserWithEmailAndPassword(auth, existingUser.email, cleanPassword).catch(() => {});
-          }
-          onLoginSuccess?.(verifiedUser, isDefaultPasswordLogin(verifiedUser, cleanPassword));
-          return;
-        }
-      } catch (err) {}
+    } catch (err) {
+      setLoginErrorMsg("Gagal terhubung ke server. Silakan periksa koneksi internet Anda.");
     }
-    setLoginErrorMsg("Username/Email atau password salah.");
   };
 
   const executeLogoutAction = () => {
@@ -1082,20 +1039,17 @@ export default function MobileDashboardView({
         <div className="flex items-center gap-3 flex-1 min-w-0">
           {/* SCI Brand Logo Graphics and Subtitles */}
           <div className="flex items-center gap-2 flex-1 min-w-0">
-            {systemState.customization?.logoUrl ? (
-              <div className="h-10 w-10 bg-white rounded-xl flex items-center justify-center p-0.5 shadow-md overflow-hidden shrink-0">
-                <img
-                  src={systemState.customization.logoUrl}
-                  alt="LPK Logo"
-                  referrerPolicy="no-referrer"
-                  className="h-full w-full object-contain"
-                />
-              </div>
-            ) : (
-              <div className="h-10 w-10 bg-indigo-700/5 ring-1 ring-indigo-700/10 rounded-xl flex items-center justify-center font-bold text-lg text-indigo-700 font-sans shadow-inner shrink-0">
-                SCI
-              </div>
-            )}
+            <div className="h-10 w-10 bg-white rounded-xl flex items-center justify-center p-0.5 shadow-md overflow-hidden shrink-0 border border-slate-200/60">
+              <img
+                src={systemState.customization?.logoUrl || "/logo.png"}
+                alt="LPK Logo"
+                referrerPolicy="no-referrer"
+                className="h-full w-full object-contain"
+                onError={(e) => {
+                  (e.currentTarget as any).src = "/logo.png";
+                }}
+              />
+            </div>
             <div className="flex-1 min-w-0">
               <h1 className="font-sans text-[11px] font-black tracking-tight leading-none text-indigo-700 uppercase sm:text-xs truncate">
                 {systemState.customization?.logoText
@@ -1108,8 +1062,21 @@ export default function MobileDashboardView({
             </div>
           </div>
         </div>
-        {/* Right actions: Bell notifications & User Account */}
-        <div className="flex items-center gap-2 shrink-0 ml-2">
+        {/* Right actions: Pasang di iOS & Bell notifications & User Account */}
+        <div className="flex items-center gap-1.5 shrink-0 ml-2">
+          {/* iOS Web App PWA Install Button */}
+          <button
+            onClick={() => {
+              setActiveSubpage("install");
+              if (setActiveTab) setActiveTab("install");
+            }}
+            className="relative p-1.5 bg-gradient-to-tr from-slate-900 to-slate-800 text-white rounded-full hover:bg-slate-700 transition active:scale-90 border border-slate-700 shadow-sm flex items-center justify-center cursor-pointer"
+            title="Pasang Web App di Apple iOS (iPhone & iPad)"
+            id="mobile-header-ios-install-btn"
+          >
+            <Apple className="h-4.5 w-4.5 fill-current text-white" />
+          </button>
+
           {/* Golden Bell Icon with unread notifications count */}
           <button
             onClick={() => {
@@ -1157,6 +1124,7 @@ export default function MobileDashboardView({
               {activeSubpage === "galeri" && "Galeri Foto Pembelajaran"}
               {activeSubpage === "medsos" && "Media Sosial Resmi LPK"}
               {activeSubpage === "privacy" && "Kebijakan Privasi"}
+              {activeSubpage === "install" && "Panduan Pasang PWA iOS"}
               {activeSubpage === "cv" && "9. CV & BIODATA JEPANG"}
               {activeSubpage === "pilih_kelas" && "Pilih Kelas Bahasa Jepang"}
               {activeSubpage === "alumni_dashboard" && "Dashboard Alumni"}
@@ -2579,6 +2547,15 @@ export default function MobileDashboardView({
               <PrivacyPolicyView />
             </div>
           )}
+          {/* PANDUAN PASANG PWA IOS */}
+          {activeSubpage === "install" && (
+            <div className="flex-1 p-3 space-y-4 text-left">
+              <IosInstallView
+                systemState={systemState}
+                onBack={() => setActiveSubpage(null)}
+              />
+            </div>
+          )}
           {/* 16. CV & BIODATA JEPANG SUBPAGE */}
           {activeSubpage === "cv" && (
             <div className="flex-1 p-3 space-y-4 text-left">
@@ -3679,15 +3656,20 @@ export default function MobileDashboardView({
                         const provider = new GoogleAuthProvider();
                         const result = await signInWithPopup(auth, provider);
                         const user = result.user;
+                        const email = (user.email || "").trim().toLowerCase();
                         
                         let existingUser = (systemState.unfilteredUsers || systemState.users || [])?.find(
-                          (u) => u.email === user.email || u.username === user.email,
+                          (u) => (u.email || "").trim().toLowerCase() === email || (u.username || "").trim().toLowerCase() === email,
                         );
 
-                        if (!existingUser && user.email) {
-                          const email = user.email;
+                        if (!existingUser && email) {
                           const name = user.displayName || email.split("@")[0];
-                          let role: any = null;
+                          let role: any = "Siswa";
+                          let studentId: string | undefined = undefined;
+                          let assignedClass: string | undefined = undefined;
+
+                          const activeMatch = systemState.activeStudents?.find(s => (s.email || "").trim().toLowerCase() === email);
+                          const regMatch = systemState.registeredStudents?.find(r => (r.email || "").trim().toLowerCase() === email);
                           
                           if (["linggadhani79@gmail.com", "ekaichiro@gmail.com", "rlstudioindonesia@gmail.com"].includes(email)) {
                             role = "VVIP";
@@ -3695,29 +3677,38 @@ export default function MobileDashboardView({
                             role = "Pengajar";
                           } else if (email.includes("admin") || email === "sakti.wardana@lpksc.id") {
                             role = "Admin";
+                          } else if (activeMatch) {
+                            role = activeMatch.status === "Lulus" || activeMatch.status === "Di Jepang" || activeMatch.kategoriPendaftaran === "Alumni" ? "Alumni" : "Siswa";
+                            studentId = activeMatch.id;
+                            assignedClass = activeMatch.class;
+                          } else if (regMatch) {
+                            role = "Siswa";
+                            studentId = regMatch.id;
                           }
 
-                          if (role) {
-                            existingUser = {
-                              username: email,
-                              name: name,
-                              email: email,
-                              role: role,
-                              status: "Active",
-                              password: "google-auth-user",
-                            } as any;
+                          existingUser = {
+                            username: email,
+                            name: activeMatch?.name || regMatch?.name || name,
+                            email: email,
+                            role: role,
+                            status: "Active",
+                            studentId: studentId,
+                            assignedClass: assignedClass,
+                            profilePicture: user.photoURL || activeMatch?.profilePicture || regMatch?.docFoto || undefined,
+                            password: "google-auth-user",
+                            lastActive: new Date().toISOString()
+                          } as any;
 
-                            // PERSIST to database
-                            await fetch("/api/state/update", {
-                              method: "POST",
-                              headers: { "Content-Type": "application/json" },
-                              body: JSON.stringify({
-                                dataType: "users",
-                                action: "add",
-                                payload: existingUser
-                              })
-                            });
-                          }
+                          // PERSIST to database
+                          await fetch("/api/state/update", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                              dataType: "users",
+                              action: "add",
+                              payload: existingUser
+                            })
+                          }).catch(() => {});
                         }
 
                         if (existingUser) {
@@ -3734,7 +3725,9 @@ export default function MobileDashboardView({
                         const isIframe = typeof window !== "undefined" && window.self !== window.top;
                         const iframeTip = isIframe ? " \n\n💡 TIPS: Karena Anda di iFrame AI Studio, beberapa browser memblokir popup Google Auth. Silakan klik tombol 'Buka di Tab Baru' (Open in new tab) di kanan atas preview, lalu coba login kembali." : "";
                         
-                        if (error.code === 'auth/popup-closed-by-user' || error.code === 'auth/cancelled-popup-request') {
+                        if (error.code === 'auth/unauthorized-domain') {
+                          alert(`Domain '${window.location.hostname}' belum diotorisasi Firebase. Tambahkan hostname ini ke Authentication > Settings > Authorized Domains di Firebase Console.${iframeTip}`);
+                        } else if (error.code === 'auth/popup-closed-by-user' || error.code === 'auth/cancelled-popup-request') {
                           alert(`Popup login ditutup atau dibatalkan.${iframeTip}`);
                         } else {
                           alert((error.message || "Gagal masuk menggunakan Google.") + iframeTip);
@@ -4470,8 +4463,8 @@ export default function MobileDashboardView({
             </section>
           )}
 
-          {/* Clean Mobile Footer with Privacy Policy & Social Media */}
-          <footer className="pt-6 pb-4 border-t border-slate-200/60 mt-8 text-center space-y-3 hidden">
+          {/* Clean Mobile Footer with Privacy Policy, Panduan PWA iOS & Social Media */}
+          <footer className="pt-6 pb-6 border-t border-slate-200/60 mt-8 text-center space-y-3 block">
             <div className="flex items-center justify-center gap-4 text-slate-400">
               <a
                 href="https://instagram.com/lpk.sourcecourse"
@@ -4519,7 +4512,15 @@ export default function MobileDashboardView({
                 Kebijakan Privasi
               </button>
               <span className="text-slate-300">•</span>
-              <span className="text-slate-400">Pati, Jawa Tengah</span>
+              <button
+                onClick={() => setActiveSubpage("install")}
+                className="font-bold text-indigo-600 hover:text-indigo-800 transition active:scale-95 cursor-pointer underline flex items-center gap-1"
+                id="mobile-footer-pwa-btn"
+              >
+                <Apple className="h-3 w-3 inline fill-current" /> Panduan iOS PWA
+              </button>
+              <span className="text-slate-300">•</span>
+              <span className="text-slate-400">Pati, Jateng</span>
             </div>
           </footer>
         </div>
@@ -4672,6 +4673,47 @@ export default function MobileDashboardView({
                   defaultSystemAccounts.forEach((defAcc) => {
                     if (!combinedUsers.some(u => u.username === defAcc.username)) {
                       combinedUsers.push(defAcc);
+                    }
+                  });
+
+                  (systemState.activeStudents || []).forEach((st: any) => {
+                    const uname = st.email?.trim() || st.id || st.nik;
+                    if (uname && !combinedUsers.some(u => 
+                      (u.username || "").toLowerCase() === uname.toLowerCase() ||
+                      (u.email && st.email && u.email.toLowerCase() === st.email.toLowerCase()) ||
+                      (u.studentId && st.id && u.studentId === st.id)
+                    )) {
+                      const isAlumni = ["Lulus", "Di Jepang"].includes(st.status || "") || st.kategoriPendaftaran === "Alumni";
+                      combinedUsers.push({
+                        username: uname,
+                        name: st.name || "Siswa",
+                        email: st.email || `${st.id || 'siswa'}@lpksci.com`,
+                        role: isAlumni ? "Alumni" : "Siswa",
+                        status: "Active",
+                        studentId: st.id,
+                        assignedClass: st.class || "",
+                        profilePicture: st.profilePicture || "",
+                      });
+                    }
+                  });
+
+                  (systemState.registeredStudents || []).forEach((reg: any) => {
+                    const uname = reg.email?.trim() || reg.id || reg.nik;
+                    if (uname && !combinedUsers.some(u => 
+                      (u.username || "").toLowerCase() === uname.toLowerCase() ||
+                      (u.email && reg.email && u.email.toLowerCase() === reg.email.toLowerCase()) ||
+                      (u.studentId && reg.id && u.studentId === reg.id)
+                    )) {
+                      combinedUsers.push({
+                        username: uname,
+                        name: reg.name || "Pendaftar",
+                        email: reg.email || `${reg.id || 'reg'}@lpksci.com`,
+                        role: "Siswa",
+                        status: "Active",
+                        studentId: reg.id,
+                        assignedClass: "",
+                        profilePicture: reg.docFoto || "",
+                      });
                     }
                   });
 

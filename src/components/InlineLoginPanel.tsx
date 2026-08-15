@@ -105,104 +105,36 @@ export function InlineLoginPanel({
   const handleManualLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg("");
-    const normalizedUsername = loginUsername.trim().toLowerCase();
+
+    const normalizedUsername = loginUsername.trim();
     const cleanPassword = loginPassword.trim();
-    if (normalizedUsername === "admin" && cleanPassword === "adminadmin") {
-      onLoginSuccess({
-        username: "admin",
-        name: "Administrator Utama",
-        email: "admin@lpk.id",
-        role: "Admin",
-        status: "Active",
-      });
-      return;
-    }
-    if (normalizedUsername === "admin_super" && cleanPassword === "adminadmin") {
-      onLoginSuccess({
-        username: "admin_super",
-        name: "Admin Super (Pengawas Sistem)",
-        email: "superadmin@lpk.id",
-        role: "Admin Super",
-        status: "Active",
-      });
-      return;
-    }
-    if (normalizedUsername === "admin_biasa" && cleanPassword === "adminadmin") {
-      onLoginSuccess({
-        username: "admin_biasa",
-        name: "Admin Operasional Biasa",
-        email: "adminbiasa@lpk.id",
-        role: "Admin Biasa",
-        status: "Active",
-      });
-      return;
-    }
-    let existingUser = (systemState.unfilteredUsers || systemState.users || [])?.find(
-      (u) => (u.username || "").trim().toLowerCase() === normalizedUsername ||
-              (u.email || "").trim().toLowerCase() === normalizedUsername,
-    );
-    
-    if (!existingUser) {
-      if (["linggadhani79@gmail.com", "ekaichiro@gmail.com", "rlstudioindonesia@gmail.com"].includes(normalizedUsername) && cleanPassword === "adminadmin") {
-         existingUser = {
-            id: normalizedUsername,
-            username: normalizedUsername,
-            name: normalizedUsername.split("@")[0],
-            email: normalizedUsername,
-            role: "VVIP",
-            status: "Active",
-            password: "adminadmin",
-         } as any;
-      }
-    }
-    
-    if (existingUser) {
-      if (existingUser.status === "Suspended") {
-        setErrorMsg(
-          "Akses Ditolak: Akun Anda telah disuspend oleh Admin atau Direktur.",
-        );
-        return;
-      }
-      if (existingUser.status !== "Active" && existingUser.role !== "Admin" && existingUser.role !== "VVIP") {
-        setErrorMsg(
-          "Akses Tertunda: Akun Anda belum disetujui atau belum aktif. Silakan hubungi Admin.",
-        );
-        return;
-      }
-      
-      const isAdminAccount = ["linggadhani79@gmail.com", "ekaichiro@gmail.com", "rlstudioindonesia@gmail.com", "admin"].includes((existingUser.email || "").trim().toLowerCase()) || (existingUser.username || "").trim().toLowerCase() === "admin";
 
-      try {
-        if (existingUser.email) {
-           await signInWithEmailAndPassword(auth, existingUser.email, cleanPassword);
-           onLoginSuccess(existingUser, isDefaultPasswordLogin(existingUser, cleanPassword));
-           return;
+    if (!normalizedUsername || !cleanPassword) {
+      setErrorMsg("Username dan password wajib diisi.");
+      return;
+    }
+
+    try {
+      const loginRes = await fetch("/api/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: normalizedUsername, password: cleanPassword }),
+      });
+      const data = await loginRes.json();
+      if (loginRes.ok && data?.user) {
+        const verifiedUser = data.user;
+        if (verifiedUser.email) {
+          createUserWithEmailAndPassword(auth, verifiedUser.email, cleanPassword).catch(() => {});
         }
-      } catch (err) {}
-
-      if (isAdminAccount && cleanPassword === "adminadmin") {
-        onLoginSuccess(existingUser);
+        onLoginSuccess(verifiedUser, isDefaultPasswordLogin(verifiedUser, cleanPassword));
+        return;
+      } else {
+        setErrorMsg(data?.error || "Username/Email atau password salah.");
         return;
       }
-
-      // Verify against the server-side (bcrypt-hashed) credential store.
-      try {
-        const loginRes = await fetch("/api/login", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ username: normalizedUsername, password: cleanPassword }),
-        });
-        if (loginRes.ok) {
-          const { user: verifiedUser } = await loginRes.json();
-          if (existingUser.email) {
-            createUserWithEmailAndPassword(auth, existingUser.email, cleanPassword).catch(() => {});
-          }
-          onLoginSuccess(verifiedUser, isDefaultPasswordLogin(verifiedUser, cleanPassword));
-          return;
-        }
-      } catch (err) {}
+    } catch (err) {
+      setErrorMsg("Gagal terhubung ke server. Silakan periksa koneksi internet Anda.");
     }
-    setErrorMsg("Username/Email atau password salah.");
   };
 
   const handleGoogleLogin = async () => {
@@ -218,15 +150,20 @@ export function InlineLoginPanel({
       const provider = new GoogleAuthProvider();
       const result = await signInWithPopup(auth, provider);
       const user = result.user;
+      const email = (user.email || "").trim().toLowerCase();
 
       let existingUser = (systemState.unfilteredUsers || systemState.users || [])?.find(
-        (u) => u.email === user.email || u.username === user.email,
+        (u) => (u.email || "").trim().toLowerCase() === email || (u.username || "").trim().toLowerCase() === email,
       );
 
-      if (!existingUser && user.email) {
-        const email = user.email;
+      if (!existingUser && email) {
         const name = user.displayName || email.split("@")[0];
-        let role: any = null;
+        let role: any = "Siswa";
+        let studentId: string | undefined = undefined;
+        let assignedClass: string | undefined = undefined;
+
+        const activeMatch = systemState.activeStudents?.find(s => (s.email || "").trim().toLowerCase() === email);
+        const regMatch = systemState.registeredStudents?.find(r => (r.email || "").trim().toLowerCase() === email);
         
         if (["linggadhani79@gmail.com", "ekaichiro@gmail.com", "rlstudioindonesia@gmail.com"].includes(email)) {
           role = "VVIP";
@@ -234,29 +171,38 @@ export function InlineLoginPanel({
           role = "Pengajar";
         } else if (email.includes("admin") || email === "sakti.wardana@lpksc.id") {
           role = "Admin";
+        } else if (activeMatch) {
+          role = activeMatch.status === "Lulus" || activeMatch.status === "Di Jepang" || activeMatch.kategoriPendaftaran === "Alumni" ? "Alumni" : "Siswa";
+          studentId = activeMatch.id;
+          assignedClass = activeMatch.class;
+        } else if (regMatch) {
+          role = "Siswa";
+          studentId = regMatch.id;
         }
 
-        if (role) {
-          existingUser = {
-            username: email,
-            name: name,
-            email: email,
-            role: role,
-            status: "Active",
-            password: "google-auth-user",
-          } as any;
+        existingUser = {
+          username: email,
+          name: activeMatch?.name || regMatch?.name || name,
+          email: email,
+          role: role,
+          status: "Active",
+          studentId: studentId,
+          assignedClass: assignedClass,
+          profilePicture: user.photoURL || activeMatch?.profilePicture || regMatch?.docFoto || undefined,
+          password: "google-auth-user",
+          lastActive: new Date().toISOString()
+        } as any;
 
-          // PERSIST to database
-          await fetch("/api/state/update", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              dataType: "users",
-              action: "add",
-              payload: existingUser
-            })
-          });
-        }
+        // PERSIST to database
+        await fetch("/api/state/update", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            dataType: "users",
+            action: "add",
+            payload: existingUser
+          })
+        }).catch(() => {});
       }
 
       if (existingUser) {
@@ -273,7 +219,9 @@ export function InlineLoginPanel({
       const isIframe = typeof window !== "undefined" && window.self !== window.top;
       const iframeTip = isIframe ? " \n\n💡 TIPS: Karena Anda membuka aplikasi di dalam iFrame AI Studio, beberapa browser memblokir popup Google Auth secara default. Silakan klik tombol 'Buka di Tab Baru' (Open in new tab) di kanan atas halaman preview untuk masuk dengan Google dengan lancar." : "";
       
-      if (error.code === 'auth/popup-closed-by-user' || error.code === 'auth/cancelled-popup-request') {
+      if (error.code === 'auth/unauthorized-domain') {
+        setErrorMsg(`Domain '${window.location.hostname}' belum diotorisasi Firebase. Tambahkan hostname ini ke Authentication > Settings > Authorized Domains di Firebase Console.${iframeTip}`);
+      } else if (error.code === 'auth/popup-closed-by-user' || error.code === 'auth/cancelled-popup-request') {
         setErrorMsg(`Popup login ditutup atau dibatalkan.${iframeTip}`);
       } else {
         setErrorMsg((error.message || "Gagal masuk menggunakan Google.") + iframeTip);

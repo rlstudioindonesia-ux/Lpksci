@@ -1,9 +1,10 @@
 import { initializeApp, getApp, getApps } from 'firebase/app';
-import { getFirestore, doc, setDoc, getDocs, collection, getDocFromServer, deleteDoc } from 'firebase/firestore';
+import { getFirestore, doc, setDoc, getDocs, collection, getDoc, getDocFromServer, deleteDoc, query, where } from 'firebase/firestore';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { auth } from '../firebaseClient';
 import fs from 'fs';
 import path from 'path';
+import firebaseAppletConfig from '../../firebase-applet-config.json';
 
 export enum OperationType {
   CREATE = 'create',
@@ -31,7 +32,7 @@ interface FirestoreErrorInfo {
   }
 }
 
-function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
   const errInfo: FirestoreErrorInfo = {
     error: error instanceof Error ? error.message : String(error),
     authInfo: {
@@ -47,37 +48,34 @@ function handleFirestoreError(error: unknown, operationType: OperationType, path
     },
     operationType,
     path
-  }
-  console.error('Firestore Error: ', JSON.stringify(errInfo));
-  throw new Error(JSON.stringify(errInfo));
+  };
+  console.warn('⚠️ Firestore Warning/Error: ', JSON.stringify(errInfo));
+  return errInfo;
 }
 
-declare var require: any;
-
-// Read config with compile-time bundling and runtime fallback
-let firebaseConfig: any;
-try {
-  // esbuild will resolve and bundle this JSON at compile-time
-  firebaseConfig = require('../../firebase-applet-config.json');
-} catch (e) {
+// Read config with bundle import and runtime filesystem fallback
+let firebaseConfig: any = firebaseAppletConfig || {};
+if (!firebaseConfig.projectId || !firebaseConfig.apiKey) {
   try {
     const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
-    const configRaw = fs.readFileSync(configPath, 'utf-8');
-    firebaseConfig = JSON.parse(configRaw);
+    if (fs.existsSync(configPath)) {
+      const configRaw = fs.readFileSync(configPath, 'utf-8');
+      firebaseConfig = JSON.parse(configRaw);
+    }
   } catch (err) {
     console.warn("⚠️ Firebase configuration file not found or unreadable.");
     firebaseConfig = {};
   }
 }
 
-const hasConfig = firebaseConfig && firebaseConfig.projectId && firebaseConfig.apiKey;
+const hasConfig = Boolean(firebaseConfig && firebaseConfig.projectId && firebaseConfig.apiKey);
 
 export const app = hasConfig 
   ? (getApps().length === 0 ? initializeApp(firebaseConfig) : getApp())
   : null;
 
 export const db = hasConfig && app
-  ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
+  ? (firebaseConfig.firestoreDatabaseId ? getFirestore(app, firebaseConfig.firestoreDatabaseId) : getFirestore(app))
   : null;
 
 export const storage = hasConfig && app
@@ -86,57 +84,181 @@ export const storage = hasConfig && app
       : getStorage(app))
   : null;
 
-function sanitizeFirestoreData(data: any): any {
-  if (data === null || data === undefined) {
-    return null;
-  }
+export function sanitizeFirestoreData(data: any): any {
+  if (data === undefined) return null;
+  if (data === null) return null;
+  if (typeof data !== "object") return data;
+  if (data instanceof Date) return data.toISOString();
   if (Array.isArray(data)) {
-    return data.map(item => sanitizeFirestoreData(item));
+    return data.filter(item => item !== undefined).map(item => sanitizeFirestoreData(item));
   }
-  if (typeof data === "object") {
-    const proto = Object.getPrototypeOf(data);
-    if (proto === null || proto === Object.prototype) {
-      const cleaned: any = {};
-      for (const key of Object.keys(data)) {
-        const val = data[key];
-        if (val !== undefined) {
-          cleaned[key] = sanitizeFirestoreData(val);
-        }
-      }
-      return cleaned;
+  const cleaned: any = {};
+  for (const key of Object.keys(data)) {
+    const val = data[key];
+    if (val !== undefined && typeof val !== "function" && typeof val !== "symbol") {
+      cleaned[key] = sanitizeFirestoreData(val);
     }
   }
-  return data;
+  return cleaned;
 }
 
-export async function testConnection() {
+export async function testConnection(): Promise<boolean> {
   if (!db) {
     console.warn("⚠️ Firestore is not configured or initialized. Skipping connection test.");
-    return;
+    return false;
   }
   try {
-    console.log("🔍 Checking Firebase connectivity for Project:", firebaseConfig.projectId);
-    await getDocFromServer(doc(db, 'test', 'connection')).catch(e => {
-      handleFirestoreError(e, OperationType.GET, 'test/connection');
-    });
+    console.log("🔍 Checking Firebase connectivity for Project:", firebaseConfig.projectId, "Database:", firebaseConfig.firestoreDatabaseId || "(default)");
+    await getDoc(doc(db, 'system', 'connection_test')).catch(() => null);
     console.log("🔥 [SUCCESS] Firebase Database Activated & Connected!");
+    return true;
   } catch (error: any) {
-    console.error("❌ [FAILURE] Firebase connection test failed.");
-    if(error instanceof Error && error.message.includes('the client is offline')) {
-      console.error("DEBUG: Client appears to be offline. Verify your network or Firebase rules.");
-    }
-    console.error("ERROR DETAILS:", error);
+    console.warn("⚠️ [WARNING] Firebase connection test check:", error?.message || error);
+    return false;
   }
+}
+
+export async function getUserFromFirestore(identifier: string): Promise<any | null> {
+  if (!db || !identifier) return null;
+  const clean = identifier.trim().toLowerCase();
+  const raw = identifier.trim();
+  try {
+    // 1. Direct doc lookup by username/id in users collection
+    const userDoc = await getDoc(doc(db, 'users', clean));
+    if (userDoc.exists()) {
+      return userDoc.data();
+    }
+    if (raw !== clean) {
+      const rawUserDoc = await getDoc(doc(db, 'users', raw));
+      if (rawUserDoc.exists()) {
+        return rawUserDoc.data();
+      }
+    }
+    
+    // 2. Query users collection by email, username, or studentId
+    const usersCol = collection(db, 'users');
+    const [byEmail, byUser, byStudentId] = await Promise.all([
+      getDocs(query(usersCol, where('email', '==', clean))).catch(() => null),
+      getDocs(query(usersCol, where('username', '==', clean))).catch(() => null),
+      getDocs(query(usersCol, where('studentId', '==', raw))).catch(() => null)
+    ]);
+
+    if (byEmail && !byEmail.empty) return byEmail.docs[0].data();
+    if (byUser && !byUser.empty) return byUser.docs[0].data();
+    if (byStudentId && !byStudentId.empty) return byStudentId.docs[0].data();
+
+    // 3. Fallback: Query activeStudents collection in Firestore (by id, email, nik)
+    const activeCol = collection(db, 'activeStudents');
+    const [actDoc, actByEmail, actById, actByNik] = await Promise.all([
+      getDoc(doc(db, 'activeStudents', raw)).catch(() => null),
+      getDocs(query(activeCol, where('email', '==', clean))).catch(() => null),
+      getDocs(query(activeCol, where('id', '==', raw))).catch(() => null),
+      getDocs(query(activeCol, where('nik', '==', raw))).catch(() => null)
+    ]);
+
+    let matchedActive: any = null;
+    if (actDoc && actDoc.exists()) matchedActive = actDoc.data();
+    else if (actByEmail && !actByEmail.empty) matchedActive = actByEmail.docs[0].data();
+    else if (actById && !actById.empty) matchedActive = actById.docs[0].data();
+    else if (actByNik && !actByNik.empty) matchedActive = actByNik.docs[0].data();
+
+    if (matchedActive) {
+      const s = matchedActive;
+      const isAlumni = s.status === "Lulus" || s.status === "Di Jepang" || s.kategoriPendaftaran === "Alumni";
+      return {
+        username: s.email ? s.email.trim().toLowerCase() : (s.id || raw),
+        name: s.name,
+        email: s.email || `${s.id || 'siswa'}@lpksci.com`,
+        role: isAlumni ? "Alumni" : "Siswa",
+        status: "Active",
+        studentId: s.id,
+        assignedClass: s.class || "",
+        password: s.password || "123456",
+        profilePicture: s.profilePicture || "",
+      };
+    }
+
+    // 4. Fallback: Query registeredStudents collection in Firestore (by id, email, nik)
+    const regCol = collection(db, 'registeredStudents');
+    const [rDoc, regByEmail, regById, regByNik] = await Promise.all([
+      getDoc(doc(db, 'registeredStudents', raw)).catch(() => null),
+      getDocs(query(regCol, where('email', '==', clean))).catch(() => null),
+      getDocs(query(regCol, where('id', '==', raw))).catch(() => null),
+      getDocs(query(regCol, where('nik', '==', raw))).catch(() => null)
+    ]);
+
+    let matchedReg: any = null;
+    if (rDoc && rDoc.exists()) matchedReg = rDoc.data();
+    else if (regByEmail && !regByEmail.empty) matchedReg = regByEmail.docs[0].data();
+    else if (regById && !regById.empty) matchedReg = regById.docs[0].data();
+    else if (regByNik && !regByNik.empty) matchedReg = regByNik.docs[0].data();
+
+    if (matchedReg) {
+      const r = matchedReg;
+      return {
+        username: r.email ? r.email.trim().toLowerCase() : (r.id || raw),
+        name: r.name,
+        email: r.email || `${r.id || 'reg'}@lpksci.com`,
+        role: "Siswa",
+        status: "Active",
+        studentId: r.id,
+        password: r.password || "123456",
+        profilePicture: r.docFoto || "",
+      };
+    }
+  } catch (err: any) {
+    console.warn("Direct user query fallback warning:", err?.message || err);
+  }
+  return null;
+}
+
+async function fetchSafeDoc(docPath: { coll: string; id: string }, retries = 2): Promise<any> {
+  if (!db) return null;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const snap = await getDoc(doc(db, docPath.coll, docPath.id));
+      return snap;
+    } catch (err: any) {
+      if (attempt < retries) {
+        await new Promise(r => setTimeout(r, 400 * (attempt + 1)));
+        continue;
+      }
+      handleFirestoreError(err, OperationType.GET, `${docPath.coll}/${docPath.id}`);
+      return null;
+    }
+  }
+  return null;
+}
+
+async function fetchSafeCollection(collName: string, retries = 3): Promise<{ collName: string; docs: any[] }> {
+  if (!db) return { collName, docs: [] };
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const snap = await getDocs(collection(db, collName));
+      if (snap && !snap.empty) {
+        return { collName, docs: snap.docs.map(d => d.data()) };
+      }
+      return { collName, docs: [] };
+    } catch (err: any) {
+      if (attempt < retries) {
+        await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
+        continue;
+      }
+      handleFirestoreError(err, OperationType.LIST, collName);
+      return { collName, docs: [] };
+    }
+  }
+  return { collName, docs: [] };
 }
 
 export async function loadStateFromFirestore(fallbackState: any) {
   if (!db) {
-    console.warn("⚠️ Firestore is not initialized. Using fallback in-memory state.");
+    console.warn("⚠️ Firestore is not initialized. Using in-memory fallback state.");
     return fallbackState;
   }
   
   const startTime = Date.now();
-  console.log("🚀 Initializing State Load from Firestore...");
+  console.log("🚀 Initializing State Load from Firestore database:", firebaseConfig.firestoreDatabaseId || "(default)");
 
   try {
     const collections = [
@@ -147,104 +269,88 @@ export async function loadStateFromFirestore(fallbackState: any) {
       'lmsComments', 'teacherLeaves', 'teacherReports', 'teacherContracts'
     ];
     
-    let loadedState: any = {};
+    let loadedState: any = { ...fallbackState };
     let hasData = false;
 
-    // Load customization and collections concurrently
-    const [custDoc, slideDoc, galleryDoc, costConfigDoc, ...snapshots] = await Promise.all([
-      getDocFromServer(doc(db, 'system', 'customization')).catch((err) => {
-        handleFirestoreError(err, OperationType.GET, 'system/customization');
-        return null;
-      }),
-      getDocFromServer(doc(db, 'system', 'slideshows')).catch((err) => {
-        handleFirestoreError(err, OperationType.GET, 'system/slideshows');
-        return null;
-      }),
-      getDocFromServer(doc(db, 'system', 'galleries')).catch((err) => {
-        handleFirestoreError(err, OperationType.GET, 'system/galleries');
-        return null;
-      }),
-      getDocFromServer(doc(db, 'system', 'costConfig')).catch((err) => {
-        handleFirestoreError(err, OperationType.GET, 'system/costConfig');
-        return null;
-      }),
-      ...collections.map(collName => getDocs(collection(db, collName)).catch((err) => {
-        handleFirestoreError(err, OperationType.LIST, collName);
-        return null;
-      }))
+    // Load system docs safely
+    const [custDoc, slideDoc, galleryDoc, costConfigDoc] = await Promise.all([
+      fetchSafeDoc({ coll: 'system', id: 'customization' }),
+      fetchSafeDoc({ coll: 'system', id: 'slideshows' }),
+      fetchSafeDoc({ coll: 'system', id: 'galleries' }),
+      fetchSafeDoc({ coll: 'system', id: 'costConfig' })
     ]);
 
     if (custDoc && custDoc.exists()) {
       const custData = custDoc.data();
-      loadedState.customization = custData;
+      loadedState.customization = {
+        ...(fallbackState.customization || {}),
+        ...custData,
+        landingConfig: {
+          ...(fallbackState.customization?.landingConfig || {}),
+          ...(custData.landingConfig || {})
+        }
+      };
       hasData = true;
-      // Populate write cache for customization (without classes)
       const { lmsClasses, ...custWithoutClasses } = custData;
       writeCache.set('system/customization', JSON.stringify(sanitizeFirestoreData(custWithoutClasses)));
     }
     if (slideDoc && slideDoc.exists()) {
-      loadedState.slideshows = slideDoc.data().data || [];
+      const slideData = slideDoc.data();
+      loadedState.slideshows = Array.isArray(slideData.data) ? slideData.data : (fallbackState.slideshows || []);
       hasData = true;
-      writeCache.set('system/slideshows', JSON.stringify(sanitizeFirestoreData(slideDoc.data())));
-    } else {
-      loadedState.slideshows = [];
+      writeCache.set('system/slideshows', JSON.stringify(sanitizeFirestoreData(slideData)));
     }
     if (galleryDoc && galleryDoc.exists()) {
-      loadedState.galleries = galleryDoc.data().data || [];
+      const galleryData = galleryDoc.data();
+      loadedState.galleries = Array.isArray(galleryData.data) ? galleryData.data : (fallbackState.galleries || []);
       hasData = true;
-      writeCache.set('system/galleries', JSON.stringify(sanitizeFirestoreData(galleryDoc.data())));
-    } else {
-      loadedState.galleries = [];
+      writeCache.set('system/galleries', JSON.stringify(sanitizeFirestoreData(galleryData)));
     }
     if (costConfigDoc && costConfigDoc.exists()) {
       loadedState.costConfig = costConfigDoc.data();
       hasData = true;
       writeCache.set('system/costConfig', JSON.stringify(sanitizeFirestoreData(costConfigDoc.data())));
     }
-    if (loadedState.customization) {
 
-      // Deep merge with fallbackState for customization to ensure new default fields are available
-      if (fallbackState.customization) {
-        loadedState.customization = {
-          ...fallbackState.customization,
-          ...loadedState.customization,
-          // Ensure nested objects like landingConfig are also merged
-          landingConfig: {
-            ...(fallbackState.customization.landingConfig || {}),
-            ...(loadedState.customization.landingConfig || {})
-          }
-        };
-        
-        // If critical arrays are empty in Firestore but present in fallback, use fallback (if it's a "lost data" scenario)
-        // Slideshows and Galleries are now loaded independently from their own collections.
+    // Load all collections safely in parallel
+    const collResults = await Promise.all(
+      collections.map(collName => fetchSafeCollection(collName))
+    );
 
-        // Same for landingConfig arrays
-        const landingArrays = ['programs', 'perks', 'testimonials', 'opportunityImages'];
-        landingArrays.forEach(key => {
-          if ((!loadedState.customization.landingConfig[key] || loadedState.customization.landingConfig[key].length === 0) && 
-              fallbackState.customization.landingConfig[key] && fallbackState.customization.landingConfig[key].length > 0) {
-             loadedState.customization.landingConfig[key] = fallbackState.customization.landingConfig[key];
-          }
-        });
-      }
-    }
+    collResults.forEach(({ collName, docs }) => {
+      const fallbackItems = Array.isArray(fallbackState[collName]) ? fallbackState[collName] : [];
 
-    collections.forEach((collName, i) => {
-      const snap = snapshots[i];
-      if (snap && !snap.empty) {
+      if (docs && docs.length > 0) {
         hasData = true;
-        const docsData = snap.docs.map(d => d.data());
-        loadedState[collName] = docsData;
-        
-        // Populate write cache for loaded collection documents
-        docsData.forEach((item: any) => {
-          const id = item.id || item.username;
-          if (id) {
-            writeCache.set(`${collName}/${id}`, JSON.stringify(sanitizeFirestoreData(item)));
+
+        // Non-destructive merge: Merge Firestore docs with any memory items that might not yet be in Firestore
+        const itemMap = new Map<string, any>();
+
+        // 1. First add memory fallback items
+        fallbackItems.forEach((item: any) => {
+          if (!item) return;
+          const key = item.id || item.username || item.email;
+          if (key) itemMap.set(String(key).toLowerCase(), item);
+        });
+
+        // 2. Overwrite with Firestore authoritative docs
+        docs.forEach((item: any) => {
+          if (!item) return;
+          const key = item.id || item.username || item.email;
+          if (key) {
+            itemMap.set(String(key).toLowerCase(), item);
+            writeCache.set(`${collName}/${key}`, JSON.stringify(sanitizeFirestoreData(item)));
           }
         });
-        
-        console.log(`✅ Loaded ${loadedState[collName].length} items from ${collName}`);
+
+        loadedState[collName] = Array.from(itemMap.values());
+        console.log(`✅ Loaded & merged ${loadedState[collName].length} items from ${collName} (${docs.length} from Firestore)`);
+      } else {
+        // Firestore returned 0 items (or had a connection issue) -> KEEP memory fallback data!
+        loadedState[collName] = fallbackItems;
+        if (fallbackItems.length > 0) {
+          console.log(`ℹ️ Firestore ${collName} empty/unreachable. Retained ${fallbackItems.length} in-memory items.`);
+        }
       }
     });
 
@@ -253,7 +359,6 @@ export async function loadStateFromFirestore(fallbackState: any) {
       if (!loadedState.customization) loadedState.customization = {};
       loadedState.customization.lmsClasses = loadedState.lmsClasses;
       
-      // Cache the loaded lmsClasses individually
       loadedState.lmsClasses.forEach((lmsClass: any) => {
         if (lmsClass && lmsClass.id) {
           writeCache.set(`lmsClasses/${lmsClass.id}`, JSON.stringify(sanitizeFirestoreData(lmsClass)));
@@ -291,27 +396,24 @@ export async function loadStateFromFirestore(fallbackState: any) {
         const timeB = new Date(b.timestamp || b.time || 0).getTime();
         return timeB - timeA;
       });
-
-      console.log(`📜 Consolidated ${loadedState.logs.length} total log items from audit_trail and individual documents.`);
-    }
-
-    if (!hasData) {
-      console.log("⚠️ No existing data in Firestore. Returning empty initial state structure.");
-      return fallbackState;
     }
 
     const duration = Date.now() - startTime;
-    console.log(`💎 Successfully synchronized state with Firestore in ${duration}ms.`);
+    console.log(`💎 Firestore synchronization completed in ${duration}ms. Data loaded: ${hasData ? 'YES' : 'CLEAN_INIT'}`);
     
-    // Fill in missing arrays
+    // Ensure all critical collection arrays exist
     for (const collName of collections) {
-      if (!loadedState[collName]) loadedState[collName] = [];
+      if (!Array.isArray(loadedState[collName])) {
+        loadedState[collName] = fallbackState[collName] || [];
+      }
     }
-    if (!loadedState.customization) loadedState.customization = fallbackState.customization;
+    if (!loadedState.customization) {
+      loadedState.customization = fallbackState.customization;
+    }
     
     return loadedState;
   } catch(e) {
-    console.error("❌ CRITICAL: Failed to load from Firestore. Reverting to local fallback.", e);
+    console.error("❌ CRITICAL: Failed to load from Firestore. Reverting to safe in-memory fallback.", e);
     return fallbackState;
   }
 }

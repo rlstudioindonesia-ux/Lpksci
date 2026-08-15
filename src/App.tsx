@@ -5,7 +5,7 @@
 
 import { auth } from "./firebaseClient";
 import { getRedirectResult } from "firebase/auth";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 
 function useIsMobile() {
   const [isMobile, setIsMobile] = useState(() =>
@@ -88,6 +88,7 @@ const RegistrationView = safeLazy(() => import("./components/RegistrationView"))
 const PrivacyPolicyView = safeLazy(() => import("./components/PrivacyPolicyView"));
 const AlumniDashboardView = safeLazy(() => import("./components/AlumniDashboardView"));
 const SenseiDashboardView = safeLazy(() => import("./components/SenseiDashboardView"));
+const IosInstallView = safeLazy(() => import("./components/IosInstallView"));
 
 export default function App() {
   const [activeTab, setActiveTabState] = useState<string>(() => {
@@ -96,6 +97,7 @@ export default function App() {
       if (path === "/kebijakan") return "privacy";
       if (path === "/login") return "frontend";
       if (path === "/daftar" || path === "/register") return "registration";
+      if (path === "/install" || path === "/pasang" || path === "/ios") return "install";
 
       const saved = localStorage.getItem("lpk_auth_session");
       if (saved) {
@@ -136,10 +138,55 @@ export default function App() {
     let path = "/";
     if (tab === "privacy") path = "/kebijakan";
     if (tab === "registration") path = "/daftar";
+    if (tab === "install") path = "/install";
     window.history.pushState({ type: "tab", tab }, "", path);
   };
 
   const [isLoginOpen, setIsLoginOpen] = useState<boolean>(false);
+  const [showAppDownloadModal, setShowAppDownloadModal] = useState<boolean>(false);
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [isInstallable, setIsInstallable] = useState<boolean>(false);
+
+  useEffect(() => {
+    const handleBeforeInstallPrompt = (e: any) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      setIsInstallable(true);
+    };
+
+    const handleAppInstalled = () => {
+      setIsInstallable(false);
+      setDeferredPrompt(null);
+    };
+
+    window.addEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+    window.addEventListener("appinstalled", handleAppInstalled);
+
+    (window as any).openAppDownloadModal = () => setActiveTab("install");
+    (window as any).navigateToInstall = () => setActiveTab("install");
+
+    return () => {
+      window.removeEventListener("beforeinstallprompt", handleBeforeInstallPrompt);
+      window.removeEventListener("appinstalled", handleAppInstalled);
+    };
+  }, []);
+
+  const handleInstallPWA = async () => {
+    if (deferredPrompt) {
+      try {
+        deferredPrompt.prompt();
+        const { outcome } = await deferredPrompt.userChoice;
+        if (outcome === "accepted") {
+          setIsInstallable(false);
+          setDeferredPrompt(null);
+        }
+      } catch (err) {
+        console.error("Install prompt error:", err);
+      }
+    } else {
+      setShowAppDownloadModal(true);
+    }
+  };
 
   useEffect(() => {
     // Parse referral code on mount and save to localStorage
@@ -269,7 +316,15 @@ export default function App() {
     chapterAssessments: [],
   });
 
-  const [isLoadingState, setIsLoadingState] = useState<boolean>(true);
+  const [isLoadingState, setIsLoadingState] = useState<boolean>(false);
+
+  // Safety net: ensure loading state never hangs
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setIsLoadingState(false);
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, []);
 
   // Check profile completeness & default password for student users
   const checkAndShowStudentProfilePrompt = (user: UserAccount | null, isDefaultPass: boolean = false) => {
@@ -327,43 +382,104 @@ export default function App() {
     }
   }, [currentUser?.username, isLoadingState]);
 
-  // Load backend state on initialization
-  const fetchState = async () => {
+  // Load backend state on initialization with automatic retries for cold starts
+  const isFetchingStateRef = useRef<boolean>(false);
+  const lastFetchTimeRef = useRef<number>(0);
+
+  const fetchState = async (retryCount = 0) => {
+    if (isFetchingStateRef.current && retryCount === 0) return;
+    isFetchingStateRef.current = true;
     try {
       const response = await fetch("/api/state");
       if (response.ok) {
         const data = await response.json();
-        setSystemState(data);
+        const hasStudents = Array.isArray(data?.activeStudents) && data.activeStudents.length > 0;
+        const hasUsers = Array.isArray(data?.users) && data.users.length > 3;
+        const isServerReady = data?._isReady !== false;
+
+        setSystemState((prevState) => {
+          if (!data) return prevState;
+          const safeData: any = { ...data };
+          const arrayKeys = [
+            "activeStudents", "registeredStudents", "users", "attendance",
+            "payments", "inventory", "taxes", "events", "jobOrders",
+            "lmsLessons", "lmsQuizzes", "lmsComments", "chapterAssessments",
+            "messages", "logs", "salaries", "cashLedger", "teacherLeaves",
+            "teacherReports", "teacherContracts", "lmsClasses"
+          ];
+          arrayKeys.forEach((key) => {
+            const prevArr = prevState[key as keyof typeof prevState];
+            if ((!safeData[key] || safeData[key].length === 0) && Array.isArray(prevArr) && prevArr.length > 0) {
+              safeData[key] = prevArr;
+            }
+          });
+          return safeData;
+        });
+        lastFetchTimeRef.current = Date.now();
+        setIsLoadingState(false);
+
+        // If server indicated it was not yet ready or returned empty dataset during cold start, retry in 1.5s
+        if ((!isServerReady || (!hasStudents && !hasUsers)) && retryCount < 10) {
+          setTimeout(() => fetchState(retryCount + 1), 1500);
+        }
+      } else {
+        if (retryCount < 5) {
+          setTimeout(() => fetchState(retryCount + 1), (retryCount + 1) * 1500);
+        } else {
+          setIsLoadingState(false);
+        }
       }
     } catch (error) {
-      if (error instanceof TypeError && error.message === "Failed to fetch") {
-        console.warn("Polling state: server temporarily unreachable.");
+      if (retryCount < 4) {
+        setTimeout(() => fetchState(retryCount + 1), (retryCount + 1) * 1500);
       } else {
-        console.error("Unable to connect to synchronized server database:", error);
+        if (error instanceof TypeError && error.message === "Failed to fetch") {
+          console.warn("Polling state: server temporarily unreachable, retrying in background...");
+        } else {
+          console.error("Unable to connect to synchronized server database:", error);
+        }
+        setIsLoadingState(false);
       }
     } finally {
-      setIsLoadingState(false);
+      isFetchingStateRef.current = false;
     }
   };
 
   useEffect(() => {
     fetchState();
 
-    // Refresh state periodically and on window focus to get latest data (like plotted classes)
+    // Refresh state periodically with a responsive 25s interval
     const intervalId = setInterval(() => {
       fetchState();
-    }, 60000); // 1 minute
+    }, 25000);
 
-    const handleFocus = () => {
-      fetchState();
+    const triggerDebouncedFetch = () => {
+      const now = Date.now();
+      // Only fetch on focus if at least 10 seconds have passed since last fetch
+      if (now - lastFetchTimeRef.current > 10000) {
+        fetchState();
+      }
     };
-    window.addEventListener("focus", handleFocus);
+
+    window.addEventListener("focus", triggerDebouncedFetch);
+    window.addEventListener("online", triggerDebouncedFetch);
+    window.addEventListener("pageshow", triggerDebouncedFetch);
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") {
+        triggerDebouncedFetch();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
 
     // Check for redirect result from Google Sign-In
     const checkRedirect = async () => {
+      if (!auth) return;
+      const isAndroidWebView = typeof navigator !== "undefined" && (
+        /wv|Android.*Version\/[0-9]/i.test(navigator.userAgent)
+      );
+      if (isAndroidWebView) return;
+
       try {
-        
-        
         const result = await getRedirectResult(auth);
         if (result && result.user) {
           const user = result.user;
@@ -469,15 +585,26 @@ export default function App() {
 
     return () => {
       clearInterval(intervalId);
-      window.removeEventListener("focus", handleFocus);
+      window.removeEventListener("focus", triggerDebouncedFetch);
+      window.removeEventListener("online", triggerDebouncedFetch);
+      window.removeEventListener("pageshow", triggerDebouncedFetch);
+      document.removeEventListener("visibilitychange", handleVisibility);
     };
   }, []);
 
   useEffect(() => {
     if (currentUser && !isLoadingState) {
+      // Guard: If users state is empty or initializing, NEVER wipe user session!
+      if (!systemState.users || systemState.users.length === 0) {
+        return;
+      }
+
       const updatedUser = systemState.users.find(
-        (u) => u.username === currentUser.username,
+        (u) =>
+          (u.username && currentUser.username && u.username.toLowerCase() === currentUser.username.toLowerCase()) ||
+          (u.email && currentUser.email && u.email.toLowerCase() === currentUser.email.toLowerCase())
       );
+
       if (updatedUser) {
         if (updatedUser.status === "Suspended") {
           setCurrentUser(null);
@@ -493,6 +620,7 @@ export default function App() {
           updatedUser.assignedClass !== currentUser.assignedClass ||
           updatedUser.studentId !== currentUser.studentId ||
           updatedUser.email !== currentUser.email ||
+          updatedUser.name !== currentUser.name ||
           updatedUser.profilePicture !== currentUser.profilePicture ||
           updatedUser.status !== currentUser.status ||
           updatedUser.bankAccount !== currentUser.bankAccount ||
@@ -502,10 +630,19 @@ export default function App() {
           setCurrentUser(updatedUser);
         }
       } else {
-        // User was deleted
-        setCurrentUser(null);
-        alert("Akses Ditolak: Akun Anda tidak ditemukan atau telah dihapus.");
-        setActiveTab("frontend");
+        // Double check with server auth validation endpoint to prevent false session removal during cold starts
+        fetch("/api/auth/validate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username: currentUser.username, email: currentUser.email })
+        })
+          .then(res => res.json())
+          .then(data => {
+            if (data?.valid && data.user) {
+              setCurrentUser(data.user);
+            }
+          })
+          .catch(() => {});
       }
     }
   }, [systemState.users, currentUser, isLoadingState]);
@@ -591,17 +728,33 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const faviconUrl = systemState?.customization?.faviconUrl;
-    if (faviconUrl) {
-      let link: HTMLLinkElement | null = document.querySelector("link[rel~='icon']");
-      if (!link) {
-        link = document.createElement('link');
-        link.rel = 'icon';
-        document.getElementsByTagName('head')[0].appendChild(link);
-      }
-      link.href = faviconUrl;
+    const rawIcon = systemState?.customization?.faviconUrl || systemState?.customization?.logoUrl || "/logo.png";
+    if (rawIcon) {
+      // Update all standard icon links
+      const iconSelectors = [
+        "link[rel='icon']",
+        "link[rel='shortcut icon']",
+        "link[rel='apple-touch-icon']",
+        "link[rel='apple-touch-icon-precomposed']",
+        "#app-favicon",
+        "#app-apple-icon"
+      ];
+
+      iconSelectors.forEach(sel => {
+        const el = document.querySelector(sel) as HTMLLinkElement | null;
+        if (el) {
+          el.href = rawIcon;
+        }
+      });
+
+      // Remove any leftover svg or dummy icon tags
+      document.querySelectorAll("link[type='image/svg+xml']").forEach(node => {
+        if ((node as HTMLLinkElement).href?.includes("favicon.svg")) {
+          node.remove();
+        }
+      });
     }
-  }, [systemState?.customization?.faviconUrl]);
+  }, [systemState?.customization?.logoUrl, systemState?.customization?.faviconUrl]);
 
   const filteredSystemState = React.useMemo(() => {
     const hiddenEmails = ["linggadhani79@gmail.com", "rlstudioindonesia@gmail.com", "linggadhani95@gmail.com", "admin"];
@@ -664,28 +817,21 @@ export default function App() {
           setActiveTab={setActiveTab}
           customization={systemState?.customization}
           isOverlay={activeTab === "frontend"}
+          onOpenDownloadModal={() => setShowAppDownloadModal(true)}
         />
 
         {/* Main viewport Container with desktop boundaries */}
         <main className={`flex-1 mx-auto w-full transition-all duration-300 ${activeTab === 'frontend' ? 'max-w-none px-0 py-0' : 'max-w-[1800px] px-4 sm:px-6 lg:px-8 py-4'}`}>
-          {isLoadingState ? (
-            <div className="flex h-64 flex-col items-center justify-center space-y-3">
-              <span className="h-10 w-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></span>
-              <span className="text-xs font-semibold text-slate-500 font-mono">
-                Menghubungkan ke Sistem Pusat Sincron...
-              </span>
-            </div>
-          ) : (
-            <div>
-              {/* TAB RENDERING & ACCESS CONTROLS GUARD */}
-              <React.Suspense fallback={
-                <div className="flex h-64 flex-col items-center justify-center space-y-3">
-                  <span className="h-10 w-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></span>
-                  <span className="text-xs font-black text-slate-400 font-mono uppercase tracking-widest">
-                    Memuat Modul...
-                  </span>
-                </div>
-              }>
+          <div>
+            {/* TAB RENDERING & ACCESS CONTROLS GUARD */}
+            <React.Suspense fallback={
+              <div className="flex h-64 flex-col items-center justify-center space-y-3">
+                <span className="h-10 w-10 border-4 border-indigo-600 border-t-transparent rounded-full animate-spin"></span>
+                <span className="text-xs font-black text-slate-400 font-mono uppercase tracking-widest">
+                  Memuat Modul...
+                </span>
+              </div>
+            }>
                 {/* TAB 1: FRONTEND WEBPAGE */}
               {activeTab === "frontend" && (
                 <FrontendView
@@ -696,6 +842,7 @@ export default function App() {
                   slideshows={systemState?.slideshows}
                   galleries={systemState?.galleries}
                   onNavigateToRegistration={() => setActiveTab("registration")}
+                  onNavigateToInstall={() => setActiveTab("install")}
                 />
               )}
 
@@ -1144,10 +1291,17 @@ export default function App() {
                   <PrivacyPolicyView />
                 </div>
               )}
+
+              {/* TAB 12: DEDICATED APPLE IOS WEB APP (PWA) INSTALL VIEW */}
+              {activeTab === "install" && (
+                <IosInstallView
+                  systemState={systemState}
+                  onBack={() => setActiveTab("frontend")}
+                />
+              )}
             </React.Suspense>
           </div>
-        )}
-      </main>
+        </main>
 
         {/* Modern footer with Pati Address & Clean Info */}
         <footer
@@ -1170,6 +1324,14 @@ export default function App() {
                   id="desktop-footer-privacy-link"
                 >
                   Kebijakan Privasi
+                </button>
+                <span className="text-slate-300 hidden sm:inline">|</span>
+                <button
+                  onClick={() => setActiveTab("install")}
+                  className="font-semibold text-indigo-600 hover:text-indigo-800 transition cursor-pointer hover:underline"
+                  id="desktop-footer-install-link"
+                >
+                  Pasang di iOS (PWA)
                 </button>
               </div>
             </div>
@@ -1247,6 +1409,7 @@ export default function App() {
                 if (user.role === "VVIP") setActiveTab("vvip");
               }}
               onOpenPrivacy={() => setIsPrivacyOpen(true)}
+              onOpenDownloadModal={() => setShowAppDownloadModal(true)}
               onLoginAs={(user) => {
                 const now = new Date().toISOString();
                 handleUpdateState("users", "edit", { username: user.username, lastActive: now });

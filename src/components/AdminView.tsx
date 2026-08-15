@@ -253,7 +253,7 @@ export default function AdminView({
 
     // Logo / Company Name
     let currentY = 20;
-    const logoUrl = systemState?.customization?.logoUrl;
+    const logoUrl = systemState?.customization?.logoUrl || "/logo.png";
     if (logoUrl) {
       try {
         const img = new window.Image();

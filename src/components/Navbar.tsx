@@ -7,7 +7,7 @@ import React, { useState, useEffect } from "react";
 import { 
   GraduationCap, LogIn, LogOut, ShieldAlert, Award, BookOpen, FolderOpen, Globe, User,
   Anchor, Compass, Sparkles, Heart, Landmark, Settings, Calendar, MessagesSquare, CreditCard, Briefcase, TrendingUp,
-  UserPlus, Share2, LayoutGrid, Menu
+  UserPlus, Share2, LayoutGrid, Menu, Smartphone, Download, Apple
 } from "lucide-react";
 import { UserAccount, SystemState } from "../types";
 import { getSafePhotoUrl } from "../lib/storageHelper";
@@ -42,6 +42,7 @@ interface NavbarProps {
     logoUrl?: string;
   };
   isOverlay?: boolean;
+  onOpenDownloadModal?: () => void;
 }
 
 export default function Navbar({
@@ -52,7 +53,8 @@ export default function Navbar({
   activeTab,
   setActiveTab,
   customization,
-  isOverlay = false
+  isOverlay = false,
+  onOpenDownloadModal
 }: NavbarProps) {
   const [scrolled, setScrolled] = useState(false);
   const [isPortalMenuOpen, setIsPortalMenuOpen] = useState(false);
@@ -69,7 +71,7 @@ export default function Navbar({
   const logoIconName = customization?.logoIcon || "GraduationCap";
   const LogoIcon = getLogoIcon(logoIconName);
   const themeColor = customization?.themeColor || "blue";
-  const logoUrl = customization?.logoUrl || "";
+  const logoUrl = customization?.logoUrl || "/logo.png";
 
   // Role detection variables matched with mobile views
   const me = systemState?.activeStudents?.find(s => s.id === currentUser?.studentId || s.name === currentUser?.name);
@@ -406,6 +408,18 @@ export default function Navbar({
                       >
                         <Settings className="h-4 w-4" /> Pengaturan Akun
                       </button>
+
+                      <div className="my-1 border-t border-slate-100"></div>
+
+                      <button
+                        onClick={() => {
+                          setActiveTab("install");
+                          setIsPortalMenuOpen(false);
+                        }}
+                        className="flex items-center gap-2.5 px-3 py-2.5 text-xs font-bold tracking-wide uppercase rounded-lg transition-colors text-left w-full text-indigo-700 bg-indigo-50 hover:bg-indigo-100"
+                      >
+                        <Apple className="h-4 w-4 text-indigo-600 fill-current" /> Pasang di iOS (PWA)
+                      </button>
                       </div>
                     </div>
                   </div>
@@ -429,6 +443,23 @@ export default function Navbar({
               </>
             </div>
             )}
+
+            {/* Pasang di iOS Button (Apple PWA) */}
+            <button
+              onClick={() => setActiveTab("install")}
+              className={`inline-flex items-center gap-1.5 rounded-2xl px-3 py-2 sm:px-3.5 sm:py-2.5 text-[11px] sm:text-xs font-bold uppercase tracking-wider transition-all active:scale-95 cursor-pointer ${
+                activeTab === "install"
+                  ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
+                  : isOverlay
+                    ? "bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-400/40 shadow-sm"
+                    : "bg-indigo-50 hover:bg-indigo-100/80 text-indigo-800 border border-indigo-200 shadow-xs"
+              }`}
+              title="Pasang Aplikasi Web di Apple iOS (iPhone & iPad)"
+              id="btn-download-app-nav"
+            >
+              <Apple className="h-3.5 w-3.5 fill-current shrink-0" />
+              <span className="hidden sm:inline">Pasang di iOS</span>
+            </button>
 
             {/* User Account / Auth trigger */}
             {currentUser ? (

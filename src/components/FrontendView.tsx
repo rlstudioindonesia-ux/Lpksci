@@ -44,6 +44,7 @@ import {
   X,
   Eye,
   Camera,
+  Apple,
 } from "lucide-react";
 import { RegisteredStudent, ActiveStudent, ALL_48_PREFECTURES_COORDINATES } from "../types";
 
@@ -99,6 +100,8 @@ interface FrontendViewProps {
   slideshows?: any[];
   galleries?: any[];
   onNavigateToRegistration?: () => void;
+  onNavigateToInstall?: () => void;
+  onOpenDownloadModal?: () => void;
 }
 
 export default function FrontendView({
@@ -109,6 +112,8 @@ export default function FrontendView({
   slideshows = [],
   galleries = [],
   onNavigateToRegistration,
+  onNavigateToInstall,
+  onOpenDownloadModal,
 }: FrontendViewProps) {
   // Quick Access active tab
   const [activeFrontendTab, setActiveFrontendTab] = useState<"program" | "biaya" | "map" | "galeri">("program");
@@ -482,7 +487,7 @@ export default function FrontendView({
               {activeSlide.description}
             </p>
 
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 pt-2">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4 pt-2">
               <button
                 onClick={(e) => {
                   e.preventDefault();
@@ -497,13 +502,25 @@ export default function FrontendView({
               <button
                 onClick={(e) => {
                   e.preventDefault();
+                  if (onNavigateToInstall) onNavigateToInstall();
+                  else if ((window as any).navigateToInstall) (window as any).navigateToInstall();
+                }}
+                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-indigo-600/30 hover:bg-indigo-600/50 border border-indigo-400/40 text-indigo-200 hover:text-white px-6 py-4 font-bold text-xs uppercase tracking-wider transition-all hover:scale-105 shadow-lg shadow-indigo-950/40 cursor-pointer"
+              >
+                <Apple className="h-4 w-4 fill-current text-indigo-400" />
+                <span>Pasang di iOS (PWA)</span>
+              </button>
+
+              <button
+                onClick={(e) => {
+                  e.preventDefault();
                   if ((window as any).openFrontendTab) {
                     (window as any).openFrontendTab('biaya');
                   }
                 }}
-                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white/10 backdrop-blur-md hover:bg-white/20 border border-white/15 text-white px-7 py-4 font-bold text-xs uppercase tracking-wider transition-all"
+                className="inline-flex items-center justify-center gap-2 rounded-2xl bg-white/10 backdrop-blur-md hover:bg-white/20 border border-white/15 text-white px-6 py-4 font-bold text-xs uppercase tracking-wider transition-all cursor-pointer"
               >
-                Intip SOP Biaya Pelatihan
+                SOP Biaya
               </button>
             </div>
           </div>
