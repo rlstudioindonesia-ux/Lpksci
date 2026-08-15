@@ -2048,7 +2048,22 @@ export default function FrontendView({
 
                 const t = themeMap[colorTheme] || themeMap.blue;
                 const isLongLevel = cls.level?.length > 3;
-                const registeredCount = cls.registered !== undefined ? cls.registered : 8;
+
+                // Sync the displayed count with real students assigned to this
+                // class in the LMS (matched against "Kelas Alumni {title}", the
+                // real class name auto-created on save - see AdminView's Kelas
+                // Alumni sync logic), falling back to the manual `cls.registered`
+                // number when no real students are recorded yet.
+                const alumniClassName = `Kelas Alumni ${cls.title || cls.level}`;
+                const targetLower = alumniClassName.toLowerCase();
+                const levelToken = targetLower.match(/\bn[1-5]\b/)?.[0] || (targetLower.includes("native") ? "native" : null);
+                const realEnrolledCount = activeStudents.filter((s: any) => {
+                  const candidate = (s.assignedClass || s.class || "").toLowerCase();
+                  if (!candidate) return false;
+                  if (candidate === targetLower) return true;
+                  return !!levelToken && candidate.includes(levelToken);
+                }).length;
+                const registeredCount = realEnrolledCount > 0 ? realEnrolledCount : (cls.registered !== undefined ? cls.registered : 8);
                 const quotaLimit = cls.quota !== undefined ? cls.quota : 10;
                 const remaining = Math.max(0, quotaLimit - registeredCount);
 

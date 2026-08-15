@@ -4246,9 +4246,15 @@ export default function AdminView({
                       // Filter active students available for recommendation
                       const recommendableStudents =
                         systemState.activeStudents.filter((st) => {
-                          // Only students who have progressed far enough to be job-ready
-                          // (still "Belajar" means they haven't finished the curriculum yet)
-                          const isJobReady = ["Lulus", "On Proges Job", "On Progres JFT/JLPT/SSW", "Diklat SO"].includes(st.status);
+                          // Any status other than "Belajar" (still studying, hasn't
+                          // finished the curriculum) or "Dikeluarkan" (expelled) can be
+                          // recommended - this includes "Di Jepang" alumni, who were
+                          // previously excluded here even though they're clearly not
+                          // "Belajar". The LMS score requirement is only enforced when
+                          // the student self-applies (JobsView auto-reject); an admin
+                          // recommending someone here isn't blocked by score, so they
+                          // can still push a student through for a special skill.
+                          const isJobReady = st.status !== "Belajar" && st.status !== "Dikeluarkan";
                           if (!isJobReady) return false;
 
                           // Check if they are locked in another active job (locked if they are recommended, showed interest, or approved)
@@ -4717,16 +4723,18 @@ export default function AdminView({
                                                 className="flex-1 text-[9px] p-1 border border-slate-200 rounded bg-slate-50 font-bold"
                                                 style={{
                                                   color:
-                                                    docs.stage === "Lolos Akhir" ? "#059669" : 
-                                                    docs.stage === "Interview" ? "#4f46e5" : 
-                                                    docs.stage === "Seleksi Awal" ? "#b45309" : 
+                                                    docs.stage === "Lolos Akhir" ? "#059669" :
+                                                    docs.stage === "Lolos Interview" ? "#0d9488" :
+                                                    docs.stage === "Interview" ? "#4f46e5" :
+                                                    docs.stage === "Seleksi Awal" ? "#b45309" :
                                                     docs.stage === "Ditolak" ? "#e11d48" : "#475569",
                                                 }}
                                               >
                                                 <option value="Tertarik">1. Tertarik (Berkas Diterima)</option>
                                                 <option value="Seleksi Awal">2. Lolos ke Seleksi Awal</option>
-                                                <option value="Interview">3. Lolos ke Interview User</option>
-                                                <option value="Lolos Akhir">4. Lolos Akhir (Matched) 🎉</option>
+                                                <option value="Interview">3. Sedang Interview User</option>
+                                                <option value="Lolos Interview">4. Lolos Interview (Menunggu Hasil Akhir)</option>
+                                                <option value="Lolos Akhir">5. Lolos Akhir (Matched) 🎉</option>
                                                 <option value="Ditolak">❌ Ditolak / Gagal</option>
                                               </select>
                                             </div>
