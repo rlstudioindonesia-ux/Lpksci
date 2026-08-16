@@ -535,12 +535,7 @@ export default function MobileBerandaSubpage({ currentMobileSlide, currentUser, 
                         Sesi Aktif:{" "}
                         {currentUser.role === "Pengajar"
                           ? "SENSEI"
-                          : currentUser.role === "Siswa" &&
-                              systemState.activeStudents?.find(
-                                (s) =>
-                                  s.id === currentUser.studentId ||
-                                  s.name === currentUser.name,
-                              )?.kategoriPendaftaran === "Alumni"
+                          : currentUser.role === "Siswa" && isUserAlumni
                             ? "ALUMNI"
                             : currentUser.role}
                       </span>
@@ -555,7 +550,7 @@ export default function MobileBerandaSubpage({ currentMobileSlide, currentUser, 
                               {myActiveStudent?.id || currentUser.studentId || "-"}
                             </span>
                           </div>
-                          {(!isUserAlumni && myActiveStudent?.kategoriPendaftaran !== "Alumni") && (
+                          {!isUserAlumni && (
                             <>
                               <div className="flex items-center gap-1 drop-shadow-[0_8px_30px_rgb(0,0,0,0.04)]">
                                 <span className="opacity-75">Kelas:</span>

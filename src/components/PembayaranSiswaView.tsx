@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { createPortal } from "react-dom";
 import { SystemState, UserAccount, PaymentRecord } from "../types";
 import { uploadFileToFirebase } from "../lib/storageHelper";
+import { isStudentAlumni } from "../lib/alumniStatus";
 import { 
   CreditCard, Search, CheckCircle, AlertCircle, TrendingUp, 
   DollarSign, Clock, Users, ArrowRight, ShieldCheck, PieChart, Info,
@@ -56,12 +57,12 @@ export function getStudentPayments(
   );
 
   // Check if this student is an Alumni
-  const isAlumni = (activeStudents || []).some(s => 
-    (s.name || "").trim().toLowerCase() === (studentName || "").trim().toLowerCase() && 
-    (s.statusPendaftaran === "Alumni" || s.kategoriPendaftaran === "Alumni" || ["Lulus", "Di Jepang", "Alumni"].includes(s.status || ""))
+  const isAlumni = (activeStudents || []).some(s =>
+    (s.name || "").trim().toLowerCase() === (studentName || "").trim().toLowerCase() &&
+    (isStudentAlumni(s) || s.status === "Alumni")
   ) || (registeredStudents || []).some(s =>
     (s.name || "").trim().toLowerCase() === (studentName || "").trim().toLowerCase() &&
-    (s.statusPendaftaran === "Alumni" || s.kategoriPendaftaran === "Alumni" || s.status === "Alumni")
+    (isStudentAlumni(s) || s.status === "Alumni")
   );
 
   if (isAlumni) {
@@ -482,11 +483,11 @@ export default function PembayaranSiswaView({
   ])).filter(Boolean).sort();
 
   const alumniStudentNames = Array.from(new Set([
-    ...(systemState.activeStudents || []).filter((s: any) => 
-      s.statusPendaftaran === "Alumni" || s.kategoriPendaftaran === "Alumni" || ["Lulus", "Di Jepang", "Alumni"].includes(s.status || "")
+    ...(systemState.activeStudents || []).filter((s: any) =>
+      isStudentAlumni(s) || s.status === "Alumni"
     ).map(s => s.name),
     ...(systemState.registeredStudents || []).filter((s: any) =>
-      s.statusPendaftaran === "Alumni" || s.kategoriPendaftaran === "Alumni" || s.status === "Alumni"
+      isStudentAlumni(s) || s.status === "Alumni"
     ).map(s => s.name)
   ])).filter(Boolean).sort();
 
@@ -1110,12 +1111,12 @@ export default function PembayaranSiswaView({
                     })()}
 
                     {(() => {
-                      const isAlumni = ((systemState.activeStudents || []) as any[]).some(s => 
-                        (s.name || "").trim().toLowerCase() === (selectedStudent || "").trim().toLowerCase() && 
-                        (s.statusPendaftaran === "Alumni" || s.kategoriPendaftaran === "Alumni" || ["Lulus", "Di Jepang", "Alumni"].includes(s.status || ""))
+                      const isAlumni = ((systemState.activeStudents || []) as any[]).some(s =>
+                        (s.name || "").trim().toLowerCase() === (selectedStudent || "").trim().toLowerCase() &&
+                        (isStudentAlumni(s) || s.status === "Alumni")
                       ) || ((systemState.registeredStudents || []) as any[]).some(s =>
                         (s.name || "").trim().toLowerCase() === (selectedStudent || "").trim().toLowerCase() &&
-                        (s.statusPendaftaran === "Alumni" || s.kategoriPendaftaran === "Alumni" || s.status === "Alumni")
+                        (isStudentAlumni(s) || s.status === "Alumni")
                       );
 
                       if (!isAlumni) return null;

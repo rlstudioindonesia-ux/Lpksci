@@ -1,6 +1,7 @@
 import React from "react";
 import { Award, BookOpen, Calculator, ChevronDown, ChevronUp, Download, Edit3, FileText, GraduationCap, Lock, PanelLeftClose, Plus, RefreshCw, Trash2, Unlock, Upload, Volume2 } from "lucide-react";
 import { downloadFile, uploadFileToFirebase } from "../../lib/storageHelper";
+import { isAlumniClassName } from "../../lib/alumniStatus";
 import { CBTTimer } from "../LmsView.tsx";
 
 interface LmsBabSegmentProps {
@@ -110,7 +111,7 @@ export default function LmsBabSegment({ activeStudentClass, activeStudents, allC
                         const studentAssessments = (studentAssessmentsMap.get(student.id) || []).filter((c: any) => (c.subject || "Bahasa Jepang") === assessmentSubject);
                         const completed = studentAssessments.filter((c: any) => c.status === "Telah Dinilai").length;
                         const pending = studentAssessments.filter((c: any) => c.status === "Selesai Belajar").length;
-                        const isAlumni = (student.class || "").toLowerCase().includes("alumni");
+                        const isAlumni = isAlumniClassName(student.class);
     
                         return (
                           <button

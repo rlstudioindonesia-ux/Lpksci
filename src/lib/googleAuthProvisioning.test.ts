@@ -42,6 +42,17 @@ describe("resolveGoogleSignupRole", () => {
     expect(result.role).toBe("Alumni");
   });
 
+  it("assigns Alumni when statusPendaftaran marks the student as Alumni regardless of status", () => {
+    // Regression case: records created via RegistrationView only ever set
+    // statusPendaftaran, never kategoriPendaftaran.
+    const result = resolveGoogleSignupRole(
+      "e@gmail.com",
+      { id: "S4", status: "Belajar", statusPendaftaran: "Alumni" },
+      null,
+    );
+    expect(result.role).toBe("Alumni");
+  });
+
   it("assigns Siswa with the linked studentId for a registration-only match", () => {
     expect(resolveGoogleSignupRole("d@gmail.com", null, { id: "REG-1" })).toEqual({
       role: "Siswa",

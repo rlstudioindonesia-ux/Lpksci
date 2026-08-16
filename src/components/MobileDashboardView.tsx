@@ -1,5 +1,6 @@
 import { InlineLoginPanel } from "./InlineLoginPanel";
 import { getSafePhotoUrl, createSvgAvatar } from "../lib/storageHelper";
+import { isStudentAlumni } from "../lib/alumniStatus";
 import { auth } from "../firebaseClient";
 import { signInWithPopup, GoogleAuthProvider, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth";
 import React, { useState, useEffect, useRef } from "react";
@@ -1033,10 +1034,7 @@ export default function MobileDashboardView({
   ];
 
   const myActiveStudent = systemState?.activeStudents?.find(s => s.id === currentUser?.studentId || s.name === currentUser?.name);
-  const isUserAlumni =
-    currentUser?.role === "Alumni" ||
-    myActiveStudent?.kategoriPendaftaran === "Alumni" ||
-    myActiveStudent?.statusPendaftaran === "Alumni";
+  const isUserAlumni = currentUser?.role === "Alumni" || isStudentAlumni(myActiveStudent);
   const isUserSiswa = currentUser?.role === "Siswa";
 
   const isMainSubpage = activeSubpage && [
@@ -1684,7 +1682,7 @@ export default function MobileDashboardView({
                       (u.email && st.email && u.email.toLowerCase() === st.email.toLowerCase()) ||
                       (u.studentId && st.id && u.studentId === st.id)
                     )) {
-                      const isAlumni = ["Lulus", "Di Jepang"].includes(st.status || "") || st.kategoriPendaftaran === "Alumni";
+                      const isAlumni = isStudentAlumni(st);
                       combinedUsers.push({
                         username: uname,
                         name: st.name || "Siswa",

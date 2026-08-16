@@ -37,6 +37,7 @@ import {
   Info,
 } from "lucide-react";
 import { uploadFileToFirebase, getEmbeddablePdfUrl, getSafePhotoUrl, createSvgAvatar } from "../lib/storageHelper";
+import { isStudentAlumni } from "../lib/alumniStatus";
 import { UserAccount, SystemState } from "../types";
 import { ConfirmForm } from "./ConfirmForm";
 import { ConfirmButton } from "./ConfirmButton";
@@ -616,11 +617,13 @@ export default function AccountSettingsView({
                       className={`px-2 py-0.5 rounded-md text-[9px] font-mono font-bold uppercase tracking-wider border shrink-0 ${getRoleBadgeColor(currentUser?.role || "Siswa")}`}
                     >
                       {currentUser?.role === "Siswa" &&
-                      systemState.activeStudents?.find(
-                        (s) =>
-                          s.id === currentUser?.studentId ||
-                          s.name === currentUser?.name,
-                      )?.kategoriPendaftaran === "Alumni"
+                      isStudentAlumni(
+                        systemState.activeStudents?.find(
+                          (s) =>
+                            s.id === currentUser?.studentId ||
+                            s.name === currentUser?.name,
+                        ),
+                      )
                         ? "Alumni"
                         : (currentUser?.role || "Siswa")}
                     </span>
