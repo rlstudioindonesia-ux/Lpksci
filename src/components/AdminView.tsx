@@ -4460,7 +4460,7 @@ export default function AdminView({
                                     Dibutuhkan
                                   </span>
                                   <span className="font-bold text-slate-800">
-                                    {job.recruitCount || "6 siswa"}
+                                    {job.recruitCount || "Belum ditentukan"}
                                   </span>
                                 </div>
                               </div>
@@ -6378,7 +6378,7 @@ export default function AdminView({
                                   </div>
                                   <div className="grid grid-cols-2 gap-3">
                                     <div className="space-y-1">
-                                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Jumlah Pendaftar (Registered)</label>
+                                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Jumlah Pendaftar Manual (fallback jika belum ada siswa tercatat)</label>
                                       <input type="number" value={cls.registered ?? 0} onChange={(e) => {
                                         const newItems = [...custLandingConfig.alumniClasses];
                                         newItems[idx] = { ...cls, registered: Number(e.target.value) };

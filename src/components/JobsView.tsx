@@ -17,7 +17,11 @@ export default function JobsView({ currentUser, systemState, onUpdateState }: Jo
 
   const isAdminOrVvip = currentUser?.role === "Admin" || currentUser?.role === "Admin Super" || currentUser?.role === "Admin Biasa" || currentUser?.role === "VVIP";
   const isPengajar = currentUser?.role === "Pengajar";
-  const graduatedStudents = systemState.activeStudents?.filter(st => st.status === "Lulus" || st.status === "On Proges Job" || st.status === "On Progres JFT/JLPT/SSW" || st.status === "Diklat SO") || [];
+  // Any status other than "Belajar" (still studying) or "Dikeluarkan" (expelled)
+  // can be recommended - this includes "Di Jepang" alumni. Mirrors the same fix
+  // applied to AdminView.tsx's recommendableStudents filter (an allow-list here
+  // used to omit "Di Jepang" too, since this is a separate duplicate dropdown).
+  const graduatedStudents = systemState.activeStudents?.filter(st => st.status !== "Belajar" && st.status !== "Dikeluarkan") || [];
   const stId = currentUser?.studentId || systemState.activeStudents?.find(s => s.name === currentUser?.name)?.id || "SIS-001";
 
   const visibleJobs = systemState.jobOrders?.filter((job: JobOrder) => {
@@ -35,7 +39,11 @@ export default function JobsView({ currentUser, systemState, onUpdateState }: Jo
       const allowByJobType = !isAlumni || (job.jobType === "Tokutei ginou" || job.jobType === "Gijin kouku");
       
       const canView = (isLulus || isRecommendedInThisJob) && allowByJobType;
-      return (job.status === "Aktif" || isRecommendedInThisJob) && canView;
+      // "Aktif" tab should only show jobs the student hasn't already applied
+      // to/been approved for - those move to "Pilihanku" instead, matching
+      // the mobile job list (MobileJobsSegment.tsx) so a job doesn't appear
+      // duplicated in both tabs, or look re-appliable once already in progress.
+      return (job.status === "Aktif" || isRecommendedInThisJob) && !isInMyJobs && canView;
     }
     return true; // Staff/Admin/VVIP bisa lihat semua
   }) || [];
@@ -139,7 +147,7 @@ export default function JobsView({ currentUser, systemState, onUpdateState }: Jo
                     </div>
                     <div>
                       <span className="block text-[9px] uppercase text-slate-400 font-bold">Dibutuhkan</span>
-                      <span className="font-bold text-slate-800">{job.recruitCount || "6 siswa"}</span>
+                      <span className="font-bold text-slate-800">{job.recruitCount || "Belum ditentukan"}</span>
                     </div>
                     <div>
                       <span className="block text-[9px] uppercase text-slate-400 font-bold">Usia</span>
@@ -157,9 +165,9 @@ export default function JobsView({ currentUser, systemState, onUpdateState }: Jo
                             <div className="flex items-center justify-between mb-2">
                               <span className="text-[10px] font-black text-indigo-900 uppercase">Tahapan Seleksi Anda</span>
                               <span className={`px-2 py-0.5 rounded font-mono text-[9px] uppercase font-bold ${
-                                myDocs.stage === "Ditolak" ? "bg-red-100 text-rose-800" : myDocs.stage === "Lolos Akhir" ? "bg-emerald-100 text-emerald-800" : "bg-indigo-100 text-indigo-800"
+                                myDocs.stage === "Ditolak" ? "bg-red-100 text-rose-800" : myDocs.stage === "Lolos Akhir" ? "bg-emerald-100 text-emerald-800" : myDocs.stage === "Lolos Interview" ? "bg-teal-100 text-teal-800" : "bg-indigo-100 text-indigo-800"
                               }`}>
-                                {myDocs.stage === "Ditolak" ? "DITOLAK ❌" : myDocs.stage === "Lolos Akhir" ? "MATCHED 🎉" : myDocs.stage === "Interview" ? "INTERVIEW" : myDocs.stage === "Seleksi Awal" ? "SELEKSI AWAL" : "TERTARIK"}
+                                {myDocs.stage === "Ditolak" ? "DITOLAK ❌" : myDocs.stage === "Lolos Akhir" ? "MATCHED 🎉" : myDocs.stage === "Lolos Interview" ? "LOLOS INTERVIEW" : myDocs.stage === "Interview" ? "INTERVIEW" : myDocs.stage === "Seleksi Awal" ? "SELEKSI AWAL" : "TERTARIK"}
                               </span>
                             </div>
                             <div className="text-xs text-slate-600 bg-white p-2 border border-slate-100 rounded-lg italic font-medium whitespace-pre-wrap">
@@ -617,15 +625,17 @@ export default function JobsView({ currentUser, systemState, onUpdateState }: Jo
                                           className={`font-black text-[10px] px-2 py-1.5 rounded-md w-full sm:w-auto outline-none transition ${
                                             !isAdminOrVvip ? "appearance-none bg-transparent pl-0" : "bg-white border border-slate-200 cursor-pointer shadow-sm hover:border-indigo-400 focus:ring-1 focus:ring-indigo-500"
                                           } ${
-                                            docs.stage === 'Lolos Akhir' ? 'text-emerald-700' : 
-                                            docs.stage === 'Interview' ? 'text-indigo-700' : 
+                                            docs.stage === 'Lolos Akhir' ? 'text-emerald-700' :
+                                            docs.stage === 'Lolos Interview' ? 'text-teal-700' :
+                                            docs.stage === 'Interview' ? 'text-indigo-700' :
                                             docs.stage === 'Seleksi Awal' ? 'text-amber-700' : 'text-slate-700'
                                           }`}
                                         >
                                           <option value="Tertarik">1. Tertarik (Berkas Diterima)</option>
                                           <option value="Seleksi Awal">2. Seleksi Awal (Pre-Screening)</option>
                                           <option value="Interview">3. Interview User</option>
-                                          <option value="Lolos Akhir">4. Lolos Akhir (Matched) 🎉</option>
+                                          <option value="Lolos Interview">4. Lolos Interview (Menunggu Hasil Akhir)</option>
+                                          <option value="Lolos Akhir">5. Lolos Akhir (Matched) 🎉</option>
                                         </select>
                                       </div>
 

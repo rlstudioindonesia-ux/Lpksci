@@ -2342,7 +2342,7 @@ export default function VvipView({
                     <div className="bg-slate-50 border border-slate-200/80 px-3 py-1.5 rounded-xl text-center">
                       <p className="text-[8px] font-black text-slate-400 uppercase">Aktivitas Terekam</p>
                       <p className="text-xs font-black text-slate-800">
-                        {systemState.logs?.length || 5} Event
+                        {systemState.logs?.length || 0} Event
                       </p>
                     </div>
                   </div>
