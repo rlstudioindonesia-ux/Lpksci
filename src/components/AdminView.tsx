@@ -1742,7 +1742,7 @@ export default function AdminView({
                 { id: "pembayaran", name: currentUser?.role === "VVIP" ? "Pembayaran Siswa" : "HR & Personalia", ic: DollarSign, color: "rose", restricted: true },
                 { id: "inventaris", name: "Inventaris", ic: Package, color: "slate" },
                 { id: "pajak", name: "Pajak & Keu", ic: FileText, color: "orange", restricted: true },
-                { id: "gaji", name: "Buku Kas & Gaji", ic: Receipt, color: "violet", restricted: true },
+                { id: "gaji", name: "Buku Kas & Gaji", ic: Receipt, color: "violet" },
                 { id: "kustomisasi", name: "Branding", ic: Sliders, color: "pink" },
                 { id: "alumnivip", name: "Manajemen Kelas Alumni", ic: Star, color: "yellow" },
                 { id: "galeri", name: "Galeri Foto", ic: Image, color: "cyan" },
