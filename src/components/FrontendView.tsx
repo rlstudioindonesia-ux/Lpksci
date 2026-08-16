@@ -47,6 +47,7 @@ import {
   Apple,
 } from "lucide-react";
 import { RegisteredStudent, ActiveStudent, ALL_48_PREFECTURES_COORDINATES } from "../types";
+import { matchesClassLevel, alumniClassNameFor, resolveClassQuota } from "../lib/classQuota";
 
 export function parsePrice(val: any): number {
   if (val === undefined || val === null) return 0;
@@ -2054,18 +2055,11 @@ export default function FrontendView({
                 // real class name auto-created on save - see AdminView's Kelas
                 // Alumni sync logic), falling back to the manual `cls.registered`
                 // number when no real students are recorded yet.
-                const alumniClassName = `Kelas Alumni ${cls.title || cls.level}`;
-                const targetLower = alumniClassName.toLowerCase();
-                const levelToken = targetLower.match(/\bn[1-5]\b/)?.[0] || (targetLower.includes("native") ? "native" : null);
-                const realEnrolledCount = activeStudents.filter((s: any) => {
-                  const candidate = (s.assignedClass || s.class || "").toLowerCase();
-                  if (!candidate) return false;
-                  if (candidate === targetLower) return true;
-                  return !!levelToken && candidate.includes(levelToken);
-                }).length;
-                const registeredCount = realEnrolledCount > 0 ? realEnrolledCount : (cls.registered !== undefined ? cls.registered : 8);
-                const quotaLimit = cls.quota !== undefined ? cls.quota : 10;
-                const remaining = Math.max(0, quotaLimit - registeredCount);
+                const alumniClassName = alumniClassNameFor(cls);
+                const realEnrolledCount = activeStudents.filter((s: any) =>
+                  matchesClassLevel(s.assignedClass || s.class, alumniClassName),
+                ).length;
+                const { registeredCount, quotaLimit, remaining } = resolveClassQuota(cls, realEnrolledCount);
 
                 return (
                   <div key={idx} className="bg-white rounded-2xl md:rounded-[2.5rem] p-4 md:p-8 border border-slate-100 shadow-sm hover:shadow-md transition-all duration-300 flex flex-col relative overflow-hidden">
