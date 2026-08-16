@@ -2,6 +2,7 @@ import React from "react";
 import { Image as ImageIcon, Lock } from "lucide-react";
 import { getStudentPayments } from "../PembayaranSiswaView";
 import { TeacherDashboardPanel } from "../TeacherDashboardPanel";
+import { isAdminOrVvip } from "../../lib/permissions";
 
 interface MobilePembayaranSubpageProps {
   currentUser: any;
@@ -18,14 +19,14 @@ export default function MobilePembayaranSubpage({ currentUser, handleUpdateState
   return (
     <div className="p-4 space-y-4 text-left">
                   <h3 className="font-sans font-black text-slate-900 border-b pb-2 text-md">
-                    {currentUser && currentUser.role === "VVIP"
+                    {currentUser && isAdminOrVvip(currentUser.role)
                       ? "Pembayaran Siswa"
-                      : currentUser && ["Pengajar", "Admin Biasa", "Admin Super", "Admin"].includes(currentUser.role)
+                      : currentUser && currentUser.role === "Pengajar"
                       ? "HR & Personalia"
                       : "Pembayaran & Booking Online"}
                   </h3>
                   <p className="text-xs text-slate-500">
-                    {currentUser && ["Pengajar", "Admin Biasa", "Admin Super", "Admin", "VVIP"].includes(currentUser.role)
+                    {currentUser && (isAdminOrVvip(currentUser.role) || currentUser.role === "Pengajar")
                       ? "Kelola kehadiran, gaji, cuti, dan rekapitulasi data staff LPK."
                       : "Pantau riwayat pembayaran dan tagihan Anda untuk program pelatihan di LPK."}
                   </p>
@@ -51,8 +52,7 @@ export default function MobilePembayaranSubpage({ currentUser, handleUpdateState
                         Buka Portal Login
                       </button>
                     </div>
-                  ) : currentUser.role === "Admin" ||
-                    currentUser.role === "VVIP" ? (
+                  ) : isAdminOrVvip(currentUser.role) ? (
                     /* ADMIN & VVIP WORKFLOW: STATS & STUDENT REKAP FILTER */
                     <div className="space-y-4 animate-fade-in text-xs font-sans">
                       {(() => {
@@ -226,8 +226,8 @@ export default function MobilePembayaranSubpage({ currentUser, handleUpdateState
                         );
                       })()}
                     </div>
-                  ) : ["Pengajar", "Alumni", "Admin", "Admin Super", "Admin Biasa", "VVIP"].includes(currentUser.role) ? (
-                    /* STAFF/ADMIN/TEACHER PERSONAL WORKFLOW: ATTENDANCE, SALARY, CUTI */
+                  ) : currentUser.role === "Pengajar" ? (
+                    /* TEACHER PERSONAL WORKFLOW: ATTENDANCE, SALARY, CUTI */
                     <TeacherDashboardPanel
                       currentUser={currentUser}
                       systemState={systemState}
