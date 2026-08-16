@@ -8,6 +8,7 @@ import { createPortal } from "react-dom";
 import { ConfirmButton } from "./ConfirmButton";
 import { getSafePhotoUrl, createSvgAvatar } from "../lib/storageHelper";
 import { calculateAge } from "../lib/dateUtils";
+import { computeFinancialMetrics, computeMonthlyExpenseBreakdown } from "../lib/financeCalculations";
 import {
   ResponsiveContainer,
   AreaChart,
@@ -611,43 +612,10 @@ export default function VvipView({
     });
   }, [systemState.cashLedger, systemState.payments]);
 
-  const financialMetrics = useMemo(() => {
-    const payments = systemState.payments || [];
-    const ledger = systemState.cashLedger || [];
-
-    const totalLunas = payments
-      .filter((p) => p.status === "Lunas")
-      .reduce((acc, curr) => acc + curr.amount, 0);
-
-    const totalCicilan = payments
-      .filter((p) => p.status === "Cicilan")
-      .reduce((acc, curr) => acc + curr.amount, 0);
-
-    const totalInLedger = ledger.reduce((acc, curr) => acc + (curr.inAmount || 0), 0);
-    const totalOutLedger = ledger.reduce((acc, curr) => acc + (curr.outAmount || 0), 0);
-
-    // Gaji is code "P1"
-    const totalGaji = ledger
-      .filter((entry) => entry.code === "P1")
-      .reduce((acc, curr) => acc + (curr.outAmount || 0), 0);
-
-    // Other operational expenses (P2 - P8)
-    const totalOperasional = ledger
-      .filter((entry) => entry.code !== "P1" && entry.code !== "P9B")
-      .reduce((acc, curr) => acc + (curr.outAmount || 0), 0);
-
-    const sisaSaldo = totalInLedger - totalOutLedger;
-
-    return {
-      totalLunas,
-      totalCicilan,
-      totalInLedger,
-      totalOutLedger,
-      totalGaji,
-      totalOperasional,
-      sisaSaldo,
-    };
-  }, [systemState.payments, systemState.cashLedger]);
+  const financialMetrics = useMemo(
+    () => computeFinancialMetrics(systemState.payments, systemState.cashLedger),
+    [systemState.payments, systemState.cashLedger],
+  );
 
   const getClassMaxBab = (cls: string) => {
     const classDef = systemState.customization?.lmsClasses?.find((c: any) => c.name === cls);
@@ -661,38 +629,10 @@ export default function VvipView({
     );
   }, [systemState.payments]);
 
-  const monthlyExpenseBreakdown = useMemo(() => {
-    const ledger = systemState.cashLedger || [];
-    const monthsData: { [key: string]: { total: number; gaji: number; operasional: number; list: any[] } } = {};
-    const monthsNames = [
-      "Januari", "Februari", "Maret", "April", "Mei", "Juni",
-      "Juli", "Agustus", "September", "Oktober", "November", "Desember"
-    ];
-
-    ledger.forEach((entry) => {
-      if (entry.outAmount <= 0) return;
-      const dateParts = entry.date.split("-");
-      if (dateParts.length < 2) return;
-      const year = dateParts[0];
-      const monthIndex = parseInt(dateParts[1], 10) - 1;
-      const monthName = monthsNames[monthIndex] || "Januari";
-      const key = `${monthName} ${year}`;
-
-      if (!monthsData[key]) {
-        monthsData[key] = { total: 0, gaji: 0, operasional: 0, list: [] };
-      }
-
-      monthsData[key].total += entry.outAmount;
-      if (entry.code === "P1") {
-        monthsData[key].gaji += entry.outAmount;
-      } else {
-        monthsData[key].operasional += entry.outAmount;
-      }
-      monthsData[key].list.push(entry);
-    });
-
-    return monthsData;
-  }, [systemState.cashLedger]);
+  const monthlyExpenseBreakdown = useMemo(
+    () => computeMonthlyExpenseBreakdown(systemState.cashLedger),
+    [systemState.cashLedger],
+  );
 
   // Recharts color palette
   const COLORS = [
