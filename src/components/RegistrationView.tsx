@@ -191,7 +191,7 @@ useEffect(() => {
 };
 
   return (
-    <div className="py-6 sm:py-10 px-4 animate-fade-in bg-slate-100 min-h-screen font-sans">
+    <div className="py-6 sm:py-10 px-4 animate-fade-only bg-slate-100 min-h-screen font-sans">
       {onBackToLanding && (
         <div className="max-w-2xl mx-auto mb-4">
           <button
