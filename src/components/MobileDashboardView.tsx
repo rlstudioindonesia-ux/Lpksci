@@ -1311,14 +1311,14 @@ export default function MobileDashboardView({
                 onLoginSuccess={(u, isDefaultPassword) => onLoginSuccess?.(u, isDefaultPassword)}
                 systemState={systemState}
               />
-            ) : currentUser.role === "Admin Biasa" && (activeSubpage === "admin_pembayaran" || activeSubpage === "admin_pajak") ? (
+            ) : currentUser.role === "Admin Biasa" && (activeSubpage === "admin_pembayaran" || activeSubpage === "admin_pajak" || activeSubpage === "admin_gaji") ? (
               <div className="max-w-md mx-auto my-12 bg-white rounded-3xl border border-rose-200 p-6 sm:p-8 text-center space-y-4 shadow-[0_8px_30px_rgb(0,0,0,0.04)] animate-fade-in">
                 <div className="h-14 w-14 bg-rose-50 text-rose-600 rounded-[24px] flex items-center justify-center mx-auto">
                   <Lock className="h-6 w-6" />
                 </div>
                 <h3 className="font-display font-black text-lg text-slate-900">Akses Terbatas: Admin Utama Only</h3>
                 <p className="text-xs text-slate-500 leading-normal">
-                  Maaf, menu finansial/pembayaran dan pajak hanya dapat diakses oleh Admin Utama, Admin Super, atau Direktur Utama (VVIP).
+                  Maaf, menu finansial/pembayaran, buku kas, pajak, dan gaji hanya dapat diakses oleh Admin Utama, Admin Super, atau Direktur Utama (VVIP).
                 </p>
               </div>
             ) : (
