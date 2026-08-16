@@ -83,7 +83,7 @@ export default function MobileBottomNav({
       { id: "admin_pembayaran", name: "Kas & Bayar", icon: DollarSign, access: currentUser?.role !== "Admin Biasa" },
       { id: "admin_inventaris", name: "Inventaris", icon: Package, access: true },
       { id: "admin_pajak", name: "Pajak & Keu", icon: Calculator, access: currentUser?.role !== "Admin Biasa" },
-      { id: "admin_gaji", name: "Buku Kas & Gaji", icon: Wallet, access: currentUser?.role !== "Admin Biasa" },
+      { id: "admin_gaji", name: "Buku Kas & Gaji", icon: Wallet, access: true },
       { id: "admin_kustomisasi", name: "Branding", icon: Paintbrush, access: true },
       { id: "admin_alumnivip", name: "Manajemen Kelas Alumni", icon: Award, access: true },
       { id: "admin_galeri", name: "Galeri Foto", icon: LucideImage, access: true },

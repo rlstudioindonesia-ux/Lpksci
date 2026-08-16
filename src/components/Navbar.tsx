@@ -12,6 +12,7 @@ import {
 import { UserAccount, SystemState } from "../types";
 import { getSafePhotoUrl, createSvgAvatar } from "../lib/storageHelper";
 import { isStudentAlumni } from "../lib/alumniStatus";
+import { hasStaffOversight } from "../lib/permissions";
 
 // Dynamic Icon Lookup
 const getLogoIcon = (iconName: string) => {
@@ -330,7 +331,7 @@ export default function Navbar({
                         <Calendar className="h-4 w-4" /> Jadwal LPK
                       </button>
 
-                      {(isPengajar || isAdmin) && (
+                      {hasStaffOversight(currentUser?.role) && (
                         <button
                           onClick={() => { setActiveTab("sensei_dashboard"); setIsPortalMenuOpen(false); }}
                           className={`flex items-center gap-2.5 px-3 py-2.5 text-xs font-bold tracking-wide uppercase rounded-lg transition-colors text-left w-full ${activeTab === "sensei_dashboard" ? "bg-slate-50 text-purple-600 font-extrabold" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"}`}
