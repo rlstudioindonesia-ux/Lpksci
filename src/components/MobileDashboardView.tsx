@@ -1205,16 +1205,24 @@ export default function MobileDashboardView({
           )}
 
           {/* 4. E-BENKYOU */}
-          <MobileEbenkyouSubpage activeSubpage={activeSubpage} currentUser={currentUser} handleUpdateState={handleUpdateState} onLoginSuccess={onLoginSuccess} selectedClassLog={selectedClassLog} setSelectedClassLog={setSelectedClassLog} systemState={systemState} />
+          {(activeSubpage === "ebenkyou" || activeSubpage === "17berkas") && (
+            <MobileEbenkyouSubpage activeSubpage={activeSubpage} currentUser={currentUser} handleUpdateState={handleUpdateState} onLoginSuccess={onLoginSuccess} selectedClassLog={selectedClassLog} setSelectedClassLog={setSelectedClassLog} systemState={systemState} />
+          )}
 
           {/* 5. PEMBAYARAN: Billing structure checkout sandbox list */}
-          <MobilePembayaranSubpage currentUser={currentUser} handleUpdateState={handleUpdateState} onOpenLogin={onOpenLogin} selectedStudent={selectedStudent} setActivePaymentDetail={setActivePaymentDetail} setActiveSubpage={setActiveSubpage} setSelectedStudent={setSelectedStudent} systemState={systemState} />
+          {activeSubpage === "pembayaran" && (
+            <MobilePembayaranSubpage currentUser={currentUser} handleUpdateState={handleUpdateState} onOpenLogin={onOpenLogin} selectedStudent={selectedStudent} setActivePaymentDetail={setActivePaymentDetail} setActiveSubpage={setActiveSubpage} setSelectedStudent={setSelectedStudent} systemState={systemState} />
+          )}
 
           {/* 6. PETA PENYEBARAN: Full responsive OpenStreetMap inside mobile */}
-          <MobilePetaSubpage mobileMapRef={mobileMapRef} />
+          {activeSubpage === "peta" && (
+            <MobilePetaSubpage mobileMapRef={mobileMapRef} />
+          )}
 
           {/* 7. GALERI: Active photos grid */}
-          <MobileGaleriSubpage setSelectedGalleryImage={setSelectedGalleryImage} systemState={systemState} />
+          {activeSubpage === "galeri" && (
+            <MobileGaleriSubpage setSelectedGalleryImage={setSelectedGalleryImage} systemState={systemState} />
+          )}
 
           {/* LIGHTBOX ENLARGED PHOTO MODAL FOR MOBILE */}
           {selectedGalleryImage && createPortal(
@@ -1362,7 +1370,9 @@ export default function MobileDashboardView({
             ))}
 
           {/* 11. NOTIFIKASI */}
-          <MobileNotifikasiSubpage currentUser={currentUser} systemState={systemState} />
+          {activeSubpage === "notifikasi" && (
+            <MobileNotifikasiSubpage currentUser={currentUser} systemState={systemState} />
+          )}
 
           {/* 12. CHAT */}
           {activeSubpage === "chat" && (
@@ -1487,10 +1497,14 @@ export default function MobileDashboardView({
             </div>
           )}
           {/* 16. CV & BIODATA JEPANG SUBPAGE */}
-          <MobileCvSubpage currentUser={currentUser} handleUpdateState={handleUpdateState} onOpenLogin={onOpenLogin} selectedCvStudentId={selectedCvStudentId} setActiveSubpage={setActiveSubpage} setSelectedCvStudentId={setSelectedCvStudentId} systemState={systemState} />
+          {activeSubpage === "cv" && (
+            <MobileCvSubpage currentUser={currentUser} handleUpdateState={handleUpdateState} onOpenLogin={onOpenLogin} selectedCvStudentId={selectedCvStudentId} setActiveSubpage={setActiveSubpage} setSelectedCvStudentId={setSelectedCvStudentId} systemState={systemState} />
+          )}
 
           {/* 17. ALUMNI: PILIH KELAS BAHASA JEPANG */}
-          <MobilePilihKelasSubpage currentUser={currentUser} isUserAlumni={isUserAlumni} monitoredVvipClass={monitoredVvipClass} setActiveSubpage={setActiveSubpage} setMonitoredVvipClass={setMonitoredVvipClass} setSelectedClassLog={setSelectedClassLog} systemState={systemState} />
+          {activeSubpage === "pilih_kelas" && (
+            <MobilePilihKelasSubpage currentUser={currentUser} isUserAlumni={isUserAlumni} monitoredVvipClass={monitoredVvipClass} setActiveSubpage={setActiveSubpage} setMonitoredVvipClass={setMonitoredVvipClass} setSelectedClassLog={setSelectedClassLog} systemState={systemState} />
+          )}
 
           {/* 17.5 ALUMNI: DASHBOARD ALUMNI EXCLUSIVE */}
           {activeSubpage === "alumni_dashboard" && (
@@ -1504,7 +1518,9 @@ export default function MobileDashboardView({
           )}
 
           {/* 18. ALUMNI: AFILIASI SCI */}
-          <MobileAfiliasiSubpage currentUser={currentUser} onLoginSuccess={onLoginSuccess} systemState={systemState} />
+          {activeSubpage === "afiliasi" && (
+            <MobileAfiliasiSubpage currentUser={currentUser} onLoginSuccess={onLoginSuccess} systemState={systemState} />
+          )}
           </React.Suspense>
         </div>
           );
