@@ -26,6 +26,7 @@ function useIsMobile() {
 
 import Navbar from "./components/Navbar";
 import { SystemState, UserAccount, RegisteredStudent } from "./types";
+import { hasStaffOversight } from "./lib/permissions";
 import {
   ShieldAlert,
   LogIn,
@@ -1052,7 +1053,7 @@ export default function App() {
               {/* TAB SENSEI DASHBOARD */}
               {activeTab === "sensei_dashboard" && (
                 <div className="bg-white rounded-3xl border border-slate-200 p-6 shadow-sm">
-                  {currentUser ? (
+                  {hasStaffOversight(currentUser?.role) ? (
                     <SenseiDashboardView
                       currentUser={effectiveUser}
                       systemState={systemState}
