@@ -2,7 +2,7 @@ import React from "react";
 import { InlineLoginPanel } from "../InlineLoginPanel";
 import { BookOpen } from "lucide-react";
 import { CHAPTERS_LIST } from "../../chapters";
-import { LmsView } from "../MobileDashboardView.tsx";
+import { LmsView } from "../MobileDashboardView";
 
 interface MobileEbenkyouSubpageProps {
   activeSubpage: any;

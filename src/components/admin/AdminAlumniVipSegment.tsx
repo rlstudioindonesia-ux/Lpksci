@@ -3,7 +3,7 @@ import { Check, ChevronDown, Plus, Star, Trash2 } from "lucide-react";
 import { ConfirmButton } from "../ConfirmButton";
 import { ConfirmForm } from "../ConfirmForm";
 import { CHAPTERS_LIST } from "../../chapters";
-import { formatRupiah } from "../AdminView.tsx";
+import { formatRupiah } from "../AdminView";
 
 interface AdminAlumniVipSegmentProps {
   custLandingConfig: any;

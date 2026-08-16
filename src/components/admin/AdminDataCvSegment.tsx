@@ -2,7 +2,7 @@ import React from "react";
 import { BookOpen, ChevronLeft } from "lucide-react";
 import { createSvgAvatar, getSafePhotoUrl } from "../../lib/storageHelper";
 import StudentCvView from "../StudentCvView";
-import { sortStudentsByDateDesc } from "../AdminView.tsx";
+import { sortStudentsByDateDesc } from "../AdminView";
 
 interface AdminDataCvSegmentProps {
   onUpdateState: any;
