@@ -280,11 +280,31 @@ export function getEmbeddablePdfUrl(url: string | null | undefined, forceGoogleD
     return trimmed;
   }
 
-  // 1. Google Drive URLs -> replace view with preview embed URL
-  if (trimmed.includes('drive.google.com/file/d/')) {
-    const match = trimmed.match(/\/d\/([a-zA-Z0-9-_]+)/);
-    if (match && match[1]) {
-      return `https://drive.google.com/file/d/${match[1]}/preview`;
+  // 1. Google Slides/Docs/Sheets links -> their own native embed endpoints.
+  // These render far more reliably than routing through the generic gview
+  // proxy below (which frequently hits a Google sign-in wall for anything
+  // it can't freely crawl) - Slides/Docs/Sheets embeds honor the viewer's
+  // own Google sign-in session instead.
+  const slidesMatch = trimmed.match(/docs\.google\.com\/presentation\/d\/([a-zA-Z0-9-_]+)/);
+  if (slidesMatch && slidesMatch[1]) {
+    return `https://docs.google.com/presentation/d/${slidesMatch[1]}/embed`;
+  }
+  const docsMatch = trimmed.match(/docs\.google\.com\/document\/d\/([a-zA-Z0-9-_]+)/);
+  if (docsMatch && docsMatch[1]) {
+    return `https://docs.google.com/document/d/${docsMatch[1]}/preview`;
+  }
+  const sheetsMatch = trimmed.match(/docs\.google\.com\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+  if (sheetsMatch && sheetsMatch[1]) {
+    return `https://docs.google.com/spreadsheets/d/${sheetsMatch[1]}/preview`;
+  }
+
+  // Google Drive file links -> replace view with preview embed URL. Covers
+  // both the "/file/d/<id>/..." format and the classic "?id=<id>" sharing
+  // link format (e.g. drive.google.com/open?id=<id>).
+  if (trimmed.includes('drive.google.com')) {
+    const fileIdMatch = trimmed.match(/\/file\/d\/([a-zA-Z0-9-_]+)/) || trimmed.match(/[?&]id=([a-zA-Z0-9-_]+)/);
+    if (fileIdMatch && fileIdMatch[1]) {
+      return `https://drive.google.com/file/d/${fileIdMatch[1]}/preview`;
     }
   }
 
