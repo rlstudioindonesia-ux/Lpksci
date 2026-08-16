@@ -1646,7 +1646,7 @@ export default function AdminView({
             { id: "manajemen", name: "Manajemen Akun & Sensei", ic: Users },
           ].filter((tab) => {
             if (currentUser?.role === "Admin Biasa") {
-              return tab.id !== "pembayaran" && tab.id !== "pajak";
+              return tab.id !== "pembayaran" && tab.id !== "pajak" && tab.id !== "gaji";
             }
             return true;
           }).map((tab) => {
@@ -1742,7 +1742,7 @@ export default function AdminView({
                 { id: "pembayaran", name: currentUser?.role === "VVIP" ? "Pembayaran Siswa" : "HR & Personalia", ic: DollarSign, color: "rose", restricted: true },
                 { id: "inventaris", name: "Inventaris", ic: Package, color: "slate" },
                 { id: "pajak", name: "Pajak & Keu", ic: FileText, color: "orange", restricted: true },
-                { id: "gaji", name: "Buku Kas & Gaji", ic: Receipt, color: "violet" },
+                { id: "gaji", name: "Buku Kas & Gaji", ic: Receipt, color: "violet", restricted: true },
                 { id: "kustomisasi", name: "Branding", ic: Sliders, color: "pink" },
                 { id: "alumnivip", name: "Manajemen Kelas Alumni", ic: Star, color: "yellow" },
                 { id: "galeri", name: "Galeri Foto", ic: Image, color: "cyan" },
@@ -1818,7 +1818,7 @@ export default function AdminView({
         {activeSegment === "joborders" && <AdminJobOrdersSegment expandedJobIds={expandedJobIds} onUpdateState={onUpdateState} recoSiswaId={recoSiswaId} setEditingJobOrder={setEditingJobOrder} setIsCreateJobOrderModalOpen={setIsCreateJobOrderModalOpen} setRecoSiswaId={setRecoSiswaId} systemState={systemState} toggleJobExpansion={toggleJobExpansion} />}
 
         {/* BUKU KAS & GAJI SEGMENT */}
-        {activeSegment === "gaji" && <AdminGajiSegment currentUser={currentUser} editingSalId={editingSalId} hrFilterMonth={hrFilterMonth} ledgerCategoryFilter={ledgerCategoryFilter} ledgerPage={ledgerPage} ledgerSearch={ledgerSearch} onUpdateState={onUpdateState} quickPayAmount={quickPayAmount} quickPayNotes={quickPayNotes} salAmount={salAmount} salMonth={salMonth} salNotes={salNotes} salPaymentDate={salPaymentDate} salRole={salRole} salStaffName={salStaffName} salStatus={salStatus} salarySubTab={salarySubTab} selectedStaffForQuickPay={selectedStaffForQuickPay} setEditingLedger={setEditingLedger} setEditingLedgerCategory={setEditingLedgerCategory} setEditingLedgerIsStudent={setEditingLedgerIsStudent} setEditingLedgerStudentName={setEditingLedgerStudentName} setEditingSalId={setEditingSalId} setHrFilterMonth={setHrFilterMonth} setLedgerCategoryFilter={setLedgerCategoryFilter} setLedgerPage={setLedgerPage} setLedgerSearch={setLedgerSearch} setQuickPayAmount={setQuickPayAmount} setQuickPayNotes={setQuickPayNotes} setSalAmount={setSalAmount} setSalMonth={setSalMonth} setSalNotes={setSalNotes} setSalPaymentDate={setSalPaymentDate} setSalRole={setSalRole} setSalStaffName={setSalStaffName} setSalStatus={setSalStatus} setSalarySubTab={setSalarySubTab} setSelectedStaffForQuickPay={setSelectedStaffForQuickPay} systemState={systemState} />}
+        {activeSegment === "gaji" && currentUser?.role !== "Admin Biasa" && <AdminGajiSegment currentUser={currentUser} editingSalId={editingSalId} hrFilterMonth={hrFilterMonth} ledgerCategoryFilter={ledgerCategoryFilter} ledgerPage={ledgerPage} ledgerSearch={ledgerSearch} onUpdateState={onUpdateState} quickPayAmount={quickPayAmount} quickPayNotes={quickPayNotes} salAmount={salAmount} salMonth={salMonth} salNotes={salNotes} salPaymentDate={salPaymentDate} salRole={salRole} salStaffName={salStaffName} salStatus={salStatus} salarySubTab={salarySubTab} selectedStaffForQuickPay={selectedStaffForQuickPay} setEditingLedger={setEditingLedger} setEditingLedgerCategory={setEditingLedgerCategory} setEditingLedgerIsStudent={setEditingLedgerIsStudent} setEditingLedgerStudentName={setEditingLedgerStudentName} setEditingSalId={setEditingSalId} setHrFilterMonth={setHrFilterMonth} setLedgerCategoryFilter={setLedgerCategoryFilter} setLedgerPage={setLedgerPage} setLedgerSearch={setLedgerSearch} setQuickPayAmount={setQuickPayAmount} setQuickPayNotes={setQuickPayNotes} setSalAmount={setSalAmount} setSalMonth={setSalMonth} setSalNotes={setSalNotes} setSalPaymentDate={setSalPaymentDate} setSalRole={setSalRole} setSalStaffName={setSalStaffName} setSalStatus={setSalStatus} setSalarySubTab={setSalarySubTab} setSelectedStaffForQuickPay={setSelectedStaffForQuickPay} systemState={systemState} />}
 
         {activeSegment === "alumnivip" && <AdminAlumniVipSegment custLandingConfig={custLandingConfig} expandedAlumniClassIds={expandedAlumniClassIds} landingSaveSuccess={landingSaveSuccess} onUpdateState={onUpdateState} setCustLandingConfig={setCustLandingConfig} setExpandedAlumniClassIds={setExpandedAlumniClassIds} setLandingSaveSuccess={setLandingSaveSuccess} systemState={systemState} />}
 
