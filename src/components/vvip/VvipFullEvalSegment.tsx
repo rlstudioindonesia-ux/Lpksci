@@ -2,6 +2,7 @@ import React from "react";
 import { Activity, Award, BookOpen, Calculator, CheckCircle, ChevronRight, Clock, DollarSign, Edit, FileText, Filter, Globe, GraduationCap, History, RefreshCw, RotateCcw, Search, ShieldCheck, TrendingUp, Users } from "lucide-react";
 import { createSvgAvatar, getSafePhotoUrl } from "../../lib/storageHelper";
 import { calculateAge } from "../../lib/dateUtils";
+import { computeAttendanceRate } from "../../lib/attendanceMetrics";
 import { Bar, BarChart, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
 interface VvipFullEvalSegmentProps {
@@ -778,13 +779,8 @@ export default function VvipFullEvalSegment({ activeStudents, classFilter, class
                                 const completedBab = studentAsss.filter((c) => c.status === "Telah Dinilai").length;
                                 const pendingBab = studentAsss.filter((c) => c.status === "Selesai Belajar").length;
     
-                                const records = systemState.attendance.filter(
-                                  (r) => r.studentName === student.name || r.studentId === student.id
-                                );
-                                const totalAtt = records.length;
-                                const hadirAtt = records.filter((r) => r.status === "Hadir").length;
-                                const rateAtt = totalAtt > 0 ? Math.round((hadirAtt / totalAtt) * 100) : null;
-    
+                                const { rate: rateAtt } = computeAttendanceRate(student, systemState.attendance);
+
                                 const classDef = systemState.customization?.lmsClasses?.find((c: any) => c.name === student.class);
                                 const sectorLabel = classDef 
                                   ? (isReadOnly ? (classDef.type === "reguler" ? "SOP Dasar (LPK)" : "Program Alumni") : `${classDef.type === "reguler" ? "SOP Dasar" : "Alumni"} - ${classDef.name}`)
@@ -1028,13 +1024,8 @@ export default function VvipFullEvalSegment({ activeStudents, classFilter, class
                                   </tr>
                                 ) : (
                                   paginatedStudents.map((student, idx) => {
-                                    const records = systemState.attendance.filter(
-                                      (r) => r.studentName === student.name || r.studentId === student.id
-                                    );
-                                    const total = records.length;
-                                    const hadir = records.filter((r) => r.status === "Hadir").length;
-                                    const rate = total > 0 ? Math.round((hadir / total) * 100) : null;
-    
+                                    const { rate } = computeAttendanceRate(student, systemState.attendance);
+
                                     const studentAsss = (systemState.chapterAssessments || []).filter((c) => c.studentId === student.id);
                                     const gradedAsss = studentAsss.filter((c) => c.status === "Telah Dinilai");
                                     const lastBab = gradedAsss.length > 0 ? Math.max(...gradedAsss.map((c) => c.chapterNumber || 0)) : 0;
@@ -1149,13 +1140,8 @@ export default function VvipFullEvalSegment({ activeStudents, classFilter, class
                               </div>
                             ) : (
                               paginatedStudents.map((student) => {
-                                const records = systemState.attendance.filter(
-                                  (r) => r.studentName === student.name || r.studentId === student.id
-                                );
-                                const total = records.length;
-                                const hadir = records.filter((r) => r.status === "Hadir").length;
-                                const rate = total > 0 ? Math.round((hadir / total) * 100) : null;
-    
+                                const { rate } = computeAttendanceRate(student, systemState.attendance);
+
                                 const studentAsss = (systemState.chapterAssessments || []).filter((c) => c.studentId === student.id);
                                 const completedBab = studentAsss.filter((c) => c.status === "Telah Dinilai").length;
     
@@ -1485,8 +1471,7 @@ export default function VvipFullEvalSegment({ activeStudents, classFilter, class
                                 const h = records.filter(a => a.status === "Hadir").length;
                                 const i = records.filter(a => a.status === "Izin" || a.status === "Sakit").length;
                                 const a = records.filter(a => a.status === "Alpa").length;
-                                const total = h + i + a;
-                                const rate = total > 0 ? Math.round((h / total) * 100) : 0;
+                                const rate = computeAttendanceRate(s, systemState.attendance).rate ?? 0;
                                 
                                 return (
                                   <tr key={s.id} className="hover:bg-slate-50/80 transition-colors group">

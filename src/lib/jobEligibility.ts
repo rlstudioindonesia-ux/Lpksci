@@ -1,5 +1,6 @@
 import { ActiveStudent, ChapterAssessment, JobOrder } from "../types";
 import { calculateAge } from "./dateUtils";
+import { resolveAttendanceScore } from "./attendanceMetrics";
 
 export interface JobEligibilityResult {
   isEligible: boolean;
@@ -64,6 +65,9 @@ function emptyResult(): JobEligibilityResult {
  * assessments (rather than read from student.mathScore/japaneseScore) since
  * those stored fields are display-only and never get written back once
  * assessments exist - reading them directly would show a stale/zero score.
+ * Attendance score is likewise recomputed live from attendance records
+ * whenever any exist, only falling back to student.attendanceScore when
+ * there are none to compute from - see resolveAttendanceScore.
  */
 export function computeJobEligibility(
   student: ActiveStudent | null | undefined,
@@ -99,14 +103,7 @@ export function computeJobEligibility(
   result.fiveSScore = student.fiveSScore ?? 0;
   result.ethicsScore = student.ethicsScore ?? 0;
 
-  const records = (attendanceRecords || []).filter(
-    (r) => r.studentName === student.name || r.studentId === student.id,
-  );
-  const rateAtt =
-    records.length > 0
-      ? Math.round((records.filter((r) => r.status === "Hadir").length / records.length) * 100)
-      : 0;
-  result.attendanceScore = student.attendanceScore ?? rateAtt;
+  result.attendanceScore = resolveAttendanceScore(student, attendanceRecords);
 
   result.reqMath = parseInt((job.minMathScore || "90").toString().replace(/\D/g, ""));
   result.reqFiveS = parseInt((job.minFiveSScore || "80").toString().replace(/\D/g, ""));

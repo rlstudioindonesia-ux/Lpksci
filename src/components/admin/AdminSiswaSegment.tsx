@@ -2,6 +2,7 @@ import React from "react";
 import { Award, Calculator, ChevronLeft, ChevronRight, Edit, Eye, FileText, Filter, History, RefreshCw, RotateCcw, Search, Sparkles, Trash2, Users, X } from "lucide-react";
 import { ConfirmButton } from "../ConfirmButton";
 import { createSvgAvatar, getSafePhotoUrl } from "../../lib/storageHelper";
+import { computeAttendanceRate } from "../../lib/attendanceMetrics";
 import { JAPAN_PREFECTURES } from "../../types";
 
 interface AdminSiswaSegmentProps {
@@ -828,8 +829,7 @@ export default function AdminSiswaSegment({ checkSyncStatus, filterClass, filter
                           {(systemState.activeStudents || [])
                             .filter((s) => isStudentRoleOnly(s))
                             .map((s) => {
-                              const attRecords = (systemState.attendance || []).filter(a => a.studentId === s.id);
-                              const attPercent = attRecords.length > 0 ? (attRecords.filter(a => a.status === "Hadir").length / attRecords.length) * 100 : 0;
+                              const attPercent = computeAttendanceRate(s, systemState.attendance).rate ?? 0;
                               const scoresArr = Object.values(s.scores || {});
                               const lastScore = scoresArr.length > 0 ? scoresArr[scoresArr.length - 1] : s.japaneseScore || 0;
                               return (
@@ -1345,8 +1345,7 @@ export default function AdminSiswaSegment({ checkSyncStatus, filterClass, filter
                         {systemState.activeStudents
                           ?.filter((s) => isStudentRoleOnly(s))
                           ?.map((s) => {
-                            const attRecords = (systemState.attendance || []).filter(a => a.studentId === s.id);
-                            const attPercent = attRecords.length > 0 ? (attRecords.filter(a => a.status === "Hadir").length / attRecords.length) * 100 : 0;
+                            const attPercent = computeAttendanceRate(s, systemState.attendance).rate ?? 0;
                             const scoresArr = Object.values(s.scores || {});
                             const lastScore = scoresArr.length > 0 ? scoresArr[scoresArr.length - 1] : s.japaneseScore || 0;
                             return (

@@ -8,6 +8,7 @@ import { SystemState, UserAccount, ActiveStudent, ChapterAssessment } from "../t
 import { CHAPTERS_LIST } from "../chapters";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { uploadFileToFirebase, getEmbeddablePdfUrl } from "../lib/storageHelper";
+import { resolveAttendanceScore } from "../lib/attendanceMetrics";
 
 interface ProgressBelajarViewProps {
   currentUser: UserAccount | null;
@@ -118,14 +119,7 @@ export default function ProgressBelajarView({
     : (activeStudent?.japaneseScore || 0);
 
   // Attendance rate
-  const studentAttendanceRecords = (systemState?.attendance || []).filter(
-    r => r.studentId === selectedStudentId || (activeStudent && r.studentName === activeStudent.name)
-  );
-  const totalAttendance = studentAttendanceRecords.length;
-  const presentCount = studentAttendanceRecords.filter(r => r.status === "Hadir").length;
-  const computedAttendanceRate = totalAttendance > 0
-    ? Math.round((presentCount / totalAttendance) * 100)
-    : (activeStudent?.attendanceScore || 0);
+  const computedAttendanceRate = resolveAttendanceScore(activeStudent, systemState?.attendance);
 
   const mathScore = activeStudent?.mathScore ?? 0;
   const fiveSScore = activeStudent?.fiveSScore ?? 0;
