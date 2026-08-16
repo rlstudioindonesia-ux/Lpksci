@@ -406,42 +406,6 @@ export default function LmsView({
   const [deleteTargetName, setDeleteTargetName] = React.useState<string>("");
   const [isDeleting, setIsDeleting] = React.useState(false);
 
-  const [attendanceClassFilter, setAttendanceClassFilter] = React.useState("Semua");
-  const [attendanceSenseiFilter, setAttendanceSenseiFilter] = React.useState(() => {
-    if (currentUser?.role === "Pengajar" && currentUser?.name) {
-      return currentUser.name;
-    }
-    return "Semua";
-  });
-  const [attendanceSearchQuery, setAttendanceSearchQuery] = React.useState("");
-
-  const isStaff = ["Pengajar", "Admin", "Admin Super", "Admin Biasa"].includes(currentUser?.role || "");
-
-  const myAttendance = React.useMemo(() => {
-    let list = attendanceRecords || [];
-    if (!isStaff) {
-      const studentId = matchingStudent?.id || currentUser?.studentId || currentUser?.username || "SIS-099";
-      list = list.filter((rec: any) => rec.studentId === studentId);
-    } else {
-      if (attendanceClassFilter !== "Semua") {
-        list = list.filter((rec: any) => (rec.class || "").toLowerCase() === attendanceClassFilter.toLowerCase());
-      }
-      if (attendanceSenseiFilter !== "Semua") {
-        list = list.filter((rec: any) => (rec.sensei || "").toLowerCase() === attendanceSenseiFilter.toLowerCase());
-      }
-      if (attendanceSearchQuery.trim()) {
-        const query = attendanceSearchQuery.toLowerCase();
-        list = list.filter((rec: any) => 
-          (rec.studentName || "").toLowerCase().includes(query) || 
-          (rec.studentId || "").toLowerCase().includes(query) ||
-          (rec.subject || "").toLowerCase().includes(query) ||
-          (rec.status || "").toLowerCase().includes(query)
-        );
-      }
-    }
-    return list;
-  }, [attendanceRecords, isStaff, matchingStudent, currentUser, attendanceClassFilter, attendanceSenseiFilter, attendanceSearchQuery]);
-  
   const lmsClassesMap = React.useMemo(() => {
     const rawList = [...(systemState?.customization?.lmsClasses || []), ...(systemState?.lmsClasses || [])];
     const studentClasses = (activeStudents || []).map(s => (s.class || "").trim()).filter(Boolean);
