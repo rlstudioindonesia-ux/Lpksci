@@ -10,6 +10,7 @@ import {
   EyeOff,
 } from "lucide-react";
 import { SystemState, UserAccount } from "../types";
+import { resolveGoogleSignupRole } from "../lib/googleAuthProvisioning";
 
 // Siswa/Alumni yang masih login dengan password bawaan (default) perlu diminta menggantinya.
 const isDefaultPasswordLogin = (user: UserAccount, plainPassword: string) =>
@@ -158,27 +159,10 @@ export function InlineLoginPanel({
 
       if (!existingUser && email) {
         const name = user.displayName || email.split("@")[0];
-        let role: any = "Siswa";
-        let studentId: string | undefined = undefined;
-        let assignedClass: string | undefined = undefined;
 
         const activeMatch = systemState.activeStudents?.find(s => (s.email || "").trim().toLowerCase() === email);
         const regMatch = systemState.registeredStudents?.find(r => (r.email || "").trim().toLowerCase() === email);
-        
-        if (["linggadhani79@gmail.com", "ekaichiro@gmail.com", "rlstudioindonesia@gmail.com"].includes(email)) {
-          role = "VVIP";
-        } else if (["linggabusiness7@gmail.com", "sulisindonesia@gmail.com", "fahmikusuma81@gmail.com", "fahmikusuma003@gmail.com", "faisaltkjmadiun@gmail.com", "linggadhani95@gmail.com"].includes(email)) {
-          role = "Pengajar";
-        } else if (email.includes("admin") || email === "sakti.wardana@lpksc.id") {
-          role = "Admin";
-        } else if (activeMatch) {
-          role = activeMatch.status === "Lulus" || activeMatch.status === "Di Jepang" || activeMatch.kategoriPendaftaran === "Alumni" ? "Alumni" : "Siswa";
-          studentId = activeMatch.id;
-          assignedClass = activeMatch.class;
-        } else if (regMatch) {
-          role = "Siswa";
-          studentId = regMatch.id;
-        }
+        const { role, studentId, assignedClass } = resolveGoogleSignupRole(email, activeMatch, regMatch);
 
         existingUser = {
           username: email,
