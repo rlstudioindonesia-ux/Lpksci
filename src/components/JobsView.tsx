@@ -3,6 +3,7 @@ import { Briefcase, MapPin, Building2, User } from 'lucide-react';
 import { UserAccount, SystemState, JobOrder } from '../types';
 import { ConfirmButton } from './ConfirmButton';
 import { computeJobEligibility } from '../lib/jobEligibility';
+import { canStudentViewJob } from '../lib/jobAccess';
 
 interface JobsViewProps {
   currentUser: UserAccount | null;
@@ -32,18 +33,11 @@ export default function JobsView({ currentUser, systemState, onUpdateState }: Jo
     if (currentUser?.role === "Siswa") {
       if (activeJobTab === "pilihanku") return isInMyJobs;
       const me = systemState.activeStudents?.find(s => s.id === stId);
-      const isLulus = me?.status === "Lulus" || me?.status === "On Proges Job" || me?.status === "On Progres JFT/JLPT/SSW" || me?.status === "Diklat SO";
-      const isRecommendedInThisJob = job.recommendations?.includes(stId);
-      
-      const isAlumni = me?.kategoriPendaftaran === "Alumni" || me?.statusPendaftaran === "Alumni";
-      const allowByJobType = !isAlumni || (job.jobType === "Tokutei ginou" || job.jobType === "Gijin kouku");
-      
-      const canView = (isLulus || isRecommendedInThisJob) && allowByJobType;
       // "Aktif" tab should only show jobs the student hasn't already applied
       // to/been approved for - those move to "Pilihanku" instead, matching
       // the mobile job list (MobileJobsSegment.tsx) so a job doesn't appear
       // duplicated in both tabs, or look re-appliable once already in progress.
-      return (job.status === "Aktif" || isRecommendedInThisJob) && !isInMyJobs && canView;
+      return canStudentViewJob(me, job, isInMyJobs);
     }
     return true; // Staff/Admin/VVIP bisa lihat semua
   }) || [];

@@ -2,8 +2,8 @@ import React, { useState } from "react";
 import { InlineLoginPanel } from "../InlineLoginPanel";
 import { CheckCircle, FileText, MessageSquare, Award } from "lucide-react";
 import { SystemState, JobOrder, UserAccount } from "../../types";
-import { calculateAge } from "../../lib/dateUtils";
 import { computeJobEligibility } from "../../lib/jobEligibility";
+import { canStudentViewJob, computeJobAccess } from "../../lib/jobAccess";
 import { Briefcase, Building, MapPin, Users, Calendar, Banknote, ShieldAlert, CheckCircle2, ChevronRight, GraduationCap, Link as LinkIcon, Lock, Check } from "lucide-react";
 
 interface MobileJobsSegmentProps {
@@ -125,35 +125,8 @@ export default function MobileJobsSegment({
 
                     if (currentUser?.role === "Siswa") {
                       if (activeJobTab === "pilihanku") return isInMyJobs;
-
-                      const me = systemState.activeStudents?.find(
-                        (s) => s.id === stId,
-                      );
-                      const isLulus =
-                        me?.status === "Lulus" ||
-                        me?.status === "On Proges Job" ||
-                        me?.status === "On Progres JFT/JLPT/SSW" ||
-                        me?.status === "Diklat SO";
-                      const isRecommendedInThisJob =
-                        job.recommendations?.includes(stId);
-
-                      const isAlumni =
-                        me?.kategoriPendaftaran === "Alumni" ||
-                        me?.statusPendaftaran === "Alumni";
-                      const allowByJobType =
-                        !isAlumni ||
-                        job.jobType === "Tokutei ginou" ||
-                        job.jobType === "Gijin kouku";
-
-                      const canView =
-                        (isLulus || isRecommendedInThisJob) && allowByJobType;
-
-                      // Muncul semua job yang aktif, ATAU yang dia direkomendasikan (meskipun tutup/tersembunyi)
-                      return (
-                        (job.status === "Aktif" || isRecommendedInThisJob) &&
-                        !isInMyJobs &&
-                        canView
-                      );
+                      const me = systemState.activeStudents?.find((s) => s.id === stId);
+                      return canStudentViewJob(me, job, isInMyJobs);
                     }
                     return true;
                   }).length > 0 ? (
@@ -173,36 +146,8 @@ export default function MobileJobsSegment({
 
                         if (currentUser?.role === "Siswa") {
                           if (activeJobTab === "pilihanku") return isInMyJobs;
-
-                          const me = systemState.activeStudents?.find(
-                            (s) => s.id === stId,
-                          );
-                          const isLulus =
-                            me?.status === "Lulus" ||
-                            me?.status === "On Proges Job" ||
-                            me?.status === "On Progres JFT/JLPT/SSW" ||
-                            me?.status === "Diklat SO";
-                          const isRecommendedInThisJob =
-                            job.recommendations?.includes(stId);
-
-                          const isAlumni =
-                            me?.kategoriPendaftaran === "Alumni" ||
-                            me?.statusPendaftaran === "Alumni";
-                          const allowByJobType =
-                            !isAlumni ||
-                            job.jobType === "Tokutei ginou" ||
-                            job.jobType === "Gijin kouku";
-
-                          const canView =
-                            (isLulus || isRecommendedInThisJob) &&
-                            allowByJobType;
-
-                          return (
-                            (job.status === "Aktif" ||
-                              isRecommendedInThisJob) &&
-                            !isInMyJobs &&
-                            canView
-                          );
+                          const me = systemState.activeStudents?.find((s) => s.id === stId);
+                          return canStudentViewJob(me, job, isInMyJobs);
                         }
                         return true;
                       })
@@ -491,15 +436,7 @@ export default function MobileJobsSegment({
                                   const me = systemState.activeStudents?.find(
                                     (s) => s.id === stId,
                                   );
-                                  const isLulus =
-                                    me?.status === "Lulus" ||
-                                    me?.status === "On Proges Job" ||
-                                    me?.status === "On Progres JFT/JLPT/SSW" ||
-                                    me?.status === "Diklat SO";
-                                  const isRecommendedInThisJob =
-                                    job.recommendations?.includes(stId);
-                                  const canApply =
-                                    isLulus || isRecommendedInThisJob;
+                                  const { meetsAccessRequirement: canApply } = computeJobAccess(me, job);
 
                                   if (currentUser?.role === "Siswa") {
                                     return (
@@ -995,82 +932,10 @@ export default function MobileJobsSegment({
                                                   <ul className="text-[10px] space-y-2.5 font-bold text-slate-700">
                                                     {(() => {
                                                       const myClassStudents = systemState.activeStudents?.filter(s => s.class === currentUser.assignedClass) || [];
-                                                      const eligibleStudents = myClassStudents.filter(me => {
-                                                        let isEligible = true;
-                                                        const reqMath = parseInt(job.minMathScore?.toString().replace(/\D/g, "") || "0");
-                                                        const reqFiveS = parseInt(job.minFiveSScore?.toString().replace(/\D/g, "") || "0");
-                                                        const reqEthics = parseInt(job.minEthicsScore?.toString().replace(/\D/g, "") || "0");
-                                                        const reqAttendance = parseInt(job.minAttendanceScore?.toString().replace(/\D/g, "") || "0");
-                                                        // Bahasa Jepang & Matematika are auto-computed from real
-                                                        // chapter assessments once graded (see JobsView.tsx desktop
-                                                        // eligibility check) - the stored fields stay stale/zero
-                                                        // forever once assessments exist, so recompute live here too.
-                                                        const myAssessments = (systemState.chapterAssessments || []).filter(
-                                                          (a) => a.studentId === me.id || (a.studentName && a.studentName === me.name)
-                                                        );
-                                                        const jpnAssessments = myAssessments.filter(
-                                                          (a) => (a.subject || "Bahasa Jepang") === "Bahasa Jepang" &&
-                                                                 (a.status === "Telah Dinilai" || a.status === "Sudah Dinilai") &&
-                                                                 typeof a.score === "number" && !isNaN(a.score)
-                                                        );
-                                                        const mathAssessments = myAssessments.filter(
-                                                          (a: any) => (a.subject === "SSW" || a.subject === "Matematika" || a.subject === "SSW Matematika") &&
-                                                                 (a.status === "Telah Dinilai" || a.status === "Sudah Dinilai") &&
-                                                                 typeof a.score === "number" && !isNaN(a.score)
-                                                        );
-                                                        const mathScore = mathAssessments.length > 0
-                                                          ? Math.round(mathAssessments.reduce((acc, curr) => acc + (curr.score || 0), 0) / mathAssessments.length)
-                                                          : (me.mathScore || 0);
-                                                        const fiveSScore = me.fiveSScore || 0;
-                                                        const ethicsScore = me.ethicsScore || 0;
-                                                        const attendanceScore = me.attendanceScore || 0;
-                                                        if (reqMath > 0 && mathScore < reqMath) isEligible = false;
-                                                        if (reqFiveS > 0 && fiveSScore < reqFiveS) isEligible = false;
-                                                        if (reqEthics > 0 && ethicsScore < reqEthics) isEligible = false;
-                                                        if (reqAttendance > 0 && attendanceScore < reqAttendance) isEligible = false;
+                                                      const eligibleStudents = myClassStudents.filter(me =>
+                                                        computeJobEligibility(me, job, systemState.attendance, systemState.chapterAssessments || []).isEligible
+                                                      );
 
-                                                        let minTB = 0, maxTB = 0, myTB = me.tb || 0;
-                                                        const tbMatches = (job.tbRequirement || "").toString().match(/(\d+)/g);
-                                                        if (tbMatches && tbMatches.length > 0) {
-                                                          minTB = parseInt(tbMatches[0]);
-                                                          if (tbMatches.length >= 2) maxTB = parseInt(tbMatches[1]);
-                                                        }
-                                                        if (minTB > 0 && myTB > 0 && myTB < minTB) isEligible = false;
-                                                        if (maxTB > 0 && myTB > 0 && myTB > maxTB) isEligible = false;
-
-                                                        let minBB = 0, maxBB = 0, myBB = me.bb || 0;
-                                                        const bbMatches = (job.bbRequirement || "").toString().match(/(\d+)/g);
-                                                        if (bbMatches && bbMatches.length > 0) {
-                                                          minBB = parseInt(bbMatches[0]);
-                                                          if (bbMatches.length >= 2) maxBB = parseInt(bbMatches[1]);
-                                                        }
-                                                        if (minBB > 0 && myBB > 0 && myBB < minBB) isEligible = false;
-                                                        if (maxBB > 0 && myBB > 0 && myBB > maxBB) isEligible = false;
-
-                                                        let minAge = 0, maxAge = 0, myAge = calculateAge(me.birthDate) ?? me.age ?? 0;
-                                                        const ageMatches = (job.ageRequirement || "").toString().match(/(\d+)/g);
-                                                        if (ageMatches && ageMatches.length > 0) {
-                                                          minAge = parseInt(ageMatches[0]);
-                                                          if (ageMatches.length >= 2) maxAge = parseInt(ageMatches[1]);
-                                                        }
-                                                        if (minAge > 0 && myAge > 0 && myAge < minAge) isEligible = false;
-                                                        if (maxAge > 0 && myAge > 0 && myAge > maxAge) isEligible = false;
-
-                                                        let minJpn = 0, myJpn = jpnAssessments.length > 0
-                                                          ? Math.round(jpnAssessments.reduce((acc, curr) => acc + (curr.score || 0), 0) / jpnAssessments.length)
-                                                          : (me.japaneseScore || 0);
-                                                        const jpnMatches = (job.minJapaneseScore || "BAB 15").toString().match(/(\d+)/);
-                                                        if (jpnMatches && jpnMatches[1]) minJpn = parseInt(jpnMatches[1]);
-                                                        if (minJpn > 0 && myJpn < minJpn) isEligible = false;
-
-                                                        const reqGender = job.gender?.toUpperCase() || "";
-                                                        const myGender = me.gender?.toUpperCase() || "";
-                                                        if (reqGender && reqGender !== "LAKI/PEREMPUAN" && reqGender !== "LAKI-LAKI/PEREMPUAN" && myGender) {
-                                                          if (!reqGender.includes(myGender)) isEligible = false;
-                                                        }
-                                                        return isEligible;
-                                                      });
-                                                      
                                                       if (eligibleStudents.length === 0) {
                                                         return <div className="text-slate-400 text-center py-4 flex flex-col items-center justify-center h-full"><Users className="h-5 w-5 mb-2 text-slate-300" />Belum ada siswa di kelas Anda yang memenuhi syarat</div>;
                                                       }
