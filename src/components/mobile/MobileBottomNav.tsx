@@ -147,7 +147,7 @@ export default function MobileBottomNav({
       mainMenus.push({ id: "informasi", name: "Informasi", icon: Info });
     }
 
-    if (isUserSiswa || isUserAlumni || currentUser?.role === "Siswa" || currentUser?.role === "Admin" || currentUser?.role === "Admin Super" || currentUser?.role === "Admin Biasa" || currentUser?.role === "VVIP") {
+    if (isUserSiswa || isUserAlumni || currentUser?.role === "Siswa" || currentUser?.role === "Pengajar" || currentUser?.role === "Admin" || currentUser?.role === "Admin Super" || currentUser?.role === "Admin Biasa" || currentUser?.role === "VVIP") {
       mainMenus.push({ id: "afiliasi", name: "Afiliasi", icon: Share2 });
     }
 
