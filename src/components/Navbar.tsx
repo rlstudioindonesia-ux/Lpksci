@@ -430,7 +430,7 @@ export default function Navbar({
                   </div>
                 )}
                 
-                {(isVvip || isAdmin) && (
+                {isVvip && (
                   <button
                     onClick={() => setActiveTab("vvip")}
                     className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-black tracking-wide uppercase rounded-xl transition-all duration-200 cursor-pointer shadow-sm ${

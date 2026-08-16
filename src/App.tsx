@@ -941,7 +941,7 @@ export default function App() {
               {/* TAB 4: VVIP MONITORING */}
               {activeTab === "vvip" &&
                 (() => {
-                  const hasAccess = currentUser?.role === "VVIP" || currentUser?.role === "Admin" || currentUser?.role === "Admin Super";
+                  const hasAccess = currentUser?.role === "VVIP";
                   if (!hasAccess) {
                     return (
                       <AccessDeniedAlert
