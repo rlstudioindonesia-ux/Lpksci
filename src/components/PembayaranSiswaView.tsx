@@ -4,6 +4,7 @@ import { SystemState, UserAccount, PaymentRecord } from "../types";
 import { uploadFileToFirebase } from "../lib/storageHelper";
 import { isStudentAlumni } from "../lib/alumniStatus";
 import { matchesPaymentCategory, categorizePaymentBucket } from "../lib/paymentCategoryMatching";
+import { isAdminOrVvip as isAdminOrVvipRole } from "../lib/permissions";
 import { 
   CreditCard, Search, CheckCircle, AlertCircle, TrendingUp, 
   DollarSign, Clock, Users, ArrowRight, ShieldCheck, PieChart, Info,
@@ -430,8 +431,11 @@ export default function PembayaranSiswaView({
     );
   }
 
-  // Check if teacher/staff is redirected to TeacherDashboardPanel
-  const isPersonalStaff = ["Pengajar", "Alumni"].includes(currentUser.role);
+  // Check if teacher/staff is redirected to TeacherDashboardPanel.
+  // Alumni are NOT staff - they must fall through to the personal
+  // "Portal Tagihan Mandiri" below like any other student, not this
+  // internal HR/attendance/salary panel.
+  const isPersonalStaff = currentUser.role === "Pengajar";
 
   if (isPersonalStaff) {
     return (
@@ -444,7 +448,7 @@ export default function PembayaranSiswaView({
     );
   }
 
-  const isAdminOrVvip = currentUser.role === "Admin" || currentUser.role === "Admin Super" || currentUser.role === "VVIP" || currentUser.role === "Admin Biasa";
+  const isAdminOrVvip = isAdminOrVvipRole(currentUser.role);
 
   // Registered Student Names Set (from official accounts & active registration records)
   const registeredStudentNamesSet = new Set([
