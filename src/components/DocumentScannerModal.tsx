@@ -219,7 +219,7 @@ export function DocumentScannerModal({ onClose, onCapture }: DocumentScannerModa
         {/* Floating Scanner Overlay - perfectly centered and neat */}
         {!capturedImage && !loading && !cameraError && (
           <div className="absolute inset-0 pointer-events-none flex items-center justify-center z-20">
-            <div className="relative w-[85%] h-[70%] max-w-sm max-h-[500px] border-2 border-white/10 rounded-3xl overflow-hidden flex items-center justify-center">
+            <div className="relative w-[78%] h-[60%] max-w-[340px] max-h-[440px] border-2 border-white/10 rounded-3xl overflow-hidden flex items-center justify-center">
               {/* Glowing Corners - Neater and better contrast */}
               <div className="absolute top-0 left-0 w-10 h-10 border-t-4 border-l-4 border-indigo-500 rounded-tl-3xl shadow-[0_0_15px_rgba(99,102,241,0.6)]"></div>
               <div className="absolute top-0 right-0 w-10 h-10 border-t-4 border-r-4 border-indigo-500 rounded-tr-3xl shadow-[0_0_15px_rgba(99,102,241,0.6)]"></div>
