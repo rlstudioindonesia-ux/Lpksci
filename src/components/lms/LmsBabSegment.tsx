@@ -816,7 +816,7 @@ export default function LmsBabSegment({ activeStudentClass, activeStudents, allC
                                                           <Download className="w-3 h-3" />
                                                           <span>Unduh</span>
                                                         </button>
-                                                        <button onClick={() => setPdfViewerUrl(lesson.bookUrl)} className="bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold px-3 py-1.5 rounded-lg transition active:scale-95 shadow-2xs shrink-0 text-center cursor-pointer">Buka PDF</button>
+                                                        <button onClick={() => window.open(lesson.bookUrl, "_blank", "noopener,noreferrer")} className="bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] font-bold px-3 py-1.5 rounded-lg transition active:scale-95 shadow-2xs shrink-0 text-center cursor-pointer">Buka PDF</button>
                                                       </div>
                                                     </div>
                                                   </div>

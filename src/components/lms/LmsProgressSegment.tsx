@@ -948,7 +948,7 @@ export default function LmsProgressSegment({ assessmentSubject, attendanceRecord
                                                 Unduh
                                               </a>
                                               <button
-                                                onClick={() => setPdfViewerUrl(assessment.submissionUrl)}
+                                                onClick={() => window.open(assessment.submissionUrl, "_blank", "noopener,noreferrer")}
                                                 className="w-full sm:w-auto text-center bg-indigo-600 text-white border border-transparent px-4 py-2 rounded-lg text-[11px] font-extrabold hover:bg-indigo-700 transition shadow-sm"
                                               >
                                                 Buka PDF
