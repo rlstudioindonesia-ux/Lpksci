@@ -47,6 +47,7 @@ import {
 import PrivacyPolicyModal from "./components/PrivacyPolicyModal";
 import LoginModal from "./components/LoginModal";
 import StudentProfilePrompt from "./components/StudentProfilePrompt";
+import ApkUpdateBanner from "./components/ApkUpdateBanner";
 import ResetPasswordView from "./components/ResetPasswordView";
 import PembayaranSiswaView from "./components/PembayaranSiswaView";
 import JobsView from "./components/JobsView";
@@ -812,6 +813,7 @@ export default function App() {
       id="app-root-container"
       className="min-h-screen bg-transparent flex flex-col justify-between pb-0"
     >
+      <ApkUpdateBanner customization={systemState.customization} />
       {(() => {
         const systemState = filteredSystemState;
         return (
