@@ -7,7 +7,7 @@ import React, { useState, useEffect } from "react";
 import { 
   GraduationCap, LogIn, LogOut, ShieldAlert, Award, BookOpen, FolderOpen, Globe, User,
   Anchor, Compass, Sparkles, Heart, Landmark, Settings, Calendar, MessagesSquare, CreditCard, Briefcase, TrendingUp,
-  UserPlus, Share2, LayoutGrid, Menu, Smartphone, Download, Apple
+  Share2, LayoutGrid, Menu, Smartphone, Download, Apple
 } from "lucide-react";
 import { UserAccount, SystemState } from "../types";
 import { getSafePhotoUrl, createSvgAvatar } from "../lib/storageHelper";
@@ -349,16 +349,7 @@ export default function Navbar({
                         </button>
                       )}
 
-                      {isAlumni && (
-                        <button
-                          onClick={() => { setActiveTab("pilih_kelas"); setIsPortalMenuOpen(false); }}
-                          className={`flex items-center gap-2.5 px-3 py-2.5 text-xs font-bold tracking-wide uppercase rounded-lg transition-colors text-left w-full ${activeTab === "pilih_kelas" ? "bg-slate-50 text-teal-600" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"}`}
-                        >
-                          <UserPlus className="h-4 w-4" /> Pilih Kelas
-                        </button>
-                      )}
-
-                      {(isAlumni || isSiswa || isPengajar) && (
+                      {(isAlumni || isSiswa || isPengajar || isAdmin || isVvip) && (
                         <button
                           onClick={() => { setActiveTab("afiliasi"); setIsPortalMenuOpen(false); }}
                           className={`flex items-center gap-2.5 px-3 py-2.5 text-xs font-bold tracking-wide uppercase rounded-lg transition-colors text-left w-full ${activeTab === "afiliasi" ? "bg-slate-50 text-rose-600" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"}`}
