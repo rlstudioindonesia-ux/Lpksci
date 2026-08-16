@@ -1,6 +1,7 @@
 import React from "react";
 import { Activity, BookOpen, Calendar, Check, Clock, Crown, Eye, FileText, GraduationCap, MessageCircle, MessageSquare, ShieldAlert, Users, X } from "lucide-react";
 import { formatRupiah, parsePrice } from "../MobileDashboardView.tsx";
+import { matchesClassLevel, alumniClassNameFor, resolveClassQuota } from "../../lib/classQuota";
 
 interface MobilePilihKelasSubpageProps {
   currentUser: any;
@@ -15,25 +16,12 @@ interface MobilePilihKelasSubpageProps {
 export default function MobilePilihKelasSubpage({ currentUser, isUserAlumni, monitoredVvipClass, setActiveSubpage, setMonitoredVvipClass, setSelectedClassLog, systemState }: MobilePilihKelasSubpageProps) {
   return (
     (() => {
-                // Matches by exact class name first, falling back to a shared
-                // JLPT-level token (N1-N5, "native") extracted from the target
-                // name - avoids a hardcoded n1/n2/n3/native allow-list that
-                // silently matched nothing for levels like N4/N5 that weren't in
-                // it, hiding real students from the monitoring/quota count.
-                const classMatches = (candidate: string, target: string) => {
-                  const c = candidate.toLowerCase();
-                  const t = target.toLowerCase();
-                  if (!c) return false;
-                  if (c === t) return true;
-                  const levelToken = t.match(/\bn[1-5]\b/)?.[0] || (t.includes("native") ? "native" : null);
-                  return !!levelToken && c.includes(levelToken);
-                };
                 const getStudentsInClass = (className: string) => {
                   const students = (systemState.activeStudents || []).filter(
-                    (s: any) => classMatches(s.assignedClass || s.class || "", className)
+                    (s: any) => matchesClassLevel(s.assignedClass || s.class, className)
                   );
                   const usersWithClass = (systemState.users || []).filter(
-                    (u: any) => classMatches(u.assignedClass || "", className)
+                    (u: any) => matchesClassLevel(u.assignedClass, className)
                   );
                   
                   const seen = new Set();
@@ -254,15 +242,9 @@ export default function MobilePilihKelasSubpage({ currentUser, isUserAlumni, mon
                         // student, so the "Pendaftar" count (and Pemantauan
                         // Kelas below) always showed 0 regardless of the manual
                         // quota numbers typed into the CMS.
-                        const alumniClassName = `Kelas Alumni ${cls.title || cls.level}`;
+                        const alumniClassName = alumniClassNameFor(cls);
                         const realEnrolledCount = getStudentsInClass(alumniClassName).length;
-                        // Prefer the real, synced count; only fall back to a
-                        // manually-typed number (still editable in the admin CMS)
-                        // when there's genuinely no student assigned yet, e.g.
-                        // for pre-launch marketing display.
-                        const registeredCount = realEnrolledCount > 0 ? realEnrolledCount : (cls.registered !== undefined ? cls.registered : 0);
-                        const quotaLimit = cls.quota !== undefined ? cls.quota : 10;
-                        const remaining = Math.max(0, quotaLimit - registeredCount);
+                        const { registeredCount, quotaLimit, remaining } = resolveClassQuota(cls, realEnrolledCount);
                         const hasAccess = isUserAlumni || ["Admin", "Admin Super", "Admin Biasa", "VVIP"].includes(currentUser?.role || "");
     
                         return (
