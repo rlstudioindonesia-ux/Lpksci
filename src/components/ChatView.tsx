@@ -10,6 +10,11 @@ interface ChatViewProps {
   systemState: SystemState;
   onUpdateState: (dataType: string, action: string, payload: any) => Promise<boolean>;
   onClose: () => void;
+  // Fires whenever an active chat room opens/closes, so the parent page can
+  // hide its own bottom nav bar while the room is open - the room pins its
+  // input bar to the real device viewport bottom, and a nav bar rendered on
+  // top of it (higher z-index) would otherwise cover the input field.
+  onActiveRoomChange?: (isOpen: boolean) => void;
 }
 
 function openMediaSafe(url: string) {
@@ -36,7 +41,7 @@ function openMediaSafe(url: string) {
   window.open(url, "_blank");
 }
 
-export default function ChatView({ currentUser, systemState, onUpdateState, onClose }: ChatViewProps) {
+export default function ChatView({ currentUser, systemState, onUpdateState, onClose, onActiveRoomChange }: ChatViewProps) {
   const [activeChatUser, setActiveChatUser] = useState<UserAccount | (UserAccount & { isGroup?: boolean }) | null>(null);
   const [newMessage, setNewMessage] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
@@ -52,6 +57,14 @@ export default function ChatView({ currentUser, systemState, onUpdateState, onCl
   const myChatName = (currentUser.role === "Admin" || currentUser.role === "Admin Super" || currentUser.role === "Admin Biasa") ? "Admin LPK SCI" : currentUser.name;
 
   const [isMobileScreen, setIsMobileScreen] = useState(false);
+
+  // Notify the parent page whenever a chat room opens/closes, so it can hide
+  // its own fixed bottom nav bar while the room (which pins its input bar to
+  // the real viewport bottom) is open.
+  useEffect(() => {
+    onActiveRoomChange?.(!!activeChatUser);
+    return () => onActiveRoomChange?.(false);
+  }, [activeChatUser]);
 
   // Handle mobile keyboard and viewport resizing
   useEffect(() => {

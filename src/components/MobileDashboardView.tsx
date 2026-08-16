@@ -320,6 +320,11 @@ export default function MobileDashboardView({
   // Workspace tracker to lock bottom navigation context (main, admin, vvip)
   const [activeWorkspace, setActiveWorkspace] = useState<"main" | "admin" | "vvip">("main");
 
+  // Tracks whether an active chat room (ChatView) is open, so the bottom nav
+  // - which renders on top of it (higher z-index) - can be hidden while the
+  // room's own input bar is pinned to the real viewport bottom.
+  const [isChatRoomOpen, setIsChatRoomOpen] = useState(false);
+
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Scroll to top of both window and any scrollable container parent wrapper on mobile layout transition
@@ -2472,6 +2477,7 @@ export default function MobileDashboardView({
                   systemState={systemState}
                   onUpdateState={handleUpdateState}
                   onClose={() => setActiveSubpage(null)}
+                  onActiveRoomChange={setIsChatRoomOpen}
                 />
               ) : (
                 <div className="bg-white border rounded-3xl p-6 text-center space-y-6 shadow-[0_8px_30px_rgb(0,0,0,0.04)] m-2 mt-4">
@@ -4572,7 +4578,7 @@ export default function MobileDashboardView({
       )}
 
       {/* Scrollable Subpage Bottom Nav Menus */}
-      {activeSubpage && !( (activeSubpage === "pendaftaran" || activeSubpage === "profil") && !currentUser ) && (
+      {activeSubpage && !( (activeSubpage === "pendaftaran" || activeSubpage === "profil") && !currentUser ) && !(activeSubpage === "chat" && isChatRoomOpen) && (
         <MobileBottomNav
           activeSubpage={activeSubpage}
           activeWorkspace={activeWorkspace}
