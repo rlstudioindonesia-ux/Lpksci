@@ -8,7 +8,9 @@
     "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
     "start": "node dist/server.cjs",
     "clean": "rm -rf dist",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
@@ -40,6 +42,11 @@
     "vite": "^6.2.3"
   },
   "devDependencies": {
-    "@types/bcryptjs": "^2.4.6"
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.4",
+    "@types/bcryptjs": "^2.4.6",
+    "jsdom": "^30.0.1",
+    "vitest": "^4.1.10"
   }
 }
