@@ -1,6 +1,7 @@
 import React from "react";
 import { Award, BookOpen, Brain, Check, FileText, Hash, Info, MessageSquare, Percent, RefreshCw, RotateCcw, Save, Scale, Star, User, Users } from "lucide-react";
 import { CHAPTERS_LIST, MATH_CHAPTERS_LIST } from "../../chapters";
+import { computeAttendanceRate } from "../../lib/attendanceMetrics";
 
 interface LmsProgressSegmentProps {
   assessmentSubject: any;
@@ -664,14 +665,10 @@ export default function LmsProgressSegment({ assessmentSubject, attendanceRecord
                           ? Math.round(mathAssessments.reduce((acc: number, curr: any) => acc + (curr.score || 0), 0) / mathAssessments.length)
                           : (student.mathScore || 0);
     
-                        // Attendance calculation from presence records vs total available bab
-                        const studentAtts = studentAttendanceMap.get(student.id) || studentAttendanceMap.get(student.name) || (attendanceRecords || []).filter((r: any) => r.studentId === student.id || r.studentName === student.name);
-                        const presentCount = studentAtts.filter((r: any) => r.status === "Hadir" || r.status === "Hadir (Tepat Waktu)" || r.status === "Hadir (Terlambat)").length;
-                        const totalAvailableBab = getClassChaptersCount(student.class || "", "Bahasa Jepang", true) || 25;
-                        const hasAttRecords = studentAtts.length > 0;
-                        const computedAttendanceRate = hasAttRecords
-                          ? Math.min(100, Math.round((presentCount / totalAvailableBab) * 100))
-                          : (student.attendanceScore || 0);
+                        // Attendance calculation: % of the student's own attendance records marked Hadir.
+                        const { rate: attRate, hadirCount: presentCount, totalRecords: totalAttRecords } = computeAttendanceRate(student, attendanceRecords);
+                        const hasAttRecords = totalAttRecords > 0;
+                        const computedAttendanceRate = attRate ?? (student.attendanceScore || 0);
     
                         return (
                           <div key={student.id} className="p-4 border border-slate-200 bg-white rounded-2xl flex flex-col gap-3 relative shadow-2xs hover:shadow-xs transition">
@@ -789,17 +786,17 @@ export default function LmsProgressSegment({ assessmentSubject, attendanceRecord
                                 <div className="flex items-center justify-between">
                                   <label className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider">Kehadiran (%)</label>
                                   {hasAttRecords && (
-                                    <span className="text-[8.5px] font-extrabold text-emerald-700 bg-emerald-50 px-1 py-0.5 rounded border border-emerald-200" title={`Akumulasi ${presentCount} presensi hadir dari ${totalAvailableBab} total bab`}>
-                                      Auto ({presentCount}/{totalAvailableBab} Bab)
+                                    <span className="text-[8.5px] font-extrabold text-emerald-700 bg-emerald-50 px-1 py-0.5 rounded border border-emerald-200" title={`Akumulasi ${presentCount} presensi hadir dari ${totalAttRecords} total presensi`}>
+                                      Auto ({presentCount}/{totalAttRecords})
                                     </span>
                                   )}
                                 </div>
                                 {hasAttRecords ? (
-                                  <div 
+                                  <div
                                     className="w-full bg-emerald-50/80 border border-emerald-200 rounded-lg px-2 py-1.5 text-xs text-center font-black text-emerald-900 shadow-2xs"
-                                    title={`Persentase kehadiran: ${presentCount} hadir / ${totalAvailableBab} total bab (${computedAttendanceRate}%)`}
+                                    title={`Persentase kehadiran: ${presentCount} hadir / ${totalAttRecords} total presensi (${computedAttendanceRate}%)`}
                                   >
-                                    {computedAttendanceRate}% <span className="text-[9px] font-semibold text-emerald-600">({presentCount}/{totalAvailableBab})</span>
+                                    {computedAttendanceRate}% <span className="text-[9px] font-semibold text-emerald-600">({presentCount}/{totalAttRecords})</span>
                                   </div>
                                 ) : (
                                   <input 

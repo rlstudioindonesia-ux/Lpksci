@@ -92,6 +92,24 @@ describe("computeJobEligibility", () => {
     expect(result.autoRejectNote).toContain("Absensi (75% < 80%)");
   });
 
+  it("prefers a live-computed attendance rate over a stale stored attendanceScore", () => {
+    // Regression test: the stored attendanceScore field only reflects
+    // whatever was last saved and can go stale as new attendance records
+    // come in, so eligibility must recompute live whenever records exist -
+    // the same rule already applied to math/Japanese scores above.
+    const student = makeStudent({ attendanceScore: 95 });
+    const records = [
+      { studentId: "SIS-1", status: "Hadir" },
+      { studentId: "SIS-1", status: "Alpa" },
+      { studentId: "SIS-1", status: "Alpa" },
+      { studentId: "SIS-1", status: "Alpa" },
+    ];
+    const result = computeJobEligibility(student, makeJob({ minAttendanceScore: "80" }), records, []);
+    expect(result.attendanceScore).toBe(25);
+    expect(result.isEligible).toBe(false);
+    expect(result.autoRejectNote).toContain("Absensi (25% < 80%)");
+  });
+
   it("rejects when height (TB) is outside the required range", () => {
     const tooShort = computeJobEligibility(makeStudent({ tb: 150 }), makeJob({ tbRequirement: "160 - 180" }), [], []);
     expect(tooShort.isEligible).toBe(false);
