@@ -2,6 +2,7 @@ import React from "react";
 import { Award, BookOpen, Brain, Check, FileText, Hash, Info, MessageSquare, Percent, RefreshCw, RotateCcw, Save, Scale, Star, User, Users } from "lucide-react";
 import { CHAPTERS_LIST, MATH_CHAPTERS_LIST } from "../../chapters";
 import { computeAttendanceRate } from "../../lib/attendanceMetrics";
+import { computeSubjectAverage } from "../../lib/scoreAveraging";
 
 interface LmsProgressSegmentProps {
   assessmentSubject: any;
@@ -639,31 +640,17 @@ export default function LmsProgressSegment({ assessmentSubject, attendanceRecord
                     
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                       {filteredActiveStudents.map((student) => {
-                        const allStudentAssessments = (chapterAssessments && chapterAssessments.length > 0 ? chapterAssessments : (systemState?.chapterAssessments || [])).filter(
-                          (a: any) => a.studentId === student.id || (a.studentName && a.studentName === student.name)
-                        );
-    
+                        const assessmentsSource = chapterAssessments && chapterAssessments.length > 0 ? chapterAssessments : (systemState?.chapterAssessments || []);
+
                         // Bahasa Jepang Assessments
-                        const jpnAssessments = allStudentAssessments.filter(
-                          (a: any) => (a.subject || "Bahasa Jepang") === "Bahasa Jepang" && 
-                                      (a.status === "Telah Dinilai" || a.status === "Sudah Dinilai" || a.score !== undefined) && 
-                                      typeof a.score === "number" && !isNaN(a.score)
-                        );
-                        const hasJpnAssessments = jpnAssessments.length > 0;
-                        const computedJpnAvg = hasJpnAssessments
-                          ? Math.round(jpnAssessments.reduce((acc: number, curr: any) => acc + (curr.score || 0), 0) / jpnAssessments.length)
-                          : (student.japaneseScore || 0);
-    
+                        const jpnAvg = computeSubjectAverage(assessmentsSource, student, "Bahasa Jepang");
+                        const hasJpnAssessments = jpnAvg.gradedCount > 0;
+                        const computedJpnAvg = jpnAvg.average ?? (student.japaneseScore || 0);
+
                         // Matematika SSW Assessments
-                        const mathAssessments = allStudentAssessments.filter(
-                          (a: any) => (a.subject === "SSW" || a.subject === "Matematika" || a.subject === "SSW Matematika") && 
-                                      (a.status === "Telah Dinilai" || a.status === "Sudah Dinilai" || a.score !== undefined) && 
-                                      typeof a.score === "number" && !isNaN(a.score)
-                        );
-                        const hasMathAssessments = mathAssessments.length > 0;
-                        const computedMathAvg = hasMathAssessments
-                          ? Math.round(mathAssessments.reduce((acc: number, curr: any) => acc + (curr.score || 0), 0) / mathAssessments.length)
-                          : (student.mathScore || 0);
+                        const mathAvg = computeSubjectAverage(assessmentsSource, student, "Matematika");
+                        const hasMathAssessments = mathAvg.gradedCount > 0;
+                        const computedMathAvg = mathAvg.average ?? (student.mathScore || 0);
     
                         // Attendance calculation: % of the student's own attendance records marked Hadir.
                         const { rate: attRate, hadirCount: presentCount, totalRecords: totalAttRecords } = computeAttendanceRate(student, attendanceRecords);
@@ -720,15 +707,15 @@ export default function LmsProgressSegment({ assessmentSubject, attendanceRecord
                                 <div className="flex items-center justify-between">
                                   <label className="text-[10px] font-bold text-amber-700 uppercase tracking-wider">B. Jepang</label>
                                   {hasJpnAssessments && (
-                                    <span className="text-[8.5px] font-extrabold text-amber-700 bg-amber-50 px-1 py-0.5 rounded border border-amber-200" title={`Diambil dari rata-rata ${jpnAssessments.length} bab`}>
-                                      Auto ({jpnAssessments.length} Bab)
+                                    <span className="text-[8.5px] font-extrabold text-amber-700 bg-amber-50 px-1 py-0.5 rounded border border-amber-200" title={`Diambil dari rata-rata ${jpnAvg.gradedCount} bab`}>
+                                      Auto ({jpnAvg.gradedCount} Bab)
                                     </span>
                                   )}
                                 </div>
                                 {hasJpnAssessments ? (
                                   <div 
                                     className="w-full bg-amber-50/80 border border-amber-200 rounded-lg px-2 py-1.5 text-xs text-center font-black text-amber-900 shadow-2xs"
-                                    title={`Rata-rata dari ${jpnAssessments.length} bab Bahasa Jepang yang telah dinilai`}
+                                    title={`Rata-rata dari ${jpnAvg.gradedCount} bab Bahasa Jepang yang telah dinilai`}
                                   >
                                     {computedJpnAvg} <span className="text-[9px] font-semibold text-amber-600">/ 100</span>
                                   </div>
@@ -753,15 +740,15 @@ export default function LmsProgressSegment({ assessmentSubject, attendanceRecord
                                 <div className="flex items-center justify-between">
                                   <label className="text-[10px] font-bold text-blue-700 uppercase tracking-wider">Matematika</label>
                                   {hasMathAssessments && (
-                                    <span className="text-[8.5px] font-extrabold text-blue-700 bg-blue-50 px-1 py-0.5 rounded border border-blue-200" title={`Diambil dari rata-rata ${mathAssessments.length} bab SSW`}>
-                                      Auto ({mathAssessments.length} Bab)
+                                    <span className="text-[8.5px] font-extrabold text-blue-700 bg-blue-50 px-1 py-0.5 rounded border border-blue-200" title={`Diambil dari rata-rata ${mathAvg.gradedCount} bab SSW`}>
+                                      Auto ({mathAvg.gradedCount} Bab)
                                     </span>
                                   )}
                                 </div>
                                 {hasMathAssessments ? (
                                   <div 
                                     className="w-full bg-blue-50/80 border border-blue-200 rounded-lg px-2 py-1.5 text-xs text-center font-black text-blue-900 shadow-2xs"
-                                    title={`Rata-rata dari ${mathAssessments.length} bab Matematika/SSW yang telah dinilai`}
+                                    title={`Rata-rata dari ${mathAvg.gradedCount} bab Matematika/SSW yang telah dinilai`}
                                   >
                                     {computedMathAvg} <span className="text-[9px] font-semibold text-blue-600">/ 100</span>
                                   </div>

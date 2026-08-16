@@ -1,6 +1,7 @@
 import { ActiveStudent, ChapterAssessment, JobOrder } from "../types";
 import { calculateAge } from "./dateUtils";
 import { resolveAttendanceScore } from "./attendanceMetrics";
+import { computeSubjectAverage } from "./scoreAveraging";
 
 export interface JobEligibilityResult {
   isEligible: boolean;
@@ -78,28 +79,10 @@ export function computeJobEligibility(
   const result = emptyResult();
   if (!student || !job) return result;
 
-  const myAssessments = (chapterAssessments || []).filter(
-    (a) => a.studentId === student.id || (a.studentName && a.studentName === student.name),
-  );
-  const jpnAssessments = myAssessments.filter(
-    (a) =>
-      (a.subject || "Bahasa Jepang") === "Bahasa Jepang" &&
-      (a.status === "Telah Dinilai" || a.status === "Sudah Dinilai") &&
-      typeof a.score === "number" &&
-      !isNaN(a.score),
-  );
-  const mathAssessments = myAssessments.filter(
-    (a: any) =>
-      (a.subject === "SSW" || a.subject === "Matematika" || a.subject === "SSW Matematika") &&
-      (a.status === "Telah Dinilai" || a.status === "Sudah Dinilai") &&
-      typeof a.score === "number" &&
-      !isNaN(a.score),
-  );
+  const mathAvg = computeSubjectAverage(chapterAssessments, student, "Matematika");
+  const jpnAvg = computeSubjectAverage(chapterAssessments, student, "Bahasa Jepang");
 
-  result.mathScore =
-    mathAssessments.length > 0
-      ? Math.round(mathAssessments.reduce((acc, curr) => acc + (curr.score || 0), 0) / mathAssessments.length)
-      : (student.mathScore ?? 0);
+  result.mathScore = mathAvg.average ?? (student.mathScore ?? 0);
   result.fiveSScore = student.fiveSScore ?? 0;
   result.ethicsScore = student.ethicsScore ?? 0;
 
@@ -133,10 +116,7 @@ export function computeJobEligibility(
 
   const jpnMatches = (job.minJapaneseScore || "BAB 15").toString().match(/(\d+)/);
   if (jpnMatches && jpnMatches[1]) result.minJpn = parseInt(jpnMatches[1]);
-  result.myJpn =
-    jpnAssessments.length > 0
-      ? Math.round(jpnAssessments.reduce((acc, curr) => acc + (curr.score || 0), 0) / jpnAssessments.length)
-      : (student.japaneseScore || 0);
+  result.myJpn = jpnAvg.average ?? (student.japaneseScore || 0);
 
   result.reqGender = job.gender?.toUpperCase() || "";
   result.myGender = student.gender?.toUpperCase() || "";

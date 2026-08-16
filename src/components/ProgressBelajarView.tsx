@@ -9,6 +9,7 @@ import { CHAPTERS_LIST } from "../chapters";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { uploadFileToFirebase, getEmbeddablePdfUrl } from "../lib/storageHelper";
 import { resolveAttendanceScore } from "../lib/attendanceMetrics";
+import { computeSubjectAverage } from "../lib/scoreAveraging";
 
 interface ProgressBelajarViewProps {
   currentUser: UserAccount | null;
@@ -111,12 +112,8 @@ export default function ProgressBelajarView({
   };
   
   const currentClassMaxChapters = activeStudent ? getClassMaxChapters(activeStudent.class) : CHAPTERS_LIST.length;
-  const validScores = studentAssessments
-    .filter(c => c.status === "Telah Dinilai" && c.score !== undefined)
-    .map(c => c.score as number);
-  const averageJapaneseScore = validScores.length > 0
-    ? Math.round(validScores.reduce((a, b) => a + b, 0) / validScores.length)
-    : (activeStudent?.japaneseScore || 0);
+  const averageJapaneseScore = computeSubjectAverage(systemState?.chapterAssessments, activeStudent, "Bahasa Jepang").average
+    ?? (activeStudent?.japaneseScore || 0);
 
   // Attendance rate
   const computedAttendanceRate = resolveAttendanceScore(activeStudent, systemState?.attendance);

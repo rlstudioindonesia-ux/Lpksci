@@ -9,6 +9,7 @@ import { ConfirmButton } from "./ConfirmButton";
 import { getSafePhotoUrl, createSvgAvatar } from "../lib/storageHelper";
 import { calculateAge } from "../lib/dateUtils";
 import { computeFinancialMetrics, computeMonthlyExpenseBreakdown } from "../lib/financeCalculations";
+import { isGradedAssessment } from "../lib/scoreAveraging";
 import {
   ResponsiveContainer,
   AreaChart,
@@ -1827,9 +1828,14 @@ export default function VvipView({
                 })
               : [];
 
+          // Only chapters actually graded count toward the average - an
+          // ungraded chapter (coerced to a 0 score above for table display)
+          // must not drag the average down as if the student failed it.
+          const gradedAssessments = actualAssessments.filter(isGradedAssessment);
           const avgScore =
-            displayAssessments.length > 0 ? displayAssessments.reduce((sum, item) => sum + item.score, 0) /
-            displayAssessments.length : 0;
+            gradedAssessments.length > 0
+              ? gradedAssessments.reduce((sum, item) => sum + (item.score || 0), 0) / gradedAssessments.length
+              : 0;
 
           // Custom skills mapping based on class specialty (more flexible)
           const isCaregiver = student.class?.includes("Caregiver") || student.class?.includes("Asahi");
