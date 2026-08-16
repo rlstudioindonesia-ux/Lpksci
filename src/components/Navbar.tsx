@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { UserAccount, SystemState } from "../types";
 import { getSafePhotoUrl, createSvgAvatar } from "../lib/storageHelper";
+import { isStudentAlumni } from "../lib/alumniStatus";
 
 // Dynamic Icon Lookup
 const getLogoIcon = (iconName: string) => {
@@ -75,7 +76,7 @@ export default function Navbar({
 
   // Role detection variables matched with mobile views
   const me = systemState?.activeStudents?.find(s => s.id === currentUser?.studentId || s.name === currentUser?.name);
-  const isAlumni = currentUser?.role === "Alumni" || me?.kategoriPendaftaran === "Alumni" || me?.statusPendaftaran === "Alumni";
+  const isAlumni = currentUser?.role === "Alumni" || isStudentAlumni(me);
   const isSiswa = currentUser?.role === "Siswa";
   const isPengajar = currentUser?.role === "Pengajar";
   const isAdmin = currentUser?.role === "Admin" || currentUser?.role === "Admin Super" || currentUser?.role === "Admin Biasa";
@@ -473,7 +474,7 @@ export default function Navbar({
                     {currentUser.name.split(" ")[0]}
                   </span>
                   <span className="text-[9px] font-mono font-bold text-indigo-400 uppercase leading-normal tracking-wide">
-                    _{currentUser.role === "Siswa" && systemState?.activeStudents?.find(s => s.id === currentUser.studentId || s.name === currentUser.name)?.kategoriPendaftaran === "Alumni" ? "Alumni" : currentUser.role}
+                    _{currentUser.role === "Siswa" && isAlumni ? "Alumni" : currentUser.role}
                   </span>
                 </div>
                 <div 

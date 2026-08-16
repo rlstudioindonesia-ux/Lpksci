@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { Activity, ChevronDown, ChevronUp, Clock } from "lucide-react";
+import { isStudentAlumni, isAlumniClassName } from "../lib/alumniStatus";
 
 const STAGE_STYLES: Record<string, string> = {
   "Tertarik": "bg-slate-100 text-slate-600 border-slate-200",
@@ -119,12 +120,7 @@ export const StudentActivitySummary = ({ systemState }: { systemState: any }) =>
               (u.name && st.name && u.name.trim().toLowerCase() === st.name.trim().toLowerCase())
             );
             const isAlumni =
-              st.statusPendaftaran === "Alumni" ||
-              st.kategoriPendaftaran === "Alumni" ||
-              st.status === "Di Jepang" ||
-              st.status === "Lulus" ||
-              matchedUser?.role === "Alumni" ||
-              (st.class && st.class.toLowerCase().includes("alumni"));
+              isStudentAlumni(st) || matchedUser?.role === "Alumni" || isAlumniClassName(st.class);
             const categoryLabel = isAlumni ? "Alumni" : "Siswa Reguler";
 
             // Nearest upcoming schedule across all this student's job stages -

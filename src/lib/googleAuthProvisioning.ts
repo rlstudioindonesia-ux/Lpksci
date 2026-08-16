@@ -1,3 +1,5 @@
+import { isStudentAlumni } from "./alumniStatus";
+
 export type ProvisionedRole = "VVIP" | "Pengajar" | "Admin" | "Alumni" | "Siswa";
 
 export interface GoogleProvisionedRole {
@@ -31,17 +33,14 @@ const ADMIN_EMAIL_ALLOWLIST = ["sakti.wardana@lpksc.id"];
  */
 export function resolveGoogleSignupRole(
   email: string,
-  activeMatch: { id: string; class?: string; status?: string; kategoriPendaftaran?: string } | null | undefined,
+  activeMatch: { id: string; class?: string; status?: string; kategoriPendaftaran?: string; statusPendaftaran?: string } | null | undefined,
   regMatch: { id: string } | null | undefined,
 ): GoogleProvisionedRole {
   if (VVIP_EMAILS.includes(email)) return { role: "VVIP" };
   if (PENGAJAR_EMAILS.includes(email)) return { role: "Pengajar" };
   if (email.includes("admin") || ADMIN_EMAIL_ALLOWLIST.includes(email)) return { role: "Admin" };
   if (activeMatch) {
-    const role: ProvisionedRole =
-      activeMatch.status === "Lulus" || activeMatch.status === "Di Jepang" || activeMatch.kategoriPendaftaran === "Alumni"
-        ? "Alumni"
-        : "Siswa";
+    const role: ProvisionedRole = isStudentAlumni(activeMatch) ? "Alumni" : "Siswa";
     return { role, studentId: activeMatch.id, assignedClass: activeMatch.class };
   }
   if (regMatch) return { role: "Siswa", studentId: regMatch.id };

@@ -3,6 +3,7 @@ import { Users, BookOpen, Award, CheckCircle2, ChevronRight, BarChart, FileText,
 import { SystemState, UserAccount } from "../types";
 import { CHAPTERS_LIST, MATH_CHAPTERS_LIST } from "../chapters";
 import { computeSubjectAverage, filterGradedAssessmentsBySubject } from "../lib/scoreAveraging";
+import { isStudentAlumni } from "../lib/alumniStatus";
 
 interface SenseiDashboardViewProps {
   currentUser: UserAccount | null;
@@ -30,7 +31,7 @@ export default function SenseiDashboardView({ currentUser, systemState }: Sensei
       }
     }
     // Filter out alumni
-    list = list.filter(s => !["Lulus", "Di Jepang"].includes(s.status) && s.statusPendaftaran !== "Alumni");
+    list = list.filter(s => !isStudentAlumni(s));
     return list;
   }, [studentsList, isSensei, assignedClass]);
 

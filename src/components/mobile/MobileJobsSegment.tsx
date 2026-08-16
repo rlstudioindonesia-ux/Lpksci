@@ -3,6 +3,7 @@ import { InlineLoginPanel } from "../InlineLoginPanel";
 import { CheckCircle, FileText, MessageSquare, Award } from "lucide-react";
 import { SystemState, JobOrder, UserAccount } from "../../types";
 import { computeJobEligibility } from "../../lib/jobEligibility";
+import { isStudentAlumni } from "../../lib/alumniStatus";
 import { canStudentViewJob, computeJobAccess } from "../../lib/jobAccess";
 import { Briefcase, Building, MapPin, Users, Calendar, Banknote, ShieldAlert, CheckCircle2, ChevronRight, GraduationCap, Link as LinkIcon, Lock, Check } from "lucide-react";
 
@@ -38,7 +39,7 @@ export default function MobileJobsSegment({
   };
   // Helpers from main view
   const myActiveStudent = systemState?.activeStudents?.find(s => s.id === currentUser?.studentId || s.name === currentUser?.name);
-  const isUserAlumni = currentUser?.role === "Alumni" || myActiveStudent?.kategoriPendaftaran === "Alumni" || myActiveStudent?.statusPendaftaran === "Alumni";
+  const isUserAlumni = currentUser?.role === "Alumni" || isStudentAlumni(myActiveStudent);
   const stId = currentUser?.studentId || systemState.activeStudents?.find(s => s.name === currentUser?.name)?.id || "SIS-001";
   
   return (

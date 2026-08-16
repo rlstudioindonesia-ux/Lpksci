@@ -2,6 +2,7 @@ import { initializeApp, getApp, getApps } from 'firebase/app';
 import { getFirestore, doc, setDoc, getDocs, collection, getDoc, getDocFromServer, deleteDoc, query, where } from 'firebase/firestore';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { auth } from '../firebaseClient';
+import { isStudentAlumni } from '../lib/alumniStatus';
 import fs from 'fs';
 import path from 'path';
 import firebaseAppletConfig from '../../firebase-applet-config.json';
@@ -175,7 +176,7 @@ async function getUserFromFirestoreOnce(identifier: string): Promise<any | null>
 
     if (matchedActive) {
       const s = matchedActive;
-      const isAlumni = s.status === "Lulus" || s.status === "Di Jepang" || s.kategoriPendaftaran === "Alumni";
+      const isAlumni = isStudentAlumni(s);
       return {
         username: s.email ? s.email.trim().toLowerCase() : (s.id || raw),
         name: s.name,
