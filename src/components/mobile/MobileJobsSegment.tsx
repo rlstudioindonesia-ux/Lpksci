@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { InlineLoginPanel } from "../InlineLoginPanel";
 import { CheckCircle, FileText, MessageSquare, Award } from "lucide-react";
 import { SystemState, JobOrder, UserAccount } from "../../types";
+import { calculateAge } from "../../lib/dateUtils";
 import { Briefcase, Building, MapPin, Users, Calendar, Banknote, ShieldAlert, CheckCircle2, ChevronRight, GraduationCap, Link as LinkIcon, Lock, Check } from "lucide-react";
 
 interface MobileJobsSegmentProps {
@@ -353,7 +354,7 @@ export default function MobileJobsSegment({
                                       Dibutuhkan
                                     </span>
                                     <span className="font-bold text-slate-800">
-                                      {job.recruitCount || "6 siswa"}
+                                      {job.recruitCount || "Belum ditentukan"}
                                     </span>
                                   </div>
                                 </div>
@@ -801,7 +802,47 @@ export default function MobileJobsSegment({
                                               myGender = "";
 
                                             if (me && job) {
-                                              mathScore = me.mathScore ?? 0;
+                                              // Bahasa Jepang & Matematika are auto-computed elsewhere
+                                              // (Penilaian Kelayakan Order Job) from real chapter
+                                              // assessments once the student has graded chapters, but
+                                              // that computed average is display-only and never written
+                                              // back to me.japaneseScore/me.mathScore - so this
+                                              // eligibility check must compute it the same way instead
+                                              // of reading a stored field that stays stale/zero forever
+                                              // once assessments exist (mirrors JobsView.tsx desktop).
+                                              const myAssessments = (
+                                                systemState.chapterAssessments || []
+                                              ).filter(
+                                                (a) =>
+                                                  a.studentId === me.id ||
+                                                  (a.studentName && a.studentName === me.name),
+                                              );
+                                              const jpnAssessments = myAssessments.filter(
+                                                (a) =>
+                                                  (a.subject || "Bahasa Jepang") === "Bahasa Jepang" &&
+                                                  (a.status === "Telah Dinilai" || a.status === "Sudah Dinilai") &&
+                                                  typeof a.score === "number" &&
+                                                  !isNaN(a.score),
+                                              );
+                                              const mathAssessments = myAssessments.filter(
+                                                (a: any) =>
+                                                  (a.subject === "SSW" ||
+                                                    a.subject === "Matematika" ||
+                                                    a.subject === "SSW Matematika") &&
+                                                  (a.status === "Telah Dinilai" || a.status === "Sudah Dinilai") &&
+                                                  typeof a.score === "number" &&
+                                                  !isNaN(a.score),
+                                              );
+
+                                              mathScore =
+                                                mathAssessments.length > 0
+                                                  ? Math.round(
+                                                      mathAssessments.reduce(
+                                                        (acc, curr) => acc + (curr.score || 0),
+                                                        0,
+                                                      ) / mathAssessments.length,
+                                                    )
+                                                  : (me.mathScore ?? 0);
                                               fiveSScore = me.fiveSScore ?? 0;
                                               ethicsScore =
                                                 me.ethicsScore ?? 0;
@@ -896,7 +937,7 @@ export default function MobileJobsSegment({
                                                     ageMatches[1],
                                                   );
                                               }
-                                              myAge = me.age || 0;
+                                              myAge = calculateAge(me.birthDate) ?? me.age ?? 0;
 
                                               const jpnMatches = (
                                                 job.minJapaneseScore || "BAB 15"
@@ -907,7 +948,15 @@ export default function MobileJobsSegment({
                                                 minJpn = parseInt(
                                                   jpnMatches[1],
                                                 );
-                                              myJpn = me.japaneseScore || 0;
+                                              myJpn =
+                                                jpnAssessments.length > 0
+                                                  ? Math.round(
+                                                      jpnAssessments.reduce(
+                                                        (acc, curr) => acc + (curr.score || 0),
+                                                        0,
+                                                      ) / jpnAssessments.length,
+                                                    )
+                                                  : (me.japaneseScore || 0);
 
                                               reqGender =
                                                 job.gender?.toUpperCase() || "";
@@ -1231,7 +1280,26 @@ export default function MobileJobsSegment({
                                                         const reqFiveS = parseInt(job.minFiveSScore?.toString().replace(/\D/g, "") || "0");
                                                         const reqEthics = parseInt(job.minEthicsScore?.toString().replace(/\D/g, "") || "0");
                                                         const reqAttendance = parseInt(job.minAttendanceScore?.toString().replace(/\D/g, "") || "0");
-                                                        const mathScore = me.mathScore || 0;
+                                                        // Bahasa Jepang & Matematika are auto-computed from real
+                                                        // chapter assessments once graded (see JobsView.tsx desktop
+                                                        // eligibility check) - the stored fields stay stale/zero
+                                                        // forever once assessments exist, so recompute live here too.
+                                                        const myAssessments = (systemState.chapterAssessments || []).filter(
+                                                          (a) => a.studentId === me.id || (a.studentName && a.studentName === me.name)
+                                                        );
+                                                        const jpnAssessments = myAssessments.filter(
+                                                          (a) => (a.subject || "Bahasa Jepang") === "Bahasa Jepang" &&
+                                                                 (a.status === "Telah Dinilai" || a.status === "Sudah Dinilai") &&
+                                                                 typeof a.score === "number" && !isNaN(a.score)
+                                                        );
+                                                        const mathAssessments = myAssessments.filter(
+                                                          (a: any) => (a.subject === "SSW" || a.subject === "Matematika" || a.subject === "SSW Matematika") &&
+                                                                 (a.status === "Telah Dinilai" || a.status === "Sudah Dinilai") &&
+                                                                 typeof a.score === "number" && !isNaN(a.score)
+                                                        );
+                                                        const mathScore = mathAssessments.length > 0
+                                                          ? Math.round(mathAssessments.reduce((acc, curr) => acc + (curr.score || 0), 0) / mathAssessments.length)
+                                                          : (me.mathScore || 0);
                                                         const fiveSScore = me.fiveSScore || 0;
                                                         const ethicsScore = me.ethicsScore || 0;
                                                         const attendanceScore = me.attendanceScore || 0;
@@ -1240,7 +1308,7 @@ export default function MobileJobsSegment({
                                                         if (reqEthics > 0 && ethicsScore < reqEthics) isEligible = false;
                                                         if (reqAttendance > 0 && attendanceScore < reqAttendance) isEligible = false;
 
-                                                        let minTB = 0, maxTB = 0, myTB = (me as any).tinggiBadan || 0;
+                                                        let minTB = 0, maxTB = 0, myTB = me.tb || 0;
                                                         const tbMatches = (job.tbRequirement || "").toString().match(/(\d+)/g);
                                                         if (tbMatches && tbMatches.length > 0) {
                                                           minTB = parseInt(tbMatches[0]);
@@ -1249,7 +1317,7 @@ export default function MobileJobsSegment({
                                                         if (minTB > 0 && myTB > 0 && myTB < minTB) isEligible = false;
                                                         if (maxTB > 0 && myTB > 0 && myTB > maxTB) isEligible = false;
 
-                                                        let minBB = 0, maxBB = 0, myBB = (me as any).beratBadan || 0;
+                                                        let minBB = 0, maxBB = 0, myBB = me.bb || 0;
                                                         const bbMatches = (job.bbRequirement || "").toString().match(/(\d+)/g);
                                                         if (bbMatches && bbMatches.length > 0) {
                                                           minBB = parseInt(bbMatches[0]);
@@ -1258,7 +1326,7 @@ export default function MobileJobsSegment({
                                                         if (minBB > 0 && myBB > 0 && myBB < minBB) isEligible = false;
                                                         if (maxBB > 0 && myBB > 0 && myBB > maxBB) isEligible = false;
 
-                                                        let minAge = 0, maxAge = 0, myAge = me.age || 0;
+                                                        let minAge = 0, maxAge = 0, myAge = calculateAge(me.birthDate) ?? me.age ?? 0;
                                                         const ageMatches = (job.ageRequirement || "").toString().match(/(\d+)/g);
                                                         if (ageMatches && ageMatches.length > 0) {
                                                           minAge = parseInt(ageMatches[0]);
@@ -1267,7 +1335,9 @@ export default function MobileJobsSegment({
                                                         if (minAge > 0 && myAge > 0 && myAge < minAge) isEligible = false;
                                                         if (maxAge > 0 && myAge > 0 && myAge > maxAge) isEligible = false;
 
-                                                        let minJpn = 0, myJpn = me.japaneseScore || 0;
+                                                        let minJpn = 0, myJpn = jpnAssessments.length > 0
+                                                          ? Math.round(jpnAssessments.reduce((acc, curr) => acc + (curr.score || 0), 0) / jpnAssessments.length)
+                                                          : (me.japaneseScore || 0);
                                                         const jpnMatches = (job.minJapaneseScore || "BAB 15").toString().match(/(\d+)/);
                                                         if (jpnMatches && jpnMatches[1]) minJpn = parseInt(jpnMatches[1]);
                                                         if (minJpn > 0 && myJpn < minJpn) isEligible = false;

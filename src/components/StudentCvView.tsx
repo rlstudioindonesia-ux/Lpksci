@@ -252,7 +252,7 @@ export default function StudentCvView({
         age: student.age || prev.age,
         profilePicture: student.profilePicture || prev.profilePicture,
         phone: student.phone || prev.phone || "",
-        birthDate: student.date ? student.date : prev.birthDate,
+        birthDate: student.birthDate ? student.birthDate : prev.birthDate,
       }));
     }
   };
