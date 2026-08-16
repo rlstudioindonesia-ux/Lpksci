@@ -890,7 +890,32 @@ async function startServer() {
     try {
       testConnection();
       console.log("Synchronizing memory state with Firebase Firestore...");
-      const loadedState = await loadStateFromFirestore(state);
+
+      // fetchSafeCollection already retries each individual collection, but
+      // if the WHOLE bootstrap round-trip comes back empty (auth token not
+      // yet warm on a brand-new instance, a transient regional blip, etc.)
+      // loadStateFromFirestore just returns the in-memory `state` unchanged
+      // - which on a fresh Cloud Run instance means activeStudents/users
+      // start out genuinely empty. Since this only ever ran once per
+      // instance lifetime, an instance that hit this on its one shot would
+      // serve 0 students/users for its entire life until Cloud Run
+      // recycled it - matching real reports of sync "sering terputus
+      // ditengah-tengah" (frequently dropping mid-use), worst right after a
+      // deploy since that always spins up fresh instances. Retry the full
+      // bootstrap a few times with backoff before accepting an empty
+      // result as final.
+      let loadedState: any = null;
+      const maxBootAttempts = 4;
+      for (let attempt = 1; attempt <= maxBootAttempts; attempt++) {
+        loadedState = await loadStateFromFirestore(state);
+        const gotRealData =
+          (Array.isArray(loadedState?.activeStudents) && loadedState.activeStudents.length > 0) ||
+          (Array.isArray(loadedState?.users) && loadedState.users.length > 0);
+        if (gotRealData || attempt === maxBootAttempts) break;
+        console.warn(`⚠️ Firestore bootstrap attempt ${attempt}/${maxBootAttempts} returned no data, retrying...`);
+        await new Promise((r) => setTimeout(r, 2000 * attempt));
+      }
+
       if (loadedState) {
         // Non-destructive merge onto memory state so no data is ever lost
         Object.keys(loadedState).forEach((key) => {
