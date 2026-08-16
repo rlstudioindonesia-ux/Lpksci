@@ -555,6 +555,9 @@ export interface SystemState {
     };
     paymentAccounts?: { bankName: string; accountNumber: string; holderName: string }[];
     runningText?: string;
+    latestApkVersion?: string;
+    apkUpdateNotes?: string;
+    playStoreUrl?: string;
     slides: {
       id: number;
       tag: string;
