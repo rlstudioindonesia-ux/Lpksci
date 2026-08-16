@@ -10,6 +10,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { uploadFileToFirebase, getEmbeddablePdfUrl } from "../lib/storageHelper";
 import { resolveAttendanceScore } from "../lib/attendanceMetrics";
 import { computeSubjectAverage } from "../lib/scoreAveraging";
+import { hasStaffOversight } from "../lib/permissions";
 
 interface ProgressBelajarViewProps {
   currentUser: UserAccount | null;
@@ -84,7 +85,7 @@ export default function ProgressBelajarView({
 
   const [saveSuccessMsg, setSaveSuccessMsg] = useState("");
 
-  const isStaff = currentUser?.role === "Pengajar" || currentUser?.role === "Admin" || currentUser?.role === "Admin Super" || currentUser?.role === "Admin Biasa" || currentUser?.role === "VVIP";
+  const isStaff = hasStaffOversight(currentUser?.role);
 
   // Filter students
   const filteredStudents = (systemState?.activeStudents || []).filter(student => {

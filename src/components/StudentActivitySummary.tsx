@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Activity, ChevronDown, ChevronUp, Clock } from "lucide-react";
 import { isStudentAlumni, isAlumniClassName } from "../lib/alumniStatus";
+import { hasStaffOversight } from "../lib/permissions";
 
 const STAGE_STYLES: Record<string, string> = {
   "Tertarik": "bg-slate-100 text-slate-600 border-slate-200",
@@ -50,11 +51,8 @@ export const StudentActivitySummary = ({ systemState }: { systemState: any }) =>
       u.studentId === st.id ||
       (u.name && st.name && u.name.trim().toLowerCase() === st.name.trim().toLowerCase())
     );
-    if (matchedUser) {
-      const role = matchedUser.role;
-      if (role === "Pengajar" || role === "Admin" || role === "Admin Super" || role === "Admin Biasa" || role === "VVIP") {
-        return false;
-      }
+    if (matchedUser && hasStaffOversight(matchedUser.role)) {
+      return false;
     }
     return true;
   });
