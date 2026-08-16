@@ -4,6 +4,7 @@ import { createSvgAvatar, getSafePhotoUrl } from "../../lib/storageHelper";
 import { calculateAge } from "../../lib/dateUtils";
 import { computeAttendanceRate } from "../../lib/attendanceMetrics";
 import { isGradedAssessment } from "../../lib/scoreAveraging";
+import { hasStaffOversight } from "../../lib/permissions";
 import { Bar, BarChart, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
 interface VvipFullEvalSegmentProps {
@@ -100,7 +101,7 @@ export default function VvipFullEvalSegment({ activeStudents, classFilter, class
                   }`}
                 >
                   <BookOpen className="h-3.5 w-3.5" />
-                  <span>Pantau Sensei ({systemState.users?.filter(u => ["Pengajar", "Admin", "Admin Biasa", "Admin Super", "Staf"].includes(u.role)).length || 0})</span>
+                  <span>Pantau Sensei ({systemState.users?.filter(u => hasStaffOversight(u.role)).length || 0})</span>
                 </button>
                 <button
                   id="vvip-mon-tab-materi"
@@ -1595,7 +1596,7 @@ export default function VvipFullEvalSegment({ activeStudents, classFilter, class
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
-                    {(systemState.users || []).filter(u => ["Pengajar", "Admin", "Admin Biasa", "Admin Super", "Staf"].includes(u.role)).map(teacher => {
+                    {(systemState.users || []).filter(u => hasStaffOversight(u.role)).map(teacher => {
                         const assignedClasses = (systemState.customization?.lmsClasses || []).filter(c => c.isActive && (c.name === teacher.assignedClass || teacher.assignedClass?.includes(c.name)));
                         const koreksiCount = (systemState.chapterAssessments || []).filter(a => a.assessedBy === teacher.name && a.status === "Telah Dinilai").length;
                         const presensiCount = (systemState.logs || []).filter(l => l.user === teacher.name && l.type === "PRESENSI_PENGAJAR").length;
@@ -1660,7 +1661,7 @@ export default function VvipFullEvalSegment({ activeStudents, classFilter, class
             {/* TAB: MONITORING MATERI (LMS E-Benkyou progress, merged from the old standalone LMS monitoring page) */}
             {monitorTab === ("materi" as any) && (() => {
               const activeSiswaOnly = (systemState.activeStudents || []).filter(s => !["Lulus", "Di Jepang"].includes(s.status || ""));
-              const senseiCount = (systemState.users || []).filter(u => ["Pengajar", "Admin", "Admin Biasa", "Admin Super", "Staf"].includes(u.role)).length || 0;
+              const senseiCount = (systemState.users || []).filter(u => hasStaffOversight(u.role)).length || 0;
               const allScores: number[] = [];
               activeSiswaOnly.forEach(s => {
                 if ((s as any).scores) Object.values((s as any).scores).forEach((v: any) => allScores.push(v));
@@ -1754,7 +1755,7 @@ export default function VvipFullEvalSegment({ activeStudents, classFilter, class
                               .map((className, i) => {
                                 const classUsers = (systemState.users || []).filter(u => u.assignedClass === className);
                                 const classStudents = (systemState.activeStudents || []).filter(s => (s.class === className || (s as any).assignedClass === className) && !["Lulus", "Di Jepang"].includes(s.status || ""));
-                                const classSensei = classUsers.filter(u => ["Pengajar", "Admin", "Admin Biasa", "Admin Super", "Staf"].includes(u.role));
+                                const classSensei = classUsers.filter(u => hasStaffOversight(u.role));
                                 const classProgressList = studentProgress(classStudents);
                                 const avgProgress = classProgressList.length > 0 ? Math.round(classProgressList.reduce((a, b) => a + b, 0) / classProgressList.length) : 0;
                                 const displayBab = (() => {
@@ -1924,7 +1925,7 @@ export default function VvipFullEvalSegment({ activeStudents, classFilter, class
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
-                        {(systemState.users || []).filter(u => ["Pengajar", "Admin", "Admin Biasa", "Admin Super", "Staf"].includes(u.role)).map(u => {
+                        {(systemState.users || []).filter(u => hasStaffOversight(u.role)).map(u => {
                           const staffLogs = (systemState.logs || []).filter(l => l.type === "PRESENSI_PENGAJAR" && (l.user === u.name || l.user === u.username));
                           const hadir = staffLogs.length;
                           let onTime = 0;
@@ -1991,7 +1992,7 @@ export default function VvipFullEvalSegment({ activeStudents, classFilter, class
                         </tr> 
                       </thead> 
                       <tbody className="divide-y divide-slate-100"> 
-                        {(systemState.users || []).filter(u => ["Pengajar", "Admin", "Admin Biasa", "Admin Super", "Staf"].includes(u.role)).map(u => ( 
+                        {(systemState.users || []).filter(u => hasStaffOversight(u.role)).map(u => ( 
                           <tr key={u.username}> 
                             <td className="p-3 font-bold text-slate-700">{u.name}</td> 
                             <td className="p-3 text-slate-600 font-mono">{u.bankAccount || "-"}</td> 
