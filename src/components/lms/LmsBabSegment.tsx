@@ -2,7 +2,7 @@ import React from "react";
 import { Award, BookOpen, Calculator, ChevronDown, ChevronUp, Download, Edit3, FileText, GraduationCap, Lock, PanelLeftClose, Plus, RefreshCw, Trash2, Unlock, Upload, Volume2 } from "lucide-react";
 import { downloadFile, uploadFileToFirebase } from "../../lib/storageHelper";
 import { isAlumniClassName } from "../../lib/alumniStatus";
-import { CBTTimer } from "../LmsView.tsx";
+import { CBTTimer } from "../LmsView";
 
 interface LmsBabSegmentProps {
   activeStudentClass: any;

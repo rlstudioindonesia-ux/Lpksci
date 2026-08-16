@@ -4,7 +4,7 @@ import { GoogleAuthProvider, signInWithPopup } from "firebase/auth";
 import { auth } from "../../firebaseClient";
 import { createSvgAvatar, getSafePhotoUrl } from "../../lib/storageHelper";
 import { resolveGoogleSignupRole } from "../../lib/googleAuthProvisioning";
-import { isAndroidWebView } from "../MobileDashboardView.tsx";
+import { isAndroidWebView } from "../MobileDashboardView";
 
 interface MobileBerandaSubpageProps {
   currentMobileSlide: any;

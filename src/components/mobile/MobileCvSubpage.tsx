@@ -1,6 +1,6 @@
 import React from "react";
 import { AlertCircle, FileText } from "lucide-react";
-import { StudentCvView } from "../MobileDashboardView.tsx";
+import { StudentCvView } from "../MobileDashboardView";
 
 interface MobileCvSubpageProps {
   currentUser: any;

@@ -1,6 +1,6 @@
 import React from "react";
 import { Activity, BookOpen, Calendar, Check, Clock, Crown, Eye, FileText, GraduationCap, MessageCircle, MessageSquare, ShieldAlert, Users, X } from "lucide-react";
-import { formatRupiah, parsePrice } from "../MobileDashboardView.tsx";
+import { formatRupiah, parsePrice } from "../MobileDashboardView";
 import { matchesClassLevel, alumniClassNameFor, resolveClassQuota } from "../../lib/classQuota";
 
 interface MobilePilihKelasSubpageProps {

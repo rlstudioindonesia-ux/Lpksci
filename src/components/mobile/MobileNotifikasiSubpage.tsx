@@ -1,6 +1,6 @@
 import React from "react";
 import { Bell } from "lucide-react";
-import { formatDateIndo, getZoomAppLink } from "../MobileDashboardView.tsx";
+import { formatDateIndo, getZoomAppLink } from "../MobileDashboardView";
 
 interface MobileNotifikasiSubpageProps {
   currentUser: any;
