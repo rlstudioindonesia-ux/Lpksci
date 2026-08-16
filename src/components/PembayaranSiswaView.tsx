@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { SystemState, UserAccount, PaymentRecord } from "../types";
 import { uploadFileToFirebase } from "../lib/storageHelper";
 import { isStudentAlumni } from "../lib/alumniStatus";
+import { matchesPaymentCategory, categorizePaymentBucket } from "../lib/paymentCategoryMatching";
 import { 
   CreditCard, Search, CheckCircle, AlertCircle, TrendingUp, 
   DollarSign, Clock, Users, ArrowRight, ShieldCheck, PieChart, Info,
@@ -145,18 +146,9 @@ export function getStudentPayments(
       const defaultId = `PAY-${studentClean.slice(0, 6)}-${cat.idSuffix}`;
 
       // All actual payments in DB that match this default category
-      const matching = studentActualPayments.filter(p => {
-        if (p.id === defaultId) return true;
-        const pCatLower = (p.category || "").toLowerCase();
-        const catLower = cat.category.toLowerCase();
-
-        return pCatLower.includes(catLower) || 
-               catLower.includes(pCatLower) ||
-               (cat.category.includes("Pendaftaran") && pCatLower.includes("pendaftaran")) ||
-               (cat.category.includes("DP Biaya Belajar") && (pCatLower.includes("pelatihan") || pCatLower.includes("asrama") || pCatLower.includes("dp"))) ||
-               (cat.category.includes("Pelunasan") && pCatLower.includes("pelunasan")) ||
-               (cat.category.includes("Manajemen") && pCatLower.includes("manajemen"));
-      });
+      const matching = studentActualPayments.filter(p =>
+        p.id === defaultId || matchesPaymentCategory(p.category, cat.category)
+      );
 
       // Check if user explicitly deleted this category
       const isExplicitlyDeleted = matching.some(p => p.isDeleted || p.status === "Dihapus" || p.status === "Dibatalkan");
@@ -197,17 +189,7 @@ export function getStudentPayments(
     // Skip if already pushed into result
     if (result.some(r => r.id === p.id)) return;
 
-    const matchesAnyDefault = defaultCategories.some(cat => {
-      const pCatLower = (p.category || "").toLowerCase();
-      const catLower = cat.category.toLowerCase();
-
-      return pCatLower.includes(catLower) || 
-             catLower.includes(pCatLower) ||
-             (cat.category.includes("Pendaftaran") && pCatLower.includes("pendaftaran")) ||
-             (cat.category.includes("DP Biaya Belajar") && (pCatLower.includes("pelatihan") || pCatLower.includes("asrama") || pCatLower.includes("dp"))) ||
-             (cat.category.includes("Pelunasan") && pCatLower.includes("pelunasan")) ||
-             (cat.category.includes("Manajemen") && pCatLower.includes("manajemen"));
-    });
+    const matchesAnyDefault = defaultCategories.some(cat => matchesPaymentCategory(p.category, cat.category));
 
     if (!matchesAnyDefault) {
       result.push(p);
@@ -584,23 +566,11 @@ export default function PembayaranSiswaView({
         totalPendingVerification += 1;
       }
 
-      const pCatLower = p.category.toLowerCase();
-      if (pCatLower.includes("pendaftaran") || pCatLower.includes("administrasi")) {
-        categoryStats["Administrasi Pendaftaran"].total += amount;
-        if (isLunas) categoryStats["Administrasi Pendaftaran"].lunas += amount;
-        else categoryStats["Administrasi Pendaftaran"].tunggakan += amount;
-      } else if (pCatLower.includes("dp") || pCatLower.includes("awal")) {
-        categoryStats["DP Biaya Belajar"].total += amount;
-        if (isLunas) categoryStats["DP Biaya Belajar"].lunas += amount;
-        else categoryStats["DP Biaya Belajar"].tunggakan += amount;
-      } else if (pCatLower.includes("pelunasan") || pCatLower.includes("cicilan") || pCatLower.includes("satu") || pCatLower.includes("1")) {
-        categoryStats["Pelunasan Biaya Belajar"].total += amount;
-        if (isLunas) categoryStats["Pelunasan Biaya Belajar"].lunas += amount;
-        else categoryStats["Pelunasan Biaya Belajar"].tunggakan += amount;
-      } else if (pCatLower.includes("manajemen") || pCatLower.includes("management") || pCatLower.includes("fee")) {
-        categoryStats["Manajemen Fee"].total += amount;
-        if (isLunas) categoryStats["Manajemen Fee"].lunas += amount;
-        else categoryStats["Manajemen Fee"].tunggakan += amount;
+      const bucket = categorizePaymentBucket(p.category);
+      if (bucket) {
+        categoryStats[bucket].total += amount;
+        if (isLunas) categoryStats[bucket].lunas += amount;
+        else categoryStats[bucket].tunggakan += amount;
       }
     });
   });
