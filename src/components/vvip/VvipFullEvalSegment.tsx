@@ -3,6 +3,7 @@ import { Activity, Award, BookOpen, Calculator, CheckCircle, ChevronRight, Clock
 import { createSvgAvatar, getSafePhotoUrl } from "../../lib/storageHelper";
 import { calculateAge } from "../../lib/dateUtils";
 import { computeAttendanceRate } from "../../lib/attendanceMetrics";
+import { isGradedAssessment } from "../../lib/scoreAveraging";
 import { Bar, BarChart, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
 interface VvipFullEvalSegmentProps {
@@ -1027,11 +1028,11 @@ export default function VvipFullEvalSegment({ activeStudents, classFilter, class
                                     const { rate } = computeAttendanceRate(student, systemState.attendance);
 
                                     const studentAsss = (systemState.chapterAssessments || []).filter((c) => c.studentId === student.id);
-                                    const gradedAsss = studentAsss.filter((c) => c.status === "Telah Dinilai");
+                                    const gradedAsss = studentAsss.filter(isGradedAssessment);
                                     const lastBab = gradedAsss.length > 0 ? Math.max(...gradedAsss.map((c) => c.chapterNumber || 0)) : 0;
-    
+
                                     const avgScoreInRange = (min: number, max: number) => {
-                                      const inRange = gradedAsss.filter((c) => (c.chapterNumber || 0) >= min && (c.chapterNumber || 0) <= max && typeof c.score === "number");
+                                      const inRange = gradedAsss.filter((c) => (c.chapterNumber || 0) >= min && (c.chapterNumber || 0) <= max);
                                       if (inRange.length === 0) return null;
                                       return Math.round(inRange.reduce((acc, c) => acc + (c.score || 0), 0) / inRange.length);
                                     };

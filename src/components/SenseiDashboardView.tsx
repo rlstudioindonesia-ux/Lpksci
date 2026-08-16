@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Users, BookOpen, Award, CheckCircle2, ChevronRight, BarChart, FileText, Search } from "lucide-react";
 import { SystemState, UserAccount } from "../types";
 import { CHAPTERS_LIST, MATH_CHAPTERS_LIST } from "../chapters";
+import { computeSubjectAverage, filterGradedAssessmentsBySubject } from "../lib/scoreAveraging";
 
 interface SenseiDashboardViewProps {
   currentUser: UserAccount | null;
@@ -68,6 +69,7 @@ export default function SenseiDashboardView({ currentUser, systemState }: Sensei
   const assessments = systemState.chapterAssessments || [];
   
   const currentSubjectChapters = selectedSubject === "SSW" ? MATH_CHAPTERS_LIST : CHAPTERS_LIST;
+  const currentSubjectGroup = selectedSubject === "SSW" ? "Matematika" : "Bahasa Jepang";
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto w-full animate-fade-in">
@@ -165,11 +167,13 @@ export default function SenseiDashboardView({ currentUser, systemState }: Sensei
                 </tr>
               ) : (
                 paginatedStudents.map(student => {
-                  const studentEvals = assessments.filter(a => a.studentId === student.id && (a.subject || "Bahasa Jepang") === selectedSubject && a.status === "Telah Dinilai");
+                  const studentEvals = filterGradedAssessmentsBySubject(assessments, student, currentSubjectGroup);
                   const totalBab = currentSubjectChapters.length;
                   const completedBabCount = studentEvals.length;
-                  const validScores = studentEvals.filter(a => a.score !== undefined).map(a => a.score as number);
-                  const averageScore = validScores.length > 0 ? Math.round(validScores.reduce((a, b) => a + b, 0) / validScores.length) : 0;
+                  const averageScore =
+                    studentEvals.length > 0
+                      ? Math.round(studentEvals.reduce((acc, c) => acc + (c.score || 0), 0) / studentEvals.length)
+                      : 0;
                   
                   return (
                     <tr key={student.id} className="hover:bg-slate-50/50 transition-colors">
