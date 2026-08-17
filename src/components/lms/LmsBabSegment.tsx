@@ -1,5 +1,5 @@
 import React from "react";
-import { Award, BookOpen, Calculator, ChevronDown, ChevronUp, Download, Edit3, FileText, GraduationCap, Lock, PanelLeftClose, Plus, RefreshCw, Trash2, Unlock, Upload, Volume2 } from "lucide-react";
+import { Award, BookOpen, Calculator, ChevronDown, ChevronUp, Download, Edit3, ExternalLink, FileText, GraduationCap, Lock, PanelLeftClose, Plus, RefreshCw, Trash2, Unlock, Upload, Volume2 } from "lucide-react";
 import { downloadFile, uploadFileToFirebase } from "../../lib/storageHelper";
 import { isAlumniClassName } from "../../lib/alumniStatus";
 import { CBTTimer } from "../LmsView";
@@ -791,8 +791,23 @@ export default function LmsBabSegment({ activeStudentClass, activeStudents, allC
                                                 )}
     
                                                 {lesson.contentType === "slide" && lesson.slidesUrl && (
-                                                  <div className="relative aspect-video sm:aspect-[16/9] w-full rounded-xl overflow-hidden border border-slate-200 shadow-3xs bg-slate-50">
-                                                    <iframe src={lesson.slidesUrl} className="absolute top-0 left-0 w-full h-full animate-fade-in" style={{ objectFit: 'contain' }} allowFullScreen referrerPolicy="no-referrer" title={lesson.title} />
+                                                  <div className="space-y-2">
+                                                    <div className="flex items-center justify-between gap-2 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
+                                                      <span className="text-[10px] text-slate-500 font-semibold truncate">
+                                                        Jika slide di bawah tidak bisa dimuat (butuh akses), buka langsung di tab baru.
+                                                      </span>
+                                                      <button
+                                                        type="button"
+                                                        onClick={() => window.open(lesson.slidesUrl, "_blank", "noopener,noreferrer")}
+                                                        className="flex items-center gap-1 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 text-[10px] font-bold px-2.5 py-1.5 rounded-lg transition active:scale-95 shadow-2xs shrink-0 cursor-pointer"
+                                                      >
+                                                        <ExternalLink className="w-3 h-3" />
+                                                        <span>Tab Baru</span>
+                                                      </button>
+                                                    </div>
+                                                    <div className="relative aspect-video sm:aspect-[16/9] w-full rounded-xl overflow-hidden border border-slate-200 shadow-3xs bg-slate-50">
+                                                      <iframe src={lesson.slidesUrl} className="absolute top-0 left-0 w-full h-full animate-fade-in" style={{ objectFit: 'contain' }} allowFullScreen referrerPolicy="no-referrer" title={lesson.title} />
+                                                    </div>
                                                   </div>
                                                 )}
     
