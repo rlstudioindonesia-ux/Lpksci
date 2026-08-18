@@ -1141,7 +1141,7 @@ export default function MobileDashboardView({
               {activeSubpage === "jobs" && "Order Job Tokutei Ginou"}
               {activeSubpage === "perkembangan" && "Data Progress Siswa"}
               {(activeSubpage === "ebenkyou") && "LMS E-Benkyou Kelas"}
-              {activeSubpage === "pembayaran" && (currentUser?.role === "VVIP" ? "Pembayaran Siswa" : (currentUser?.role === "Pengajar" || currentUser?.role?.startsWith("Admin")) ? "HR & Personalia" : "Dashboard Pembayaran")}
+              {activeSubpage === "pembayaran" && ((currentUser?.role === "VVIP" || currentUser?.role?.startsWith("Admin")) ? "Pembayaran Siswa" : currentUser?.role === "Pengajar" ? "HR & Personalia" : "Dashboard Pembayaran")}
               {activeSubpage === "peta" && "Peta Sebaran Alumni LPK"}
               {activeSubpage === "galeri" && "Galeri Foto Pembelajaran"}
               {activeSubpage === "medsos" && "Media Sosial Resmi LPK"}
