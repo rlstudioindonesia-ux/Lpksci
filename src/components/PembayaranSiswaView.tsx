@@ -4,7 +4,7 @@ import { SystemState, UserAccount, PaymentRecord } from "../types";
 import { uploadFileToFirebase } from "../lib/storageHelper";
 import { isStudentAlumni } from "../lib/alumniStatus";
 import { matchesPaymentCategory, categorizePaymentBucket } from "../lib/paymentCategoryMatching";
-import { isAdminOrVvip as isAdminOrVvipRole } from "../lib/permissions";
+import { isAdminOrVvip as isAdminOrVvipRole, isAdminTier } from "../lib/permissions";
 import { 
   CreditCard, Search, CheckCircle, AlertCircle, TrendingUp, 
   DollarSign, Clock, Users, ArrowRight, ShieldCheck, PieChart, Info,
@@ -431,11 +431,14 @@ export default function PembayaranSiswaView({
     );
   }
 
-  // Check if teacher/staff is redirected to TeacherDashboardPanel.
-  // Alumni are NOT staff - they must fall through to the personal
-  // "Portal Tagihan Mandiri" below like any other student, not this
-  // internal HR/attendance/salary panel.
-  const isPersonalStaff = currentUser.role === "Pengajar";
+  // Check if teacher/staff is redirected to TeacherDashboardPanel for their
+  // own personal attendance/salary/leave. Admin-tier staff (Admin, Admin
+  // Super, Admin Biasa) need this too - they clock in daily just like
+  // Pengajar - so they're included here. VVIP is the business owner, not
+  // day-to-day staff, so they keep the full financial oversight view below
+  // instead. Alumni are NOT staff either - they fall through to the
+  // personal "Portal Tagihan Mandiri" like any other student.
+  const isPersonalStaff = currentUser.role === "Pengajar" || isAdminTier(currentUser.role);
 
   if (isPersonalStaff) {
     return (

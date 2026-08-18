@@ -2,7 +2,7 @@ import React from "react";
 import { Image as ImageIcon, Lock } from "lucide-react";
 import { getStudentPayments } from "../PembayaranSiswaView";
 import { TeacherDashboardPanel } from "../TeacherDashboardPanel";
-import { isAdminOrVvip } from "../../lib/permissions";
+import { isAdminTier } from "../../lib/permissions";
 
 interface MobilePembayaranSubpageProps {
   currentUser: any;
@@ -19,16 +19,16 @@ export default function MobilePembayaranSubpage({ currentUser, handleUpdateState
   return (
     <div className="p-4 space-y-4 text-left">
                   <h3 className="font-sans font-black text-slate-900 border-b pb-2 text-md">
-                    {currentUser && isAdminOrVvip(currentUser.role)
+                    {currentUser && currentUser.role === "VVIP"
                       ? "Pembayaran Siswa"
-                      : currentUser && currentUser.role === "Pengajar"
+                      : currentUser && (currentUser.role === "Pengajar" || isAdminTier(currentUser.role))
                       ? "HR & Personalia"
                       : "Pembayaran & Booking Online"}
                   </h3>
                   <p className="text-xs text-slate-500">
-                    {currentUser && isAdminOrVvip(currentUser.role)
+                    {currentUser && currentUser.role === "VVIP"
                       ? "Pantau status pembayaran, tunggakan, dan riwayat transaksi seluruh siswa LPK."
-                      : currentUser && currentUser.role === "Pengajar"
+                      : currentUser && (currentUser.role === "Pengajar" || isAdminTier(currentUser.role))
                       ? "Kelola kehadiran, gaji, cuti, dan rekapitulasi data staff LPK."
                       : "Pantau riwayat pembayaran dan tagihan Anda untuk program pelatihan di LPK."}
                   </p>
@@ -54,8 +54,8 @@ export default function MobilePembayaranSubpage({ currentUser, handleUpdateState
                         Buka Portal Login
                       </button>
                     </div>
-                  ) : isAdminOrVvip(currentUser.role) ? (
-                    /* ADMIN & VVIP WORKFLOW: STATS & STUDENT REKAP FILTER */
+                  ) : currentUser.role === "VVIP" ? (
+                    /* VVIP WORKFLOW: STATS & STUDENT REKAP FILTER */
                     <div className="space-y-4 animate-fade-in text-xs font-sans">
                       {(() => {
                         const allStudentNames = Array.from(
@@ -228,8 +228,8 @@ export default function MobilePembayaranSubpage({ currentUser, handleUpdateState
                         );
                       })()}
                     </div>
-                  ) : currentUser.role === "Pengajar" ? (
-                    /* TEACHER PERSONAL WORKFLOW: ATTENDANCE, SALARY, CUTI */
+                  ) : currentUser.role === "Pengajar" || isAdminTier(currentUser.role) ? (
+                    /* STAFF PERSONAL WORKFLOW: ATTENDANCE, SALARY, CUTI */
                     <TeacherDashboardPanel
                       currentUser={currentUser}
                       systemState={systemState}
