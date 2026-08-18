@@ -445,7 +445,7 @@ export function TeacherDashboardPanel({
   return (
     <div className="space-y-6 max-w-4xl mx-auto w-full p-4 sm:p-6 text-left">
       <div className="bg-gradient-to-r from-sky-700 to-indigo-800 text-white rounded-3xl p-6 shadow-md relative overflow-hidden">
-        <h3 className="font-sans font-black text-2xl relative z-10">Portal Pengajar (Sensei)</h3>
+        <h3 className="font-sans font-black text-2xl relative z-10">{currentUser.role === "Pengajar" ? "Portal Pengajar (Sensei)" : "Portal Staf & Admin"}</h3>
         <p className="text-sm text-sky-100 mt-2 relative z-10">Kelola kehadiran, gaji, cuti, dan laporan Anda di sini.</p>
       </div>
 
