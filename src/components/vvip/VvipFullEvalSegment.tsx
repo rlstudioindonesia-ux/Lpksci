@@ -5,7 +5,7 @@ import { calculateAge } from "../../lib/dateUtils";
 import { computeAttendanceRate } from "../../lib/attendanceMetrics";
 import { isGradedAssessment } from "../../lib/scoreAveraging";
 import { hasStaffOversight } from "../../lib/permissions";
-import { formatPayrollPeriodLabel, generateRecentPayrollPeriods, isTimestampInPayrollPeriod } from "../../lib/staffAttendancePeriod";
+import { countWorkingDaysInPayrollPeriod, formatPayrollPeriodLabel, generateRecentPayrollPeriods, isTimestampInPayrollPeriod } from "../../lib/staffAttendancePeriod";
 import { Bar, BarChart, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
 interface VvipFullEvalSegmentProps {
@@ -1932,17 +1932,20 @@ export default function VvipFullEvalSegment({ activeStudents, classFilter, class
                     </div>
                   </div>
                   <div className="overflow-x-auto -mx-5 px-5 sm:mx-0 sm:px-0">
-                    <table className="w-full text-left text-xs min-w-[560px]">
+                    <table className="w-full text-left text-xs min-w-[660px]">
                       <thead className="bg-slate-50 text-slate-500 text-[10px] uppercase tracking-wide">
                         <tr>
                           <th className="p-3 rounded-l-xl">Nama & Role</th>
                           <th className="p-3 text-center">Hadir</th>
+                          <th className="p-3 text-center">Tidak Hadir</th>
                           <th className="p-3 text-center">Ketepatan Waktu</th>
                           <th className="p-3 rounded-r-xl text-right">Aksi</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
-                        {(systemState.users || []).filter(u => hasStaffOversight(u.role)).map(u => {
+                        {(() => {
+                          const workingDays = countWorkingDaysInPayrollPeriod(hrAttendancePeriod);
+                          return (systemState.users || []).filter(u => hasStaffOversight(u.role)).map(u => {
                           const staffLogs = (systemState.logs || []).filter(l => l.type === "PRESENSI_PENGAJAR" && (l.user === u.name || l.user === u.username) && isTimestampInPayrollPeriod(l.timestamp || l.time, hrAttendancePeriod));
                           let onTime = 0;
                           let checkIns = 0;
@@ -1965,11 +1968,12 @@ export default function VvipFullEvalSegment({ activeStudents, classFilter, class
                           // each real work day writes both a MASUK and a PULANG entry, so
                           // counting staffLogs.length would double every attended day.
                           const hadir = checkIns;
+                          const tidakHadir = Math.max(0, workingDays - hadir);
                           const punctuality = checkIns > 0 ? Math.round((onTime / checkIns) * 100) : null;
-                          return { u, hadir, punctuality };
-                        })
-                        .sort((a, b) => b.hadir - a.hadir)
-                        .map(({ u, hadir, punctuality }) => {
+                          return { u, hadir, tidakHadir, punctuality };
+                          })
+                          .sort((a, b) => b.hadir - a.hadir)
+                          .map(({ u, hadir, tidakHadir, punctuality }) => {
                           return (
                             <tr
                               key={u.username}
@@ -1982,6 +1986,10 @@ export default function VvipFullEvalSegment({ activeStudents, classFilter, class
                               </td>
                               <td className="p-3 text-center">
                                 <span className="font-black text-emerald-600">{hadir}</span>
+                                <span className="text-slate-400 font-medium"> Hari</span>
+                              </td>
+                              <td className="p-3 text-center">
+                                <span className={`font-black ${tidakHadir > 0 ? "text-rose-600" : "text-slate-400"}`}>{tidakHadir}</span>
                                 <span className="text-slate-400 font-medium"> Hari</span>
                               </td>
                               <td className="p-3 text-center">
@@ -2000,7 +2008,8 @@ export default function VvipFullEvalSegment({ activeStudents, classFilter, class
                               </td>
                             </tr>
                           );
-                        })}
+                          });
+                        })()}
                       </tbody>
                     </table>
                   </div>

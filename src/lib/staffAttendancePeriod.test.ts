@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  countWorkingDaysInPayrollPeriod,
   formatPayrollPeriodLabel,
   generateRecentPayrollPeriods,
   getCurrentPayrollPeriodKey,
@@ -67,6 +68,24 @@ describe("formatPayrollPeriodLabel", () => {
 
   it("rolls the year forward for a December period", () => {
     expect(formatPayrollPeriodLabel("2026-12")).toBe("21 Desember - 20 Januari 2027");
+  });
+});
+
+describe("countWorkingDaysInPayrollPeriod", () => {
+  it("counts Mon-Fri days across the full 21 Jul - 20 Aug 2026 period once it has fully elapsed", () => {
+    // Jul 21 2026 is a Tuesday, Aug 20 2026 is a Thursday; the 31-day span
+    // contains 4 Saturdays and 4 Sundays, leaving 23 working days.
+    expect(countWorkingDaysInPayrollPeriod("2026-07", new Date(2026, 8, 1))).toBe(23);
+  });
+
+  it("caps the count at asOfDate for a period still in progress", () => {
+    // Aug 18 2026 is a Tuesday, 29 days into the period (Jul 21 - Aug 18
+    // inclusive), containing 4 Saturdays and 4 Sundays -> 21 working days.
+    expect(countWorkingDaysInPayrollPeriod("2026-07", new Date(2026, 7, 18, 12, 0, 0))).toBe(21);
+  });
+
+  it("returns 0 when asOfDate is before the period starts", () => {
+    expect(countWorkingDaysInPayrollPeriod("2026-07", new Date(2026, 6, 1))).toBe(0);
   });
 });
 
