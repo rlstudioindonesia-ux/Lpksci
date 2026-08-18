@@ -26,7 +26,9 @@ export default function MobilePembayaranSubpage({ currentUser, handleUpdateState
                       : "Pembayaran & Booking Online"}
                   </h3>
                   <p className="text-xs text-slate-500">
-                    {currentUser && (isAdminOrVvip(currentUser.role) || currentUser.role === "Pengajar")
+                    {currentUser && isAdminOrVvip(currentUser.role)
+                      ? "Pantau status pembayaran, tunggakan, dan riwayat transaksi seluruh siswa LPK."
+                      : currentUser && currentUser.role === "Pengajar"
                       ? "Kelola kehadiran, gaji, cuti, dan rekapitulasi data staff LPK."
                       : "Pantau riwayat pembayaran dan tagihan Anda untuk program pelatihan di LPK."}
                   </p>
