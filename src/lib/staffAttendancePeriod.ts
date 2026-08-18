@@ -58,6 +58,28 @@ export function formatPayrollPeriodLabel(periodKey: string): string {
   return `21 ${startMonthName} - 20 ${endMonthName} ${endYear}`;
 }
 
+/**
+ * Number of working days (Mon-Fri) within a payroll period, used as the
+ * denominator for "Tidak Hadir" (absent days). For the period currently in
+ * progress this is capped at `asOfDate` (default: now) so future days that
+ * haven't happened yet are never counted as absences; a fully elapsed past
+ * period uses its full 21-20 span.
+ */
+export function countWorkingDaysInPayrollPeriod(periodKey: string, asOfDate: Date = new Date()): number {
+  const { start, end } = getPayrollPeriodRange(periodKey);
+  const cappedEnd = asOfDate < end ? asOfDate : end;
+  if (cappedEnd < start) return 0;
+  let count = 0;
+  const cursor = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+  const endDateOnly = new Date(cappedEnd.getFullYear(), cappedEnd.getMonth(), cappedEnd.getDate());
+  while (cursor <= endDateOnly) {
+    const day = cursor.getDay(); // 0 = Sunday, 6 = Saturday
+    if (day !== 0 && day !== 6) count++;
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return count;
+}
+
 /** Most recent `count` payroll period keys, most recent first - for a period picker dropdown. */
 export function generateRecentPayrollPeriods(count: number = 12, now: Date = new Date()): string[] {
   const periods: string[] = [];
