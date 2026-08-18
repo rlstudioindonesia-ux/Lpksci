@@ -154,6 +154,15 @@ export default function VvipExecSegment({ currentViewMode, inJapanCount, setCurr
                     Monitoring Afiliasi
                   </button>
                   <button
+                    onClick={() => {
+                      setCurrentViewMode("security");
+                    }}
+                    className={`flex items-center gap-2 text-[10px] font-black uppercase tracking-wider px-5 py-2.5 rounded-2xl border shadow-xs transition-all active:scale-95 cursor-pointer ${(currentViewMode as string) === "security" ? "bg-slate-900 text-white border-slate-900" : "bg-white hover:bg-slate-50 text-slate-800 border-slate-200"}`}
+                  >
+                    <ShieldCheck className="h-4 w-4 text-slate-500" />
+                    Keamanan Akun
+                  </button>
+                  <button
                     onClick={() => setShowLoginAsModal(true)}
                     className="flex items-center gap-2 text-[10px] font-black uppercase tracking-wider px-5 py-2.5 rounded-2xl border shadow-xs transition-all active:scale-95 cursor-pointer bg-white hover:bg-slate-50 text-indigo-600 border-indigo-200"
                   >

@@ -5,6 +5,7 @@ import { calculateAge } from "../../lib/dateUtils";
 import { computeAttendanceRate } from "../../lib/attendanceMetrics";
 import { isGradedAssessment } from "../../lib/scoreAveraging";
 import { hasStaffOversight } from "../../lib/permissions";
+import { formatPayrollPeriodLabel, generateRecentPayrollPeriods, isTimestampInPayrollPeriod } from "../../lib/staffAttendancePeriod";
 import { Bar, BarChart, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
 interface VvipFullEvalSegmentProps {
@@ -15,6 +16,7 @@ interface VvipFullEvalSegmentProps {
   filterStatus: any;
   filterYear: any;
   getClassMaxBab: any;
+  hrAttendancePeriod: any;
   isReadOnly: any;
   lmsClassFilter: any;
   monitorTab: any;
@@ -30,6 +32,7 @@ interface VvipFullEvalSegmentProps {
   setFilterMonth: any;
   setFilterStatus: any;
   setFilterYear: any;
+  setHrAttendancePeriod: any;
   setLmsClassFilter: any;
   setMonitorTab: any;
   setOfficeLat: any;
@@ -53,7 +56,7 @@ interface VvipFullEvalSegmentProps {
   systemState: any;
 }
 
-export default function VvipFullEvalSegment({ activeStudents, classFilter, classTabs, filterMonth, filterStatus, filterYear, getClassMaxBab, isReadOnly, lmsClassFilter, monitorTab, officeEnforce, officeLat, officeLon, officeRadius, onNavigateToAdmin, onUpdateState, selectedClassTab, setClassFilter, setCurrentViewMode, setFilterMonth, setFilterStatus, setFilterYear, setLmsClassFilter, setMonitorTab, setOfficeLat, setOfficeLon, setOfficeRadius, setSelectedClassTab, setSelectedHrAttendanceStaff, setSelectedSenseiDetail, setSelectedStudentDetail, setSiswaPage, setSiswaTab, setStatCardMode, setStudentListMode, setStudentSearch, siswaPage, siswaTab, startVvipEditReg, statCardMode, studentListMode, studentSearch, systemState }: VvipFullEvalSegmentProps) {
+export default function VvipFullEvalSegment({ activeStudents, classFilter, classTabs, filterMonth, filterStatus, filterYear, getClassMaxBab, hrAttendancePeriod, isReadOnly, lmsClassFilter, monitorTab, officeEnforce, officeLat, officeLon, officeRadius, onNavigateToAdmin, onUpdateState, selectedClassTab, setClassFilter, setCurrentViewMode, setFilterMonth, setFilterStatus, setFilterYear, setHrAttendancePeriod, setLmsClassFilter, setMonitorTab, setOfficeLat, setOfficeLon, setOfficeRadius, setSelectedClassTab, setSelectedHrAttendanceStaff, setSelectedSenseiDetail, setSelectedStudentDetail, setSiswaPage, setSiswaTab, setStatCardMode, setStudentListMode, setStudentSearch, siswaPage, siswaTab, startVvipEditReg, statCardMode, studentListMode, studentSearch, systemState }: VvipFullEvalSegmentProps) {
   return (
     <section
               className="bg-white border border-slate-200 rounded-[2.5rem] p-5 sm:p-8 shadow-xs space-y-8 animate-fade-in text-slate-800"
@@ -1910,9 +1913,23 @@ export default function VvipFullEvalSegment({ activeStudents, classFilter, class
               <div className="space-y-6 animate-fade-in text-left">
                 <h3 className="font-bold text-slate-800">Pemantauan Absensi & HR (Pengajar & Staf)</h3> 
                 <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200">
-                  <div className="flex items-center justify-between mb-3">
-                    <h4 className="font-bold text-slate-800 text-sm">Kehadiran (Absensi) Pengajar & Staf</h4>
-                    <span className="text-[9px] text-slate-400 font-medium hidden sm:block">Klik baris untuk lihat detail log</span>
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+                    <div>
+                      <h4 className="font-bold text-slate-800 text-sm">Kehadiran (Absensi) Pengajar & Staf</h4>
+                      <span className="text-[9px] text-slate-400 font-medium hidden sm:block">Klik baris untuk lihat detail log · Diurutkan dari yang paling rajin</span>
+                    </div>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wide">Periode:</span>
+                      <select
+                        value={hrAttendancePeriod}
+                        onChange={(e) => setHrAttendancePeriod(e.target.value)}
+                        className="text-[11px] font-bold p-1.5 bg-slate-50 border border-slate-200 rounded-lg outline-hidden cursor-pointer"
+                      >
+                        {generateRecentPayrollPeriods(12).map((periodKey) => (
+                          <option key={periodKey} value={periodKey}>{formatPayrollPeriodLabel(periodKey)}</option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
                   <div className="overflow-x-auto -mx-5 px-5 sm:mx-0 sm:px-0">
                     <table className="w-full text-left text-xs min-w-[560px]">
@@ -1926,8 +1943,7 @@ export default function VvipFullEvalSegment({ activeStudents, classFilter, class
                       </thead>
                       <tbody className="divide-y divide-slate-100">
                         {(systemState.users || []).filter(u => hasStaffOversight(u.role)).map(u => {
-                          const staffLogs = (systemState.logs || []).filter(l => l.type === "PRESENSI_PENGAJAR" && (l.user === u.name || l.user === u.username));
-                          const hadir = staffLogs.length;
+                          const staffLogs = (systemState.logs || []).filter(l => l.type === "PRESENSI_PENGAJAR" && (l.user === u.name || l.user === u.username) && isTimestampInPayrollPeriod(l.timestamp || l.time, hrAttendancePeriod));
                           let onTime = 0;
                           let checkIns = 0;
                           staffLogs.forEach(l => {
@@ -1945,7 +1961,15 @@ export default function VvipFullEvalSegment({ activeStudents, classFilter, class
                             }
                             if (!(hrVal > 8 || (hrVal === 8 && minVal > 0))) onTime++;
                           });
+                          // "Hadir" counts distinct check-ins (MASUK), not every log row -
+                          // each real work day writes both a MASUK and a PULANG entry, so
+                          // counting staffLogs.length would double every attended day.
+                          const hadir = checkIns;
                           const punctuality = checkIns > 0 ? Math.round((onTime / checkIns) * 100) : null;
+                          return { u, hadir, punctuality };
+                        })
+                        .sort((a, b) => b.hadir - a.hadir)
+                        .map(({ u, hadir, punctuality }) => {
                           return (
                             <tr
                               key={u.username}

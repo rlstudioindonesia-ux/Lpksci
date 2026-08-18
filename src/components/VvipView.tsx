@@ -10,6 +10,7 @@ import { getSafePhotoUrl, createSvgAvatar } from "../lib/storageHelper";
 import { calculateAge } from "../lib/dateUtils";
 import { computeFinancialMetrics, computeMonthlyExpenseBreakdown } from "../lib/financeCalculations";
 import { isGradedAssessment } from "../lib/scoreAveraging";
+import { formatPayrollPeriodLabel, getCurrentPayrollPeriodKey, isTimestampInPayrollPeriod } from "../lib/staffAttendancePeriod";
 import {
   ResponsiveContainer,
   AreaChart,
@@ -207,6 +208,7 @@ export default function VvipView({
   const [selectedClassTab, setSelectedClassTab] = useState<string>("Belajar");
   const [selectedSenseiDetail, setSelectedSenseiDetail] = useState<any | null>(null);
   const [selectedHrAttendanceStaff, setSelectedHrAttendanceStaff] = useState<any | null>(null);
+  const [hrAttendancePeriod, setHrAttendancePeriod] = useState<string>(getCurrentPayrollPeriodKey());
   const [viewingAttendancePhoto, setViewingAttendancePhoto] = useState<string | null>(null);
   const [selectedStudentDetail, setSelectedStudentDetail] = useState<
     any | null
@@ -1502,14 +1504,14 @@ export default function VvipView({
       )}
 
       {(currentViewMode === "full" || currentViewMode === "eval") && (
-        <VvipFullEvalSegment activeStudents={activeStudents} classFilter={classFilter} classTabs={classTabs} filterMonth={filterMonth} filterStatus={filterStatus} filterYear={filterYear} getClassMaxBab={getClassMaxBab} isReadOnly={isReadOnly} lmsClassFilter={lmsClassFilter} monitorTab={monitorTab} officeEnforce={officeEnforce} officeLat={officeLat} officeLon={officeLon} officeRadius={officeRadius} onNavigateToAdmin={onNavigateToAdmin} onUpdateState={onUpdateState} selectedClassTab={selectedClassTab} setClassFilter={setClassFilter} setCurrentViewMode={setCurrentViewMode} setFilterMonth={setFilterMonth} setFilterStatus={setFilterStatus} setFilterYear={setFilterYear} setLmsClassFilter={setLmsClassFilter} setMonitorTab={setMonitorTab} setOfficeLat={setOfficeLat} setOfficeLon={setOfficeLon} setOfficeRadius={setOfficeRadius} setSelectedClassTab={setSelectedClassTab} setSelectedHrAttendanceStaff={setSelectedHrAttendanceStaff} setSelectedSenseiDetail={setSelectedSenseiDetail} setSelectedStudentDetail={setSelectedStudentDetail} setSiswaPage={setSiswaPage} setSiswaTab={setSiswaTab} setStatCardMode={setStatCardMode} setStudentListMode={setStudentListMode} setStudentSearch={setStudentSearch} siswaPage={siswaPage} siswaTab={siswaTab} startVvipEditReg={startVvipEditReg} statCardMode={statCardMode} studentListMode={studentListMode} studentSearch={studentSearch} systemState={systemState} />
+        <VvipFullEvalSegment activeStudents={activeStudents} classFilter={classFilter} classTabs={classTabs} filterMonth={filterMonth} filterStatus={filterStatus} filterYear={filterYear} getClassMaxBab={getClassMaxBab} hrAttendancePeriod={hrAttendancePeriod} isReadOnly={isReadOnly} lmsClassFilter={lmsClassFilter} monitorTab={monitorTab} officeEnforce={officeEnforce} officeLat={officeLat} officeLon={officeLon} officeRadius={officeRadius} onNavigateToAdmin={onNavigateToAdmin} onUpdateState={onUpdateState} selectedClassTab={selectedClassTab} setClassFilter={setClassFilter} setCurrentViewMode={setCurrentViewMode} setFilterMonth={setFilterMonth} setFilterStatus={setFilterStatus} setFilterYear={setFilterYear} setHrAttendancePeriod={setHrAttendancePeriod} setLmsClassFilter={setLmsClassFilter} setMonitorTab={setMonitorTab} setOfficeLat={setOfficeLat} setOfficeLon={setOfficeLon} setOfficeRadius={setOfficeRadius} setSelectedClassTab={setSelectedClassTab} setSelectedHrAttendanceStaff={setSelectedHrAttendanceStaff} setSelectedSenseiDetail={setSelectedSenseiDetail} setSelectedStudentDetail={setSelectedStudentDetail} setSiswaPage={setSiswaPage} setSiswaTab={setSiswaTab} setStatCardMode={setStatCardMode} setStudentListMode={setStudentListMode} setStudentSearch={setStudentSearch} siswaPage={siswaPage} siswaTab={siswaTab} startVvipEditReg={startVvipEditReg} statCardMode={statCardMode} studentListMode={studentListMode} studentSearch={studentSearch} systemState={systemState} />
       )}
 
       {/* HR ATTENDANCE DETAIL MODAL */}
       {selectedHrAttendanceStaff && (() => {
         const staff = selectedHrAttendanceStaff;
         const staffLogs = (systemState.logs || [])
-          .filter(l => l.type === "PRESENSI_PENGAJAR" && (l.user === staff.name || l.user === staff.username))
+          .filter(l => l.type === "PRESENSI_PENGAJAR" && (l.user === staff.name || l.user === staff.username) && isTimestampInPayrollPeriod(l.timestamp || l.time, hrAttendancePeriod))
           .sort((a, b) => new Date(b.timestamp || b.time || 0).getTime() - new Date(a.timestamp || a.time || 0).getTime());
 
         const getPunctuality = (log: any): string | null => {
@@ -1540,7 +1542,7 @@ export default function VvipView({
                     Detail Kehadiran: {staff.name}
                   </h3>
                   <p className="text-[10px] text-slate-500 font-mono mt-1 ml-9">
-                    @{staff.username} · {staffLogs.length} Log Presensi Tercatat
+                    @{staff.username} · {staffLogs.length} Log Presensi · Periode {formatPayrollPeriodLabel(hrAttendancePeriod)}
                   </p>
                 </div>
                 <button
