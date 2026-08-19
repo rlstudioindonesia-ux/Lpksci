@@ -11,6 +11,7 @@ import { calculateAge } from "../lib/dateUtils";
 import { computeFinancialMetrics, computeMonthlyExpenseBreakdown } from "../lib/financeCalculations";
 import { isGradedAssessment } from "../lib/scoreAveraging";
 import { formatPayrollPeriodLabel, getCurrentPayrollPeriodKey, isTimestampInPayrollPeriod } from "../lib/staffAttendancePeriod";
+import { downloadStaffAttendanceDetailPdf } from "../lib/attendanceReportPdf";
 import {
   ResponsiveContainer,
   AreaChart,
@@ -1530,6 +1531,25 @@ export default function VvipView({
           return hrVal > 8 || (hrVal === 8 && minVal > 0) ? "Terlambat" : "Tepat Waktu";
         };
 
+        const handleDownloadDetailPdf = () => {
+          downloadStaffAttendanceDetailPdf(
+            staff.name,
+            staff.username,
+            formatPayrollPeriodLabel(hrAttendancePeriod),
+            staffLogs.map((log) => {
+              const ts = log.timestamp || log.time;
+              const dateObj = ts ? new Date(ts) : null;
+              return {
+                dateLabel: dateObj ? dateObj.toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" }) : "-",
+                timeLabel: dateObj ? dateObj.toLocaleTimeString("id-ID") : "-",
+                status: getPunctuality(log) || "-",
+                description: log.description || "Hadir",
+                location: log.location || "-",
+              };
+            }),
+          );
+        };
+
         return createPortal(
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto overflow-x-hidden bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
             <div className="bg-white rounded-3xl max-w-2xl w-full max-h-[90vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden text-left animate-in zoom-in-95 duration-150">
@@ -1545,12 +1565,22 @@ export default function VvipView({
                     @{staff.username} · {staffLogs.length} Log Presensi · Periode {formatPayrollPeriodLabel(hrAttendancePeriod)}
                   </p>
                 </div>
-                <button
-                  onClick={() => setSelectedHrAttendanceStaff(null)}
-                  className="p-2 hover:bg-slate-200 rounded-full transition cursor-pointer text-slate-400 hover:text-slate-600"
-                >
-                  <span className="text-xl font-bold">×</span>
-                </button>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button
+                    type="button"
+                    onClick={handleDownloadDetailPdf}
+                    className="flex items-center gap-1 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-bold px-2.5 py-1.5 rounded-lg transition active:scale-95 cursor-pointer"
+                  >
+                    <Download className="w-3 h-3" />
+                    <span>Unduh PDF</span>
+                  </button>
+                  <button
+                    onClick={() => setSelectedHrAttendanceStaff(null)}
+                    className="p-2 hover:bg-slate-200 rounded-full transition cursor-pointer text-slate-400 hover:text-slate-600"
+                  >
+                    <span className="text-xl font-bold">×</span>
+                  </button>
+                </div>
               </div>
               <div className="p-6 overflow-y-auto space-y-3">
                 {staffLogs.length === 0 && (
