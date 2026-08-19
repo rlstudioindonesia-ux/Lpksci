@@ -5,6 +5,7 @@ import {
   generateRecentPayrollPeriods,
   getCurrentPayrollPeriodKey,
   getPayrollPeriodRange,
+  isNationalHoliday,
   isTimestampInPayrollPeriod,
 } from "./staffAttendancePeriod";
 
@@ -72,20 +73,54 @@ describe("formatPayrollPeriodLabel", () => {
 });
 
 describe("countWorkingDaysInPayrollPeriod", () => {
-  it("counts Mon-Fri days across the full 21 Jul - 20 Aug 2026 period once it has fully elapsed", () => {
+  it("counts Mon-Fri days across the full 21 Jul - 20 Aug 2026 period once it has fully elapsed, minus the 17 Aug national holiday", () => {
     // Jul 21 2026 is a Tuesday, Aug 20 2026 is a Thursday; the 31-day span
-    // contains 4 Saturdays and 4 Sundays, leaving 23 working days.
-    expect(countWorkingDaysInPayrollPeriod("2026-07", new Date(2026, 8, 1))).toBe(23);
+    // contains 4 Saturdays and 4 Sundays (23 weekdays), minus 17 Aug 2026
+    // (Hari Kemerdekaan RI, a Monday) -> 22 working days.
+    expect(countWorkingDaysInPayrollPeriod("2026-07", new Date(2026, 8, 1))).toBe(22);
   });
 
-  it("caps the count at asOfDate for a period still in progress", () => {
+  it("caps the count at asOfDate for a period still in progress, minus the 17 Aug national holiday", () => {
     // Aug 18 2026 is a Tuesday, 29 days into the period (Jul 21 - Aug 18
-    // inclusive), containing 4 Saturdays and 4 Sundays -> 21 working days.
-    expect(countWorkingDaysInPayrollPeriod("2026-07", new Date(2026, 7, 18, 12, 0, 0))).toBe(21);
+    // inclusive), containing 4 Saturdays and 4 Sundays (21 weekdays), minus
+    // 17 Aug 2026 (Hari Kemerdekaan RI) -> 20 working days.
+    expect(countWorkingDaysInPayrollPeriod("2026-07", new Date(2026, 7, 18, 12, 0, 0))).toBe(20);
   });
 
   it("returns 0 when asOfDate is before the period starts", () => {
     expect(countWorkingDaysInPayrollPeriod("2026-07", new Date(2026, 6, 1))).toBe(0);
+  });
+
+  it("excludes multiple weekday national holidays that fall outside the Aug 17 example", () => {
+    // Period 2026-05 covers 21 May - 20 June 2026, which contains three
+    // weekday national holidays: 27 May (Idul Adha, Wed), 1 June (Hari
+    // Lahir Pancasila, Mon), and 16 June (Tahun Baru Islam, Tue). 31 May
+    // (Waisak) also falls in range but lands on a Sunday, already excluded
+    // by the weekend rule, so it doesn't add to this count.
+    const withoutHolidayLogic = (() => {
+      // Independently recompute using only the weekend rule, to prove the
+      // two holiday dates are exactly what's being subtracted.
+      let count = 0;
+      const cursor = new Date(2026, 4, 21);
+      const end = new Date(2026, 5, 20);
+      while (cursor <= end) {
+        const day = cursor.getDay();
+        if (day !== 0 && day !== 6) count++;
+        cursor.setDate(cursor.getDate() + 1);
+      }
+      return count;
+    })();
+    expect(countWorkingDaysInPayrollPeriod("2026-05", new Date(2026, 6, 1))).toBe(withoutHolidayLogic - 3);
+  });
+});
+
+describe("isNationalHoliday", () => {
+  it("recognizes a known 2026 national holiday", () => {
+    expect(isNationalHoliday(new Date(2026, 7, 17))).toBe(true); // Hari Kemerdekaan RI
+  });
+
+  it("returns false for an ordinary weekday", () => {
+    expect(isNationalHoliday(new Date(2026, 7, 18))).toBe(false);
   });
 });
 
