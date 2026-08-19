@@ -1,11 +1,12 @@
 import React from "react";
-import { Activity, Award, BookOpen, Calculator, CheckCircle, ChevronRight, Clock, DollarSign, Edit, FileText, Filter, Globe, GraduationCap, History, RefreshCw, RotateCcw, Search, ShieldCheck, TrendingUp, Users } from "lucide-react";
+import { Activity, Award, BookOpen, Calculator, CheckCircle, ChevronRight, Clock, DollarSign, Download, Edit, FileText, Filter, Globe, GraduationCap, History, RefreshCw, RotateCcw, Search, ShieldCheck, TrendingUp, Users } from "lucide-react";
 import { createSvgAvatar, getSafePhotoUrl } from "../../lib/storageHelper";
 import { calculateAge } from "../../lib/dateUtils";
 import { computeAttendanceRate } from "../../lib/attendanceMetrics";
 import { isGradedAssessment } from "../../lib/scoreAveraging";
 import { hasStaffOversight } from "../../lib/permissions";
 import { countWorkingDaysInPayrollPeriod, formatPayrollPeriodLabel, generateRecentPayrollPeriods, isTimestampInPayrollPeriod } from "../../lib/staffAttendancePeriod";
+import { downloadHrAttendanceSummaryPdf } from "../../lib/attendanceReportPdf";
 import { Bar, BarChart, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
 interface VvipFullEvalSegmentProps {
@@ -57,6 +58,47 @@ interface VvipFullEvalSegmentProps {
 }
 
 export default function VvipFullEvalSegment({ activeStudents, classFilter, classTabs, filterMonth, filterStatus, filterYear, getClassMaxBab, hrAttendancePeriod, isReadOnly, lmsClassFilter, monitorTab, officeEnforce, officeLat, officeLon, officeRadius, onNavigateToAdmin, onUpdateState, selectedClassTab, setClassFilter, setCurrentViewMode, setFilterMonth, setFilterStatus, setFilterYear, setHrAttendancePeriod, setLmsClassFilter, setMonitorTab, setOfficeLat, setOfficeLon, setOfficeRadius, setSelectedClassTab, setSelectedHrAttendanceStaff, setSelectedSenseiDetail, setSelectedStudentDetail, setSiswaPage, setSiswaTab, setStatCardMode, setStudentListMode, setStudentSearch, siswaPage, siswaTab, startVvipEditReg, statCardMode, studentListMode, studentSearch, systemState }: VvipFullEvalSegmentProps) {
+  const hrAttendanceRows = React.useMemo(() => {
+    const workingDays = countWorkingDaysInPayrollPeriod(hrAttendancePeriod);
+    return (systemState.users || [])
+      .filter((u: any) => hasStaffOversight(u.role))
+      .map((u: any) => {
+        const staffLogs = (systemState.logs || []).filter((l: any) => l.type === "PRESENSI_PENGAJAR" && (l.user === u.name || l.user === u.username) && isTimestampInPayrollPeriod(l.timestamp || l.time, hrAttendancePeriod));
+        let onTime = 0;
+        let checkIns = 0;
+        staffLogs.forEach((l: any) => {
+          if (!(l.description || "").includes("MASUK")) return;
+          checkIns++;
+          const match = (l.description || "").match(/MASUK\s*-\s*(\d{2}):(\d{2}):(\d{2})/i);
+          let hrVal: number, minVal: number;
+          if (match) {
+            hrVal = parseInt(match[1]);
+            minVal = parseInt(match[2]);
+          } else {
+            const d = new Date(l.timestamp || l.time);
+            hrVal = d.getHours();
+            minVal = d.getMinutes();
+          }
+          if (!(hrVal > 8 || (hrVal === 8 && minVal > 0))) onTime++;
+        });
+        // "Hadir" counts distinct check-ins (MASUK), not every log row -
+        // each real work day writes both a MASUK and a PULANG entry, so
+        // counting staffLogs.length would double every attended day.
+        const hadir = checkIns;
+        const tidakHadir = Math.max(0, workingDays - hadir);
+        const punctuality = checkIns > 0 ? Math.round((onTime / checkIns) * 100) : null;
+        return { u, hadir, tidakHadir, punctuality };
+      })
+      .sort((a, b) => b.hadir - a.hadir);
+  }, [systemState.users, systemState.logs, hrAttendancePeriod]);
+
+  const handleDownloadHrAttendancePdf = () => {
+    downloadHrAttendanceSummaryPdf(
+      hrAttendanceRows.map(({ u, hadir, tidakHadir, punctuality }) => ({ name: u.name, role: u.role, hadir, tidakHadir, punctuality })),
+      formatPayrollPeriodLabel(hrAttendancePeriod),
+    );
+  };
+
   return (
     <section
               className="bg-white border border-slate-200 rounded-[2.5rem] p-5 sm:p-8 shadow-xs space-y-8 animate-fade-in text-slate-800"
@@ -1929,6 +1971,14 @@ export default function VvipFullEvalSegment({ activeStudents, classFilter, class
                           <option key={periodKey} value={periodKey}>{formatPayrollPeriodLabel(periodKey)}</option>
                         ))}
                       </select>
+                      <button
+                        type="button"
+                        onClick={handleDownloadHrAttendancePdf}
+                        className="flex items-center gap-1 bg-indigo-600 hover:bg-indigo-700 text-white text-[10px] font-bold px-2.5 py-1.5 rounded-lg transition active:scale-95 cursor-pointer shrink-0"
+                      >
+                        <Download className="w-3 h-3" />
+                        <span>Unduh PDF</span>
+                      </button>
                     </div>
                   </div>
                   <div className="overflow-x-auto -mx-5 px-5 sm:mx-0 sm:px-0">
@@ -1943,37 +1993,7 @@ export default function VvipFullEvalSegment({ activeStudents, classFilter, class
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
-                        {(() => {
-                          const workingDays = countWorkingDaysInPayrollPeriod(hrAttendancePeriod);
-                          return (systemState.users || []).filter(u => hasStaffOversight(u.role)).map(u => {
-                          const staffLogs = (systemState.logs || []).filter(l => l.type === "PRESENSI_PENGAJAR" && (l.user === u.name || l.user === u.username) && isTimestampInPayrollPeriod(l.timestamp || l.time, hrAttendancePeriod));
-                          let onTime = 0;
-                          let checkIns = 0;
-                          staffLogs.forEach(l => {
-                            if (!(l.description || "").includes("MASUK")) return;
-                            checkIns++;
-                            const match = (l.description || "").match(/MASUK\s*-\s*(\d{2}):(\d{2}):(\d{2})/i);
-                            let hrVal: number, minVal: number;
-                            if (match) {
-                              hrVal = parseInt(match[1]);
-                              minVal = parseInt(match[2]);
-                            } else {
-                              const d = new Date(l.timestamp || l.time);
-                              hrVal = d.getHours();
-                              minVal = d.getMinutes();
-                            }
-                            if (!(hrVal > 8 || (hrVal === 8 && minVal > 0))) onTime++;
-                          });
-                          // "Hadir" counts distinct check-ins (MASUK), not every log row -
-                          // each real work day writes both a MASUK and a PULANG entry, so
-                          // counting staffLogs.length would double every attended day.
-                          const hadir = checkIns;
-                          const tidakHadir = Math.max(0, workingDays - hadir);
-                          const punctuality = checkIns > 0 ? Math.round((onTime / checkIns) * 100) : null;
-                          return { u, hadir, tidakHadir, punctuality };
-                          })
-                          .sort((a, b) => b.hadir - a.hadir)
-                          .map(({ u, hadir, tidakHadir, punctuality }) => {
+                        {hrAttendanceRows.map(({ u, hadir, tidakHadir, punctuality }) => {
                           return (
                             <tr
                               key={u.username}
@@ -2008,14 +2028,13 @@ export default function VvipFullEvalSegment({ activeStudents, classFilter, class
                               </td>
                             </tr>
                           );
-                          });
-                        })()}
+                        })}
                       </tbody>
                     </table>
                   </div>
                 </div>
-                <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200"> 
-                  <h4 className="font-bold text-slate-800 text-sm mb-3">Rekening Gaji Pengajar & Staf</h4> 
+                <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200">
+                  <h4 className="font-bold text-slate-800 text-sm mb-3">Rekening Gaji Pengajar & Staf</h4>
                   <div className="overflow-x-auto"> 
                     <table className="w-full text-left text-xs"> 
                       <thead className="bg-slate-50 text-slate-500"> 
