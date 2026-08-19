@@ -240,6 +240,31 @@ export async function uploadFileToFirebase(file: File, folder: string): Promise<
   }
 }
 
+// Placeholder the server substitutes for embedded base64 photos it strips out of
+// /api/state responses (see optimizedLogs in server.ts) to keep that payload small.
+const STRIPPED_PHOTO_PLACEHOLDER = "[FOTO_TERSIMPAN]";
+
+/**
+ * Resolves a log entry's real attendance photo URL for display. `photoUrl` as seen
+ * in systemState.logs may be the stripped placeholder (or empty, for logs older than
+ * the server's in-memory cap) rather than the actual image - in that case, fetch the
+ * real photoUrl on demand from the dedicated single-log endpoint. Returns null if no
+ * photo is available.
+ */
+export async function resolveAttendancePhotoUrl(logId: string | undefined, photoUrl: string | undefined): Promise<string | null> {
+  if (photoUrl && photoUrl !== STRIPPED_PHOTO_PLACEHOLDER) return photoUrl;
+  if (!logId) return null;
+  try {
+    const res = await fetch(`/api/logs/${encodeURIComponent(logId)}/photo`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.photoUrl || null;
+  } catch (e) {
+    console.error("Gagal mengambil foto bukti presensi:", e);
+    return null;
+  }
+}
+
 /**
  * Helper to convert Base64 Data URL to a native Blob object
  */

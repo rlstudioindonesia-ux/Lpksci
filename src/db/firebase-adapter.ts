@@ -477,6 +477,17 @@ export function syncEntityToFirestore(collectionName: string, id: string, data: 
   }
 }
 
+export async function getEntityFromFirestore(collectionName: string, id: string): Promise<any | null> {
+  if (!db || !id) return null;
+  try {
+    const snap = await getDoc(doc(db, collectionName, id));
+    return snap.exists() ? snap.data() : null;
+  } catch (e) {
+    console.error(e);
+    return null;
+  }
+}
+
 export function syncCustomizationToFirestore(data: any) {
   if (!db) return;
   try {

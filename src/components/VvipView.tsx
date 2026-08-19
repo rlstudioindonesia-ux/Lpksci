@@ -6,7 +6,7 @@
 import React, { useState, useMemo } from "react";
 import { createPortal } from "react-dom";
 import { ConfirmButton } from "./ConfirmButton";
-import { getSafePhotoUrl, createSvgAvatar } from "../lib/storageHelper";
+import { getSafePhotoUrl, createSvgAvatar, resolveAttendancePhotoUrl } from "../lib/storageHelper";
 import { calculateAge } from "../lib/dateUtils";
 import { computeFinancialMetrics, computeMonthlyExpenseBreakdown } from "../lib/financeCalculations";
 import { isGradedAssessment } from "../lib/scoreAveraging";
@@ -211,6 +211,7 @@ export default function VvipView({
   const [selectedHrAttendanceStaff, setSelectedHrAttendanceStaff] = useState<any | null>(null);
   const [hrAttendancePeriod, setHrAttendancePeriod] = useState<string>(getCurrentPayrollPeriodKey());
   const [viewingAttendancePhoto, setViewingAttendancePhoto] = useState<string | null>(null);
+  const [loadingAttendancePhotoLogId, setLoadingAttendancePhotoLogId] = useState<string | null>(null);
   const [selectedStudentDetail, setSelectedStudentDetail] = useState<
     any | null
   >(null);
@@ -1627,10 +1628,20 @@ export default function VvipView({
                       {log.photoUrl && (
                         <button
                           type="button"
-                          onClick={() => setViewingAttendancePhoto(log.photoUrl)}
-                          className="inline-flex items-center gap-1.5 mt-2 text-[10px] font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-xl border border-indigo-200/80 transition cursor-pointer shadow-3xs active:scale-95"
+                          disabled={loadingAttendancePhotoLogId === log.id}
+                          onClick={async () => {
+                            setLoadingAttendancePhotoLogId(log.id);
+                            const resolved = await resolveAttendancePhotoUrl(log.id, log.photoUrl);
+                            setLoadingAttendancePhotoLogId(null);
+                            if (resolved) {
+                              setViewingAttendancePhoto(resolved);
+                            } else {
+                              alert("Foto bukti presensi ini tidak ditemukan atau gagal dimuat.");
+                            }
+                          }}
+                          className="inline-flex items-center gap-1.5 mt-2 text-[10px] font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 px-3 py-1.5 rounded-xl border border-indigo-200/80 transition cursor-pointer shadow-3xs active:scale-95 disabled:opacity-50 disabled:cursor-wait"
                         >
-                          📸 Lihat Foto Bukti Presensi
+                          {loadingAttendancePhotoLogId === log.id ? "⏳ Memuat Foto..." : "📸 Lihat Foto Bukti Presensi"}
                         </button>
                       )}
                     </div>
