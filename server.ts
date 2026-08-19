@@ -5,7 +5,7 @@ import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
 import fs from "fs";
-import { testConnection, loadStateFromFirestore, syncEntityToFirestore, syncCustomizationToFirestore, syncLmsClassToFirestore, deleteEntityFromFirestore, uploadBufferToFirebaseStorage, getUserFromFirestore } from "./src/db/firebase-adapter.ts";
+import { testConnection, loadStateFromFirestore, syncEntityToFirestore, syncCustomizationToFirestore, syncLmsClassToFirestore, deleteEntityFromFirestore, uploadBufferToFirebaseStorage, getUserFromFirestore, getEntityFromFirestore } from "./src/db/firebase-adapter.ts";
 import { isHashedPassword, hashPassword, verifyPassword, stripPassword } from "./server/auth-utils.ts";
 import { handleStateUpdate } from "./server/handlers/index.ts";
 
@@ -345,6 +345,31 @@ app.get("/api/state", async (req, res) => {
     users: (state.users || []).map(u => ({ ...stripPassword(u), hasPassword: !!u.password })),
     registeredStudents: (state.registeredStudents || []).map(stripPassword),
   });
+});
+
+// /api/state strips embedded base64 photos out of every log entry (see optimizedLogs
+// above) to keep that payload small on every poll. This endpoint fetches a single
+// log's real, un-stripped photoUrl on demand - used when a user actually opens an
+// attendance photo. Falls back to Firestore for logs older than the in-memory cap.
+app.get("/api/logs/:id/photo", async (req, res) => {
+  try {
+    await ensureStateReady(30000);
+  } catch (e) {}
+
+  const { id } = req.params;
+  const memLog = (state.logs || []).find((l: any) => l.id === id);
+  if (memLog && memLog.photoUrl) {
+    return res.json({ photoUrl: memLog.photoUrl });
+  }
+
+  try {
+    const doc = await getEntityFromFirestore("logs", id);
+    if (doc && doc.photoUrl) {
+      return res.json({ photoUrl: doc.photoUrl });
+    }
+  } catch (e) {}
+
+  return res.status(404).json({ error: "Foto bukti presensi tidak ditemukan." });
 });
 
 // Server-side credential verification (bcrypt) - replaces the old client-side plaintext check.

@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { UserAccount, SystemState } from "../types";
-import { uploadFileToFirebase } from "../lib/storageHelper";
+import { dataURLtoBlob, resolveAttendancePhotoUrl, uploadFileToFirebase } from "../lib/storageHelper";
 import { 
   FileText, CheckSquare, Receipt, Clock, Users, Search,
   Camera, MapPin, Upload, AlertTriangle, CheckCircle, Image as ImageIcon, Video, HelpCircle, Eye
@@ -32,6 +32,24 @@ export function TeacherDashboardPanel({
   const [presensiNotes, setPresensiNotes] = useState("");
   const [studentSearchQuery, setStudentSearchQuery] = useState("");
   const [selectedLogForPreview, setSelectedLogForPreview] = useState<any>(null);
+  const [previewPhotoUrl, setPreviewPhotoUrl] = useState<string | null>(null);
+  const [previewPhotoLoading, setPreviewPhotoLoading] = useState(false);
+
+  useEffect(() => {
+    if (!selectedLogForPreview?.photoUrl) {
+      setPreviewPhotoUrl(null);
+      return;
+    }
+    let cancelled = false;
+    setPreviewPhotoLoading(true);
+    resolveAttendancePhotoUrl(selectedLogForPreview.id, selectedLogForPreview.photoUrl).then((url) => {
+      if (!cancelled) {
+        setPreviewPhotoUrl(url);
+        setPreviewPhotoLoading(false);
+      }
+    });
+    return () => { cancelled = true; };
+  }, [selectedLogForPreview]);
 
   const [presensiType, setPresensiType] = useState<"MASUK" | "PULANG">("MASUK");
   const [presensiMode, setPresensiMode] = useState<"REGULER" | "ZOOM">("REGULER");
@@ -376,12 +394,29 @@ export function TeacherDashboardPanel({
       setPresensiBiometricStatus("scanning");
       setTimeout(async () => {
         const liveFacePhoto = captureFaceSnapshot();
-        const gpsStr = presensiGps 
-          ? `${presensiGps.latitude}, ${presensiGps.longitude} (Akurasi: ${presensiGps.accuracy}m)` 
+        const gpsStr = presensiGps
+          ? `${presensiGps.latitude}, ${presensiGps.longitude} (Akurasi: ${presensiGps.accuracy}m)`
           : "Lokasi tidak terdeteksi";
 
         // If no class photo was uploaded, use the biometric snapshot as evidence photo!
-        const finalPhoto = presensiPhoto || liveFacePhoto || "";
+        // The snapshot is a raw base64 data: URL, which the server strips out of
+        // /api/state responses (replaced with a "[FOTO_TERSIMPAN]" placeholder) to
+        // avoid multi-megabyte state payloads - so it must be uploaded to Storage
+        // first and referenced by URL, or the photo becomes permanently unopenable
+        // for anyone viewing it after their next state refresh (e.g. VVIP/HR).
+        let finalPhoto = presensiPhoto || "";
+        if (!finalPhoto && liveFacePhoto) {
+          try {
+            const blob = dataURLtoBlob(liveFacePhoto);
+            if (blob) {
+              const snapshotFile = new File([blob], `presensi_${currentUser.username}_${Date.now()}.jpg`, { type: blob.type || "image/jpeg" });
+              finalPhoto = await uploadFileToFirebase(snapshotFile, "attendance_photos");
+            }
+          } catch (err) {
+            console.error("Gagal mengunggah foto bukti presensi biometrik:", err);
+            finalPhoto = liveFacePhoto;
+          }
+        }
 
         const logData = {
           type: "PRESENSI_PENGAJAR",
@@ -1143,13 +1178,19 @@ export function TeacherDashboardPanel({
                       <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">
                         Dokumentasi Kegiatan
                       </span>
-                      <div className="relative rounded-2xl overflow-hidden border border-slate-200">
-                        <img
-                          src={selectedLogForPreview.photoUrl}
-                          alt="Dokumentasi Kelas"
-                          className="w-full h-36 object-cover"
-                          referrerPolicy="no-referrer"
-                        />
+                      <div className="relative rounded-2xl overflow-hidden border border-slate-200 min-h-[9rem] flex items-center justify-center bg-slate-50">
+                        {previewPhotoLoading ? (
+                          <span className="text-[10px] text-slate-400 font-bold py-8">⏳ Memuat foto...</span>
+                        ) : previewPhotoUrl ? (
+                          <img
+                            src={previewPhotoUrl}
+                            alt="Dokumentasi Kelas"
+                            className="w-full h-36 object-cover"
+                            referrerPolicy="no-referrer"
+                          />
+                        ) : (
+                          <span className="text-[10px] text-slate-400 font-bold py-8">Foto tidak ditemukan.</span>
+                        )}
                       </div>
                     </div>
                   )}
