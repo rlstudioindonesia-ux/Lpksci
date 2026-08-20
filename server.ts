@@ -14,6 +14,23 @@ dotenv.config();
 const app = express();
 const PORT = 3000;
 
+// Safety net: this server holds ALL application state in memory and takes
+// ~25-30s to reload it from Firestore on boot (see stateInitPromise below).
+// Without these handlers, a single uncaught error in any request (e.g. an
+// async route handler throwing, which Express 4 does NOT catch) becomes an
+// unhandled rejection - and Node 15+ terminates the whole process on that by
+// default. That takes down every logged-in user at once (matches reports of
+// the app "freezing"/"database disconnected" and nobody able to log in,
+// worst during high-concurrency afternoon traffic) until Cloud Run cold-boots
+// a fresh instance and it re-syncs from Firestore. Logging instead of
+// crashing keeps the one bad request isolated to its own caller.
+process.on("unhandledRejection", (reason) => {
+  console.error("⚠️ [UNHANDLED REJECTION] Kept server alive, but investigate this:", reason);
+});
+process.on("uncaughtException", (err) => {
+  console.error("⚠️ [UNCAUGHT EXCEPTION] Kept server alive, but investigate this:", err);
+});
+
 // Enable gzip/deflate compression for all HTTP responses (reduces JSON payload by ~85-90%)
 app.use(compression());
 
@@ -242,69 +259,79 @@ app.post("/api/upload", async (req, res) => {
 });
 
 app.post("/api/request-reset", async (req, res) => {
-  const { username } = req.body;
-  if (!username) return res.status(400).json({ error: "Username/Email required" });
-  
-  const normalized = username.trim().toLowerCase();
-  const user = state.users?.find(
-    (u) => (u.username || "").trim().toLowerCase() === normalized ||
-            (u.email || "").trim().toLowerCase() === normalized
-  );
-  
-  if (!user) {
-    return res.status(404).json({ error: "Username/Email tidak ditemukan." });
+  try {
+    const { username } = req.body;
+    if (!username) return res.status(400).json({ error: "Username/Email required" });
+
+    const normalized = username.trim().toLowerCase();
+    const user = state.users?.find(
+      (u) => (u.username || "").trim().toLowerCase() === normalized ||
+              (u.email || "").trim().toLowerCase() === normalized
+    );
+
+    if (!user) {
+      return res.status(404).json({ error: "Username/Email tidak ditemukan." });
+    }
+
+    if (["Admin", "VVIP", "Admin Super", "Admin Biasa"].includes(user.role)) {
+      return res.status(403).json({ error: "Akun Admin/VVIP tidak dapat direset via link ini." });
+    }
+
+    const token = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+
+    if (!state.passwordResets) state.passwordResets = [];
+    state.passwordResets.push({
+      token,
+      username: user.username,
+      expires: Date.now() + 1000 * 60 * 60 * 24 // 24 hours
+    });
+
+    // In a real app, we would send an email here.
+    // For now, we return the link to be displayed in the UI for demonstration.
+    const resetLink = `/reset-password?token=${token}`;
+
+    return res.json({ success: true, resetLink });
+  } catch (error: any) {
+    console.error("Request-reset API error:", error);
+    return res.status(500).json({ error: error.message || "Internal server error" });
   }
-  
-  if (["Admin", "VVIP", "Admin Super", "Admin Biasa"].includes(user.role)) {
-    return res.status(403).json({ error: "Akun Admin/VVIP tidak dapat direset via link ini." });
-  }
-  
-  const token = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-  
-  if (!state.passwordResets) state.passwordResets = [];
-  state.passwordResets.push({
-    token,
-    username: user.username,
-    expires: Date.now() + 1000 * 60 * 60 * 24 // 24 hours
-  });
-  
-  // In a real app, we would send an email here.
-  // For now, we return the link to be displayed in the UI for demonstration.
-  const resetLink = `/reset-password?token=${token}`;
-  
-  return res.json({ success: true, resetLink });
 });
 
 app.post("/api/reset-password", async (req, res) => {
-  const { token, newPassword } = req.body;
-  
-  if (!state.passwordResets) state.passwordResets = [];
-  const resetIndex = state.passwordResets.findIndex((r) => r.token === token);
-  
-  if (resetIndex === -1) {
-    return res.status(400).json({ error: "Token tidak valid atau sudah digunakan." });
+  try {
+    const { token, newPassword } = req.body;
+
+    if (!state.passwordResets) state.passwordResets = [];
+    const resetIndex = state.passwordResets.findIndex((r) => r.token === token);
+
+    if (resetIndex === -1) {
+      return res.status(400).json({ error: "Token tidak valid atau sudah digunakan." });
+    }
+
+    const resetReq = state.passwordResets[resetIndex];
+    if (Date.now() > resetReq.expires) {
+      return res.status(400).json({ error: "Token sudah kadaluarsa." });
+    }
+
+    const userIndex = state.users.findIndex((u) => u.username === resetReq.username);
+    if (userIndex !== -1) {
+      state.users[userIndex].password = hashPassword(newPassword);
+
+      // Save state to firestore if needed
+      try {
+        syncEntityToFirestore("users", state.users[userIndex].username, state.users[userIndex]);
+      } catch(e) {}
+
+      // Invalidate token
+      state.passwordResets.splice(resetIndex, 1);
+      return res.json({ success: true });
+    }
+
+    return res.status(404).json({ error: "User tidak ditemukan." });
+  } catch (error: any) {
+    console.error("Reset-password API error:", error);
+    return res.status(500).json({ error: error.message || "Internal server error" });
   }
-  
-  const resetReq = state.passwordResets[resetIndex];
-  if (Date.now() > resetReq.expires) {
-    return res.status(400).json({ error: "Token sudah kadaluarsa." });
-  }
-  
-  const userIndex = state.users.findIndex((u) => u.username === resetReq.username);
-  if (userIndex !== -1) {
-    state.users[userIndex].password = hashPassword(newPassword);
-    
-    // Save state to firestore if needed
-    try {
-      syncEntityToFirestore("users", state.users[userIndex].username, state.users[userIndex]);
-    } catch(e) {}
-    
-    // Invalidate token
-    state.passwordResets.splice(resetIndex, 1);
-    return res.json({ success: true });
-  }
-  
-  return res.status(404).json({ error: "User tidak ditemukan." });
 });
 
 app.get("/api/state", async (req, res) => {
@@ -379,6 +406,8 @@ app.post("/api/login", async (req, res) => {
     // real user with a real account isn't wrongly told "account not found".
     await ensureStateReady(30000);
   } catch (e) {}
+
+  try {
   const { username, password } = req.body || {};
   if (!username || !password) {
     return res.status(400).json({ error: "Username dan password wajib diisi." });
@@ -532,6 +561,10 @@ app.post("/api/login", async (req, res) => {
   syncEntityToFirestore("users", user.username, user);
 
   return res.json({ user: stripPassword(user) });
+  } catch (error: any) {
+    console.error("Login API error:", error);
+    return res.status(500).json({ error: error.message || "Internal server error" });
+  }
 });
 
 // Lightweight session validation endpoint for Android/Web clients
@@ -539,32 +572,38 @@ app.post("/api/auth/validate", async (req, res) => {
   try {
     await ensureStateReady(30000);
   } catch (e) {}
-  const { username, email } = req.body || {};
-  const target = (username || email || "").trim().toLowerCase();
-  if (!target) {
-    return res.status(400).json({ error: "Username/Email required" });
-  }
 
-  let user = (state.users || []).find((u: any) =>
-    (u.username || "").trim().toLowerCase() === target ||
-    (u.email || "").trim().toLowerCase() === target
-  );
+  try {
+    const { username, email } = req.body || {};
+    const target = (username || email || "").trim().toLowerCase();
+    if (!target) {
+      return res.status(400).json({ error: "Username/Email required" });
+    }
 
-  if (!user) {
-    try {
-      const directUser = await getUserFromFirestore(target);
-      if (directUser) {
-        user = directUser;
-        if (!state.users) state.users = [];
-        state.users.push(directUser);
-      }
-    } catch (e) {}
-  }
+    let user = (state.users || []).find((u: any) =>
+      (u.username || "").trim().toLowerCase() === target ||
+      (u.email || "").trim().toLowerCase() === target
+    );
 
-  if (user) {
-    return res.json({ valid: true, user: stripPassword(user) });
+    if (!user) {
+      try {
+        const directUser = await getUserFromFirestore(target);
+        if (directUser) {
+          user = directUser;
+          if (!state.users) state.users = [];
+          state.users.push(directUser);
+        }
+      } catch (e) {}
+    }
+
+    if (user) {
+      return res.json({ valid: true, user: stripPassword(user) });
+    }
+    return res.json({ valid: false });
+  } catch (error: any) {
+    console.error("Auth-validate API error:", error);
+    return res.status(500).json({ error: error.message || "Internal server error" });
   }
-  return res.json({ valid: false });
 });
 
 // Student sign up from the landing page with integrated Midtrans Sandbox Payment
@@ -576,6 +615,8 @@ app.post("/api/register", async (req, res) => {
   try {
     await ensureStateReady(30000);
   } catch (e) {}
+
+  try {
   const {
     name, email, password, phone, birthDate, gender, education, program, japaneseLevel, paymentAmount, paymentMethod, proofOfPayment,
     docAkta, docFoto, docIjazahSD, docIjazahSMP, docIjazahSMA, docKK, docKTP, docTranskip, docPraMCU, docVaksin, docKontrak,
@@ -702,6 +743,10 @@ app.post("/api/register", async (req, res) => {
   syncEntityToFirestore('payments', newPay.id, newPay);
 
   res.json({ success: true, registered: stripPassword(newReg), payment: newPay });
+  } catch (error: any) {
+    console.error("Register API error:", error);
+    return res.status(500).json({ error: error.message || "Internal server error" });
+  }
 });
 
 // Update standard datasets from the Admin Portal or LMS E-Benkyou
