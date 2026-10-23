@@ -340,6 +340,8 @@ export interface CashLedgerRecord {
   inAmount: number; // IN
   outAmount: number; // OUT
   createdAt?: string;
+  /** Payroll entry written for this salary (23-10-2026). */
+  salaryId?: string;
 }
 
 export interface SalaryRecord {

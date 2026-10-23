@@ -2,6 +2,39 @@ import type { Request, Response } from "express";
 import { syncEntityToFirestore, deleteEntityFromFirestore, uploadBufferToFirebaseStorage, mergeEntityFieldsToFirestore } from "../../src/db/firebase-adapter.ts";
 import { todayJakartaISO } from "../../src/lib/dateUtils.ts";
 import { uniqueIdSuffix } from "../../src/lib/idGenerator.ts";
+import { planLedgerSyncForSalary } from "../../src/lib/salaryLedger.ts";
+
+// Stored attendance percentage of a student (records marked "Hadir" / all records).
+function recomputeAttendanceScore(state: any, studentId: any) {
+  if (!studentId) return;
+  const student = (state.activeStudents || []).find((s: any) => s.id === studentId);
+  if (!student) return;
+  const stRecords = (state.attendance || []).filter((a: any) => a.studentId === studentId);
+  const presentCount = stRecords.filter((a: any) => a.status === "Hadir").length;
+  const score = stRecords.length > 0 ? Math.round((presentCount / stRecords.length) * 100) : 0;
+  if (student.attendanceScore !== score) {
+    student.attendanceScore = score;
+    mergeEntityFieldsToFirestore("activeStudents", student.id, { attendanceScore: score });
+  }
+}
+
+// Keeps the Buku Kas payroll entry (salaryId) in step with its salary (src/lib/salaryLedger.ts).
+function syncLedgerForSalary(state: any, salary: any, deleted = false) {
+  if (!state.cashLedger) state.cashLedger = [];
+  const plan = planLedgerSyncForSalary(state.cashLedger, salary, deleted);
+  if (plan.kind === "add") {
+    const entry = { id: `CAS-${uniqueIdSuffix()}`, ...plan.entry, createdAt: new Date().toISOString() };
+    state.cashLedger.push(entry);
+    syncEntityToFirestore("cashLedger", entry.id, entry);
+  } else if (plan.kind === "update") {
+    const entry = state.cashLedger[plan.index];
+    Object.assign(entry, plan.changes);
+    mergeEntityFieldsToFirestore("cashLedger", entry.id, plan.changes);
+  } else if (plan.kind === "remove") {
+    const [entry] = state.cashLedger.splice(plan.index, 1);
+    if (entry?.id) deleteEntityFromFirestore("cashLedger", entry.id);
+  }
+}
 
 // Attendance, salaries, and teacher leave/report/contract records
 // Extracted verbatim from the monolithic /api/state/update handler in server.ts.
@@ -110,6 +143,7 @@ export function handleHrState(req: Request, res: Response, dataType: string, act
 
     if ((dataType === "attendance" || dataType === "attendanceRecords") && (action === "edit" || action === "upsert" || action === "sync")) {
       const index = state.attendance.findIndex((a: any) => a.id === payload.id);
+      const previousStudentId = index !== -1 ? state.attendance[index].studentId : undefined;
       if (index !== -1) {
         state.attendance[index] = { ...state.attendance[index], ...payload };
         syncEntityToFirestore("attendance", state.attendance[index].id, state.attendance[index]);
@@ -118,18 +152,12 @@ export function handleHrState(req: Request, res: Response, dataType: string, act
         syncEntityToFirestore("attendance", payload.id, payload);
       }
 
-      // Recompute the student's attendanceScore in case status changed.
-      const studentId = payload.studentId;
-      if (studentId) {
-        const student = state.activeStudents.find((s: any) => s.id === studentId);
-        if (student) {
-          const stRecords = state.attendance.filter((a: any) => a.studentId === studentId);
-          const presentCount = stRecords.filter((a: any) => a.status === "Hadir").length;
-          const totalRecords = stRecords.length;
-          student.attendanceScore = totalRecords > 0 ? Math.round((presentCount / totalRecords) * 100) : 0;
-          mergeEntityFieldsToFirestore("activeStudents", student.id, { attendanceScore: student.attendanceScore });
-        }
-      }
+      // Recompute the attendance percentage, also when a partial edit (e.g. only
+      // the status) does not repeat the studentId, and for a record moved to
+      // another student.
+      const savedRecord = index !== -1 ? state.attendance[index] : payload;
+      recomputeAttendanceScore(state, savedRecord?.studentId);
+      if (previousStudentId && previousStudentId !== savedRecord?.studentId) recomputeAttendanceScore(state, previousStudentId);
       return res.json({ success: true, item: payload });
     }
 
@@ -148,6 +176,7 @@ export function handleHrState(req: Request, res: Response, dataType: string, act
       };
       state.salaries.unshift(newSalary);
       syncEntityToFirestore("salaries", newSalary.id, newSalary);
+      syncLedgerForSalary(state, newSalary);
       return res.json({ success: true, item: newSalary });
     }
 
@@ -167,6 +196,7 @@ export function handleHrState(req: Request, res: Response, dataType: string, act
           notes: payload.notes ?? state.salaries[index].notes,
         };
         syncEntityToFirestore("salaries", state.salaries[index].id, state.salaries[index]);
+        syncLedgerForSalary(state, state.salaries[index]);
         return res.json({ success: true, item: state.salaries[index] });
       }
       return res.status(404).json({ error: "Salary record not found" });
@@ -180,6 +210,7 @@ export function handleHrState(req: Request, res: Response, dataType: string, act
       if (index !== -1) {
         state.salaries[index].status = payload.status;
         syncEntityToFirestore("salaries", salId, state.salaries[index]);
+        syncLedgerForSalary(state, state.salaries[index]);
         return res.json({ success: true, updated: state.salaries[index] });
       }
     }
@@ -188,6 +219,8 @@ export function handleHrState(req: Request, res: Response, dataType: string, act
     if (dataType === "salaries" && action === "delete") {
       if (!state.salaries) state.salaries = [];
       const { id } = payload;
+      const removed = state.salaries.find((s: any) => s.id === id);
+      if (removed) syncLedgerForSalary(state, removed, true);
       state.salaries = state.salaries.filter((s: any) => s.id !== id);
       if (id) deleteEntityFromFirestore("salaries", id);
       return res.json({ success: true, id });
