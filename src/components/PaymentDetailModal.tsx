@@ -42,19 +42,18 @@ export default function PaymentDetailModal({ payment, currentUser, systemState, 
     }
     
     if (selectedMethod === "Midtrans") {
-      alert(`Memproses Rp ${nominalToPay.toLocaleString("id-ID")} ke Midtrans Checkout... (Simulasi sukses)`);
-      const finalStatus = nominalToPay >= initialSisa ? "Lunas" : "Cicilan";
+      // 23-10-2026 (security): Midtrans is not connected yet - this used to be a
+      // simulation that marked the bill as paid without any real payment.
+      // It now only records the request; Admin verifies like a transfer.
       await onUpdateState("payments", "update_payment", {
         id: payment.id,
         studentName: payment.studentName,
         category: payment.category,
         amount: payment.amount,
         paymentMethod: "Midtrans Virtual Account",
-        status: finalStatus,
-        isSigned: true,
-        signatureDate: new Date().toLocaleDateString("id-ID")
+        status: "Pending",
       });
-      alert(`Pembayaran Rp ${nominalToPay.toLocaleString("id-ID")} dengan Midtrans berhasil & lunas otomatis!`);
+      alert(`Permintaan pembayaran Rp ${nominalToPay.toLocaleString("id-ID")} lewat Midtrans tercatat dan menunggu verifikasi Admin.`);
       onClose();
       return;
     }

@@ -89,11 +89,24 @@ export function installAuthFetch() {
       if (token && isOwnApiUrl(url, window.location.origin)) {
         const headers = new Headers(init?.headers || (input instanceof Request ? input.headers : undefined));
         if (!headers.has("Authorization")) headers.set("Authorization", `Bearer ${token}`);
-        return originalFetch(input, { ...(init || {}), headers });
+        return originalFetch(input, { ...(init || {}), headers }).then((res) => {
+          notifyIfSessionRejected(res, url);
+          return res;
+        });
       }
     } catch (e) {}
     return originalFetch(input, init);
   };
+}
+
+export const AUTH_REQUIRED_EVENT = "lpk-auth-required";
+
+/** Stage 2: the server refused the session (expired / password changed elsewhere). */
+function notifyIfSessionRejected(res: Response, url: string) {
+  try {
+    if (res.status !== 401 || /\/api\/(login|auth\/)/.test(url)) return;
+    window.dispatchEvent(new Event(AUTH_REQUIRED_EVENT));
+  } catch (e) {}
 }
 
 export type GoogleServerLogin =
