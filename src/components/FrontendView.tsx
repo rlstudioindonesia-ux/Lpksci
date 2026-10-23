@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect, useRef, useMemo } from "react";
+import { getStudentStatusGroup } from "../lib/studentStatusGroups";
 import { pickGalleryItems } from "../lib/galleryItems";
 import { ConfirmForm } from "./ConfirmForm";
 import {
@@ -2134,7 +2135,9 @@ export default function FrontendView({
                 // number when no real students are recorded yet.
                 const alumniClassName = alumniClassNameFor(cls);
                 const realEnrolledCount = activeStudents.filter((s: any) =>
-                  matchesClassLevel(s.assignedClass || s.class, alumniClassName),
+                  matchesClassLevel(s.assignedClass || s.class, alumniClassName) &&
+                  // Expelled students no longer take a seat (23-10-2026).
+                  getStudentStatusGroup(s.status) !== "Dikeluarkan",
                 ).length;
                 const { registeredCount, quotaLimit, remaining } = resolveClassQuota(cls, realEnrolledCount);
 
