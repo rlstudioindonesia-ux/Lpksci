@@ -2,6 +2,8 @@
 
 Terakhir diperbarui: 23-10-2026. Baca berkas ini dulu sebelum melanjutkan pekerjaan di repo `rlstudioindonesia-ux/Lpksci`.
 
+Skill Claude Code ada di `.claude/skills/` (`alur-perubahan`, `aturan-data-siswa`, `cek-bug`) dan `CLAUDE.md` di akar repo.
+
 ## Cara kerja dengan pemilik
 
 - Pemilik berkomunikasi dalam **Bahasa Indonesia**; jawab dalam Bahasa Indonesia, ringkas, tanpa istilah teknis berlebihan.
@@ -57,7 +59,8 @@ Terakhir diperbarui: 23-10-2026. Baca berkas ini dulu sebelum melanjutkan pekerj
 - #64 data terhapus tidak muncul lagi, ETag per instance, batasi resync paksa
 - #65 diff kelas/pengaturan (bab tidak tertutup lagi)
 - #66 sertifikat di rapor Admin/VVIP, status tidak tertimpa form edit, jenis kelamin, nilai berbobot, tanpa SIS-001, CV per studentId, rumus Siswa Aktif, dokumen ini
-- berikutnya: nilai < 75 ikut rata-rata, essay diperketat, tab Alumni = Di Jepang
+- #67 nilai < 75 ikut rata-rata, essay diperketat, tab Alumni = Di Jepang
+- berikutnya: skill `.claude/skills` + `CLAUDE.md`
 
 ## Tindak lanjut terbuka
 
