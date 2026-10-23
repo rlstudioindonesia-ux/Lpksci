@@ -1,5 +1,6 @@
 import { ADMIN_ROLES } from "./apiAccess";
 import { findStudentForUser } from "./recordMatching";
+import { QUIZ_ANSWER_KEY_FIELDS } from "./quizScoring";
 
 /**
  * What GET /api/state sends to whom (security stage 2, 23-10-2026).
@@ -82,6 +83,20 @@ export function scopeStateForViewer(payload: any, viewer: { username?: string; r
         return copy;
       })
     : [];
+
+  // Answer keys only for quizzes this student already submitted (for the review).
+  const submittedQuizIds = new Set<string>();
+  for (const c of scoped.chapterAssessments as any[]) {
+    if (c && ownIds.has(norm(c.studentId))) {
+      for (const d of c.details?.quizDetails || []) if (d?.quizId) submittedQuizIds.add(d.quizId);
+    }
+  }
+  scoped.lmsQuizzes = (payload.lmsQuizzes || []).map((q: any) => {
+    if (!q || submittedQuizIds.has(q.id)) return q;
+    const copy = { ...q };
+    for (const k of QUIZ_ANSWER_KEY_FIELDS) delete copy[k];
+    return copy;
+  });
 
   if (!viewer) {
     scoped.messages = [];

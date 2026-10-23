@@ -25,8 +25,7 @@ Afiliasi/referral & Alumni dashboard (satu rumus di `src/lib/referrals.ts`), kal
 Android/PWA, peta sebaran.
 
 ## Temuan yang belum diperbaiki (perlu keputusan pemilik)
-- Galeri/slideshow disimpan sebagai seluruh daftar dari peramban; menghapus foto terakhir galeri memunculkan lagi foto bawaan.
-- Agenda, materi LMS, galeri, slideshow masih ditulis utuh dari memori instance (Lowongan sudah dibaca ulang dulu).
+- Slideshow & daftar galeri penuh masih dikirim utuh dari peramban (agenda, materi LMS, pengaturan, galeri per-foto, Lowongan sudah dibaca ulang lewat `server/freshRead.ts`).
 - `syncCustomizationToFirestore` menulis seluruh pengaturan dari memori instance (galeri, kelas, kustomisasi) - bisa menimpa perubahan dari instance lain yang belum tersinkron.
 
 ## Cara melapor ke pemilik

@@ -756,6 +756,8 @@ export default function AdminView({
         setCustGallery(systemState.galleries);
       } else if (Array.isArray(systemState.customization?.gallery) && systemState.customization.gallery.length > 0) {
         setCustGallery(systemState.customization.gallery);
+      } else if ((systemState.customization as any)?.galleryCleared) {
+        setCustGallery([]);
       } else {
         setCustGallery((prev) => (prev && prev.length > 0 ? prev : DEFAULT_GALLERY_ITEMS));
       }

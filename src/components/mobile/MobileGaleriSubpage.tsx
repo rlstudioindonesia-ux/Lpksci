@@ -1,4 +1,5 @@
 import React from "react";
+import { pickGalleryItems } from "../../lib/galleryItems";
 import { Camera, Download, Maximize2 } from "lucide-react";
 import { DEFAULT_GALLERY_ITEMS } from "../../data/defaultGallery";
 
@@ -8,9 +9,7 @@ interface MobileGaleriSubpageProps {
 }
 
 export default function MobileGaleriSubpage({ setSelectedGalleryImage, systemState }: MobileGaleriSubpageProps) {
-  const galleryItems = (systemState?.galleries && systemState.galleries.length > 0)
-    ? systemState.galleries
-    : DEFAULT_GALLERY_ITEMS;
+  const galleryItems = pickGalleryItems(systemState?.galleries, systemState?.customization?.gallery, systemState?.customization?.galleryCleared, DEFAULT_GALLERY_ITEMS);
 
   return (
     <div className="p-4 space-y-4 text-left">

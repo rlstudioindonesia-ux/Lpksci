@@ -1,9 +1,9 @@
 import type { Request, Response } from "express";
 import { syncEntityToFirestore, syncCustomizationToFirestore, syncGalleriesToFirestore } from "../../src/db/firebase-adapter.ts";
-import { DEFAULT_GALLERY_ITEMS } from "../../src/data/defaultGallery.ts";
+import { refreshGalleries } from "../freshRead.ts";
 
 // Slideshows and galleries
-export function handleMediaState(req: Request, res: Response, dataType: string, action: string, payload: any, state: any) {
+export async function handleMediaState(req: Request, res: Response, dataType: string, action: string, payload: any, state: any) {
   const normAction = (action || "").toLowerCase();
 
   if (dataType === "slideshows" || dataType === "slideshow") {
@@ -43,6 +43,12 @@ export function handleMediaState(req: Request, res: Response, dataType: string, 
       };
     };
 
+    // Deltas (delete / add / one photo) are applied to the latest list, so two
+    // admins editing the gallery at once do not undo each other (server/freshRead.ts).
+    const isDelta = normAction === "delete" || normAction === "remove" || normAction === "add" || normAction === "create" ||
+      (!Array.isArray(payload) && payload && typeof payload === "object" && !Array.isArray(payload.data) && payload.id);
+    if (isDelta) await refreshGalleries(state);
+
     // Ensure state.galleries is an initialized array
     if (!Array.isArray(state.galleries)) {
       state.galleries = [];
@@ -79,10 +85,9 @@ export function handleMediaState(req: Request, res: Response, dataType: string, 
       }
     }
 
-    // Safety fallback: only restore default gallery items if collection is completely empty
-    if (state.galleries.length === 0 && normAction !== "clear") {
-      state.galleries = DEFAULT_GALLERY_ITEMS;
-    }
+    // 23-10-2026: an emptied gallery stays empty (it used to refill itself with
+    // the sample photos). `galleriesCleared` keeps it empty across restarts.
+    state.galleriesCleared = state.galleries.length === 0;
 
     // Persist to state and Firestore
     if (state.customization) {

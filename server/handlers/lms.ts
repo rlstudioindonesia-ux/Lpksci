@@ -6,6 +6,7 @@ import { isQuizInBatchScope } from "../../src/lib/quizBatchScope.ts";
 import { mergeQuizRetake } from "../../src/lib/quizRetake.ts";
 import { todayJakartaISO } from "../../src/lib/dateUtils.ts";
 import { uniqueIdSuffix } from "../../src/lib/idGenerator.ts";
+import { refreshListItem } from "../freshRead.ts";
 
 async function uploadBase64IfPresent(dataStr: string | undefined, prefix: string, folder: string): Promise<string> {
   if (!dataStr || typeof dataStr !== "string" || !dataStr.startsWith("data:")) {
@@ -105,6 +106,8 @@ export async function handleLmsState(req: Request, res: Response, dataType: stri
       }
 
       if (action === "edit" || action === "update") {
+        // Latest version first: another instance may have changed this lesson (server/freshRead.ts).
+        await refreshListItem(state, "lmsLessons", "lmsLessons", payload?.id);
         const index = state.lmsLessons.findIndex(l => l.id === payload.id);
         if (index !== -1) {
           const processEditLesson = async () => {

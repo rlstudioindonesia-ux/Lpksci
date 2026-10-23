@@ -863,6 +863,9 @@ export default function App() {
     };
 
     window.addEventListener("focus", triggerDebouncedFetch);
+    // Explicit reload request (e.g. right after a quiz submission is graded by the server).
+    const onRefreshRequested = () => fetchState(0, true);
+    window.addEventListener("lpk-refresh-state", onRefreshRequested);
     window.addEventListener("online", triggerDebouncedFetch);
     window.addEventListener("pageshow", triggerDebouncedFetch);
     const handleVisibility = () => {
@@ -876,6 +879,7 @@ export default function App() {
       clearInterval(intervalId);
       if (retryTimeoutRef.current) clearTimeout(retryTimeoutRef.current);
       window.removeEventListener("focus", triggerDebouncedFetch);
+      window.removeEventListener("lpk-refresh-state", onRefreshRequested);
       window.removeEventListener("online", triggerDebouncedFetch);
       window.removeEventListener("pageshow", triggerDebouncedFetch);
       document.removeEventListener("visibilitychange", handleVisibility);

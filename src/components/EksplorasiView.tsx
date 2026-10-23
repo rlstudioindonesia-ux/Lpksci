@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { pickGalleryItems } from "../lib/galleryItems";
 import { DEFAULT_GALLERY_ITEMS } from "../data/defaultGallery";
 import { SystemState, UserAccount } from "../types";
 import {
@@ -57,7 +58,7 @@ export default function EksplorasiView({
     }
   };
 
-  const galleryItems = (systemState?.galleries && systemState.galleries.length > 0) ? systemState.galleries : DEFAULT_GALLERY_ITEMS;
+  const galleryItems = pickGalleryItems(systemState?.galleries, systemState?.customization?.gallery, systemState?.customization?.galleryCleared, DEFAULT_GALLERY_ITEMS);
 
   return (
     <div className="space-y-8 animate-fade-in text-left">

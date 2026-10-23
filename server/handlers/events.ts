@@ -1,13 +1,14 @@
 import type { Request, Response } from "express";
 import { syncEntityToFirestore, deleteEntityFromFirestore } from "../../src/db/firebase-adapter.ts";
 import { uniqueIdSuffix } from "../../src/lib/idGenerator.ts";
+import { refreshListItem } from "../freshRead.ts";
 
 // Calendar events
 // Extracted verbatim from the monolithic /api/state/update handler in server.ts.
 // Returns a truthy value (the Express Response) if this domain handled the
 // (dataType, action) combination and already sent a response; otherwise false,
 // so the caller (server/handlers/index.ts) can try the next domain in order.
-export function handleEventsState(req: Request, res: Response, dataType: string, action: string, payload: any, state: any) {
+export async function handleEventsState(req: Request, res: Response, dataType: string, action: string, payload: any, state: any) {
 
 
     if (dataType === "events") {
@@ -61,6 +62,8 @@ export function handleEventsState(req: Request, res: Response, dataType: string,
         return res.json({ success: true, item: newEvent });
       }
       if (action === "update") {
+        // Latest version first: another instance may have changed this event (server/freshRead.ts).
+        await refreshListItem(state, "events", "events", payload?.id);
         const { id, title, date, desc, targets, type, studyTime, reminderTime, targetClass, time, url, location } = payload;
         const index = state.events.findIndex(e => e.id === id);
         if (index !== -1) {

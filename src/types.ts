@@ -642,5 +642,7 @@ export interface SystemState {
       mathChapters?: { number: number; title: string; japaneseTitle: string; description: string; isActive?: boolean }[];
     }[];
     inventoryAreas?: string[];
+    /** Set by the server when the admin emptied the gallery on purpose (23-10-2026). */
+    galleryCleared?: boolean;
   };
 }

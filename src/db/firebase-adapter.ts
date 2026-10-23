@@ -379,6 +379,11 @@ export async function loadStateFromFirestore(fallbackState: any) {
       if (galList.length > 0) {
         loadedState.galleries = galList;
         hasData = true;
+        loadedState.galleriesCleared = false;
+      } else if (galleryData?.cleared === true) {
+        // The admin emptied the gallery on purpose: no sample photos.
+        loadedState.galleries = [];
+        loadedState.galleriesCleared = true;
       } else {
         loadedState.galleries = (fallbackState.galleries && fallbackState.galleries.length > 0) ? fallbackState.galleries : DEFAULT_GALLERY_ITEMS;
       }
@@ -386,7 +391,7 @@ export async function loadStateFromFirestore(fallbackState: any) {
     }
 
     // If galleries is empty, check customization doc for any previously saved gallery
-    if ((!loadedState.galleries || loadedState.galleries.length === 0) && custDoc && custDoc.exists()) {
+    if (!loadedState.galleriesCleared && (!loadedState.galleries || loadedState.galleries.length === 0) && custDoc && custDoc.exists()) {
       const custData = custDoc.data();
       if (Array.isArray(custData?.gallery) && custData.gallery.length > 0) {
         loadedState.galleries = custData.gallery;
@@ -396,7 +401,7 @@ export async function loadStateFromFirestore(fallbackState: any) {
         hasData = true;
       }
     }
-    if (!loadedState.galleries || loadedState.galleries.length === 0) {
+    if (!loadedState.galleriesCleared && (!loadedState.galleries || loadedState.galleries.length === 0)) {
       loadedState.galleries = DEFAULT_GALLERY_ITEMS;
     }
     if (costConfigDoc && costConfigDoc.exists()) {
@@ -848,7 +853,7 @@ export function syncGalleriesToFirestore(galleries: any[]) {
     const hashVal = hashString(JSON.stringify(sanitized));
     if (writeCache.get(cacheKey) !== hashVal) {
       setWriteCache(cacheKey, hashVal);
-      setDocWithRetry(doc(db, 'system', 'galleries'), { data: sanitized, galleries: sanitized, gallery: sanitized, updatedAt: new Date().toISOString() }, cacheKey, OperationType.WRITE);
+      setDocWithRetry(doc(db, 'system', 'galleries'), { data: sanitized, galleries: sanitized, gallery: sanitized, cleared: list.length === 0, updatedAt: new Date().toISOString() }, cacheKey, OperationType.WRITE);
     }
   } catch(e) {
     console.error("syncGalleriesToFirestore error:", e);
