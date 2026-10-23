@@ -4,7 +4,7 @@ import path from "path";
 import { createServer as createViteServer } from "vite";
 import dotenv from "dotenv";
 import fs from "fs";
-import { getStudentStatusGroup } from "./src/lib/studentStatusGroups.ts";
+import { getStudentStatusGroup, isAlumniStatusValue } from "./src/lib/studentStatusGroups.ts";
 import { findRecordIndex, findStudentUserIndex } from "./src/lib/recordMatching.ts";
 import { testConnection, loadStateFromFirestore, syncEntityToFirestore, syncCustomizationToFirestore, syncGalleriesToFirestore, syncLmsClassToFirestore, syncAllLmsClassesToFirestore, deleteEntityFromFirestore, uploadBufferToFirebaseStorage, getUserFromFirestore, getEntityFromFirestore, db, touchSyncMeta, setSyncInstanceId, parseSyncChangeValue, SYNC_CHANGES_DOC_ID, mergeEntityFieldsToFirestore } from "./src/db/firebase-adapter.ts";
 import { doc, getDoc } from "firebase/firestore";
@@ -1809,7 +1809,8 @@ async function startServer() {
         let newAlumniUsersCount = 0;
         if (state.users && state.activeStudents) {
           state.activeStudents.forEach(student => {
-            const isAlumni = ["Lulus", "Di Jepang"].includes(student.status || "");
+            // 23-10-2026 (owner): "Lulus" stays a student; only "Di Jepang" is alumni.
+            const isAlumni = isAlumniStatusValue(student.status);
             if (isAlumni) {
               const userIndex = findStudentUserIndex(state.users, student);
               if (userIndex !== -1) {

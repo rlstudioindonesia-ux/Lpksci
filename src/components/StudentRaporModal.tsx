@@ -1,4 +1,5 @@
 import { EXTRA_STUDENT_DOCUMENTS } from "../lib/studentDocuments";
+import { isAlumniTabStudent } from "../lib/studentStatusGroups";
 import React, { useState } from "react";
 import { createPortal } from "react-dom";
 import { Activity, Clock, DollarSign, FileText, CheckCircle, Upload, X } from "lucide-react";
@@ -36,7 +37,7 @@ export default function StudentRaporModal({
   const matchedReg = {
     id: matchedRS?.id || student.id,
     name: matchedRS?.name || student.name,
-    status: matchedRS?.status || student.statusPendaftaran || (["Lulus", "Di Jepang"].includes(student.status) ? "Alumni" : "Siswa Aktif"),
+    status: matchedRS?.status || student.statusPendaftaran || (isAlumniTabStudent(student) ? "Alumni" : "Siswa Aktif"),
     email: matchedRS?.email || student.email || "-",
     phone: matchedRS?.phone || student.phone || "-",
     birthDate: matchedRS?.birthDate || student.birthDate || "-",

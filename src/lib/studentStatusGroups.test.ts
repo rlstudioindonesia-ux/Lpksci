@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   countStudentsByStatusGroup,
+  isAlumniStatusValue,
   getStudentStatusGroup,
   studentMatchesStatusGroup,
   isActiveStudent,
@@ -92,5 +93,14 @@ describe("isAlumniTabStudent", () => {
     expect(isAlumniTabStudent({ status: "Di Jepang" })).toBe(true);
     expect(isAlumniTabStudent({ status: "Lulus" })).toBe(false);
     expect(isAlumniTabStudent({ status: "Diklat SO" })).toBe(false);
+  });
+});
+
+describe("isAlumniStatusValue", () => {
+  it("only Di Jepang is alumni; Lulus stays a student (owner, 23-10-2026)", () => {
+    expect(isAlumniStatusValue("Di Jepang")).toBe(true);
+    expect(isAlumniStatusValue("Lulus")).toBe(false);
+    expect(isAlumniStatusValue("Belajar")).toBe(false);
+    expect(isAlumniStatusValue(undefined)).toBe(false);
   });
 });

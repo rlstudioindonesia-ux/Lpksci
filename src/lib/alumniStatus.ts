@@ -9,22 +9,21 @@ export interface AlumniStatusStudent {
  * purposes: either explicitly flagged via registration
  * (kategoriPendaftaran/statusPendaftaran, two historically redundant
  * fields that different screens have checked inconsistently), or their
- * program status shows they've completed training and moved to Japan
- * ("Lulus"/"Di Jepang").
+ * program status shows they've moved to Japan ("Di Jepang").
+ *
+ * 23-10-2026 (owner): "Lulus" (passed JFT/JLPT) is still a student - it no
+ * longer makes someone an alumnus anywhere.
  *
  * This is deliberately NOT used by Job Order eligibility/access
  * (src/lib/jobAccess.ts) - there, a "Lulus" student is still an active
  * job-seeker going through their first placement, not yet an alumnus, so
- * that module only trusts the explicit registration category. Everywhere
- * else in the app (rosters, billing, profile labels) has historically
- * treated "Lulus"/"Di Jepang" as alumni, which this function preserves.
+ * that module only trusts the explicit registration category.
  */
 export function isStudentAlumni(student: AlumniStatusStudent | null | undefined): boolean {
   if (!student) return false;
   return (
     student.statusPendaftaran === "Alumni" ||
     student.kategoriPendaftaran === "Alumni" ||
-    student.status === "Lulus" ||
     student.status === "Di Jepang"
   );
 }

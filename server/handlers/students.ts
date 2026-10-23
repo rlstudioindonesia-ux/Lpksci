@@ -3,7 +3,8 @@ import { syncEntityToFirestore, syncEntityToFirestoreAsync, deleteEntityFromFire
 import { hashPassword, isHashedPassword } from "../auth-utils.ts";
 import { invalidateStateCache } from "../stateCache.ts";
 import { nextSequentialId, collectUsedStudentIds } from "../../src/lib/idGenerator.ts";
-import { findRecordIndex } from "../../src/lib/recordMatching.ts";
+import { findRecordIndex, findStudentUserIndex } from "../../src/lib/recordMatching.ts";
+import { isAlumniStatusValue } from "../../src/lib/studentStatusGroups.ts";
 import { normalizeGender } from "../../src/lib/gender.ts";
 import { EXTRA_STUDENT_DOCUMENT_FIELDS } from "../../src/lib/studentDocuments.ts";
 
@@ -44,11 +45,12 @@ export async function handleStudentsState(req: Request, res: Response, dataType:
       // Helper to synchronize activeStudent with user account when they are Alumni
       const syncActiveStudentToAlumniUser = (studentId: string, studentName: string, status: string, profilePicture?: string) => {
         const studentObj = state.activeStudents.find((s: any) => s.id === studentId);
-        const isAlumni = ["Lulus", "Di Jepang"].includes(status) && studentObj?.statusPendaftaran === "Alumni";
+        // 23-10-2026 (owner): only "Di Jepang" is alumni; "Lulus" (passed JFT/JLPT) stays a student.
+        const isAlumni = isAlumniStatusValue(status) && studentObj?.statusPendaftaran === "Alumni";
         
         if (isAlumni) {
           const protectedRoles = ["Pengajar", "VVIP", "Admin", "Admin Super", "Admin Biasa"];
-          const userIndex = state.users.findIndex(u => !protectedRoles.includes(u.role) && ((u.studentId && u.studentId === studentId) || u.name === studentName));
+          const userIndex = findStudentUserIndex(state.users, { id: studentId, name: studentName, email: studentObj?.email });
           if (userIndex !== -1) {
             const currentRole = state.users[userIndex].role;
             const protectedRoles = ["Pengajar", "VVIP", "Admin", "Admin Super", "Admin Biasa"];
@@ -130,7 +132,7 @@ export async function handleStudentsState(req: Request, res: Response, dataType:
         const { name, batch, class: className, status, prefecture, city, company, latitude, longitude, sensei, graduationYear } = payload;
         const newId = nextSequentialId("SIS", collectUsedStudentIds(state));
 
-        const isAlumni = ["Lulus", "Di Jepang"].includes(status || "Di Jepang");
+        const isAlumni = isAlumniStatusValue(status || "Di Jepang");
         const finalClass = isAlumni ? "" : (className || "");
         const finalSensei = isAlumni ? "" : (sensei || "Sensei Utama");
 
@@ -345,8 +347,9 @@ export async function handleStudentsState(req: Request, res: Response, dataType:
             state.activeStudents[index].kategoriPendaftaran = statusPendaftaran === "Alumni" ? "Alumni" : "Siswa";
           }
 
-          // If status is an alumni status (Lulus, Di Jepang), default to Alumni IF NOT ALREADY SET TO SISWA
-          const isAlumniStatus = ["Lulus", "Di Jepang"].includes(state.activeStudents[index].status);
+          // Alumni status ("Di Jepang" only - owner 23-10-2026: "Lulus" keeps class & sensei),
+          // default to Alumni IF NOT ALREADY SET TO SISWA
+          const isAlumniStatus = isAlumniStatusValue(state.activeStudents[index].status);
           if (isAlumniStatus) {
             if (!statusPendaftaran && state.activeStudents[index].statusPendaftaran !== "Siswa Baru" && state.activeStudents[index].statusPendaftaran !== "Siswa") {
               state.activeStudents[index].statusPendaftaran = "Alumni";
@@ -535,6 +538,8 @@ export async function handleStudentsState(req: Request, res: Response, dataType:
             if (effectivePhoto) state.users[userIndex].profilePicture = effectivePhoto;
             if (effectiveClass !== undefined) state.users[userIndex].assignedClass = effectiveClass;
             if (isAlumniStatus) state.users[userIndex].role = "Alumni";
+            // Getting a class again (e.g. a "Lulus" student made Alumni by the old rule) means a student account.
+            else if (effectiveClass && state.users[userIndex].role === "Alumni") state.users[userIndex].role = "Siswa";
             if (password && password.trim() !== "") {
               state.users[userIndex].password = isHashedPassword(password)
                 ? password

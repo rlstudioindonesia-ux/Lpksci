@@ -19,12 +19,9 @@ describe("isStudentAlumni", () => {
     expect(isStudentAlumni({ status: "Belajar", kategoriPendaftaran: "Alumni" })).toBe(true);
   });
 
-  it("treats status Lulus as alumni even with no registration category set", () => {
-    // Regression case: records created via RegistrationView only ever set
-    // statusPendaftaran, never kategoriPendaftaran - a student who
-    // graduated (Lulus) must still count as alumni even when both
-    // registration fields are undefined.
-    expect(isStudentAlumni({ status: "Lulus" })).toBe(true);
+  it("keeps status Lulus (passed JFT/JLPT) as a student (owner, 23-10-2026)", () => {
+    expect(isStudentAlumni({ status: "Lulus" })).toBe(false);
+    expect(isStudentAlumni({ status: "Lulus", statusPendaftaran: "Alumni" })).toBe(true);
   });
 
   it("treats status Di Jepang as alumni", () => {

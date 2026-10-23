@@ -12,6 +12,7 @@ Semua aturan ini sudah ada di `src/lib` dan dijaga tes. **Pakai fungsinya, janga
 - `getStudentStatusGroup`: Lulus → grup Sertifikasi JFT/JLPT/SSW; "On Progres Job" (salah eja lama) → On Proges Job; "Berhenti" → Dikeluarkan; kosong/tak dikenal → Belajar.
 - **Siswa Aktif** (pemilik): Belajar + On Progres Job + On Progres JFT + Lulus sertifikasi → `isActiveStudent` / `countActiveStudents`. Bukan Diklat SO, Di Jepang, Dikeluarkan.
 - **Tab Alumni** = hanya Di Jepang → `isAlumniTabStudent`.
+- **"Lulus" tetap siswa** (pemilik, 23-10-2026): kelas & sensei TIDAK dikosongkan, akun tetap Siswa. Hanya "Di Jepang" yang menjadikan alumni → `isAlumniStatusValue` (server), `isStudentAlumni` (tanpa "Lulus"). Jangan pakai `["Lulus", "Di Jepang"]` untuk menentukan alumni.
 - Tabel per status/kelas: `countStudentsByStatusGroup`, filter: `studentMatchesStatusGroup`.
 - Form edit Admin/VVIP: status PENDAFTARAN (`status`) terpisah dari status PROGRES siswa (`studentStatus`). Jangan pernah menyalin status pendaftaran ke siswa aktif.
 
