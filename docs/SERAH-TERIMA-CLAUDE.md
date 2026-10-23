@@ -86,7 +86,8 @@ Skill Claude Code ada di `.claude/skills/` (`alur-perubahan`, `aturan-data-siswa
 - #79 tagihan ditautkan ke nomor siswa (siswa bernama sama terpisah, ganti nama tidak melepas tagihan, tagihan ikut saat pendaftar disetujui)
 - #80 edit Buku Kas tidak lagi mengubah kode jadi "P1 Gaji" / tidak menambah nominal tagihan, Lowongan dibaca ulang sebelum ditulis, panel berkas pendaftar hanya kirim kolom yang berubah
 - #81 galeri kosong tetap kosong, agenda/materi/pengaturan/galeri dibaca ulang sebelum ditulis (`server/freshRead.ts`), nilai kuis dihitung server, kunci jawaban tidak dikirim sebelum dikumpulkan
-- berikutnya: gaji ↔ Buku Kas sinkron di server, persentase kehadiran ikut koreksi absen
+- #82 gaji ↔ Buku Kas sinkron di server, persentase kehadiran ikut koreksi absen
+- berikutnya: notifikasi tertarget tidak lagi tersebar ke semua siswa, kirim notifikasi massal khusus staf (saat sakelar), kuota kelas tanpa siswa dikeluarkan & tanpa akun Sensei, data dimuat ulang saat logout
 
 ## Tindak lanjut terbuka
 

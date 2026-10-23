@@ -1,4 +1,5 @@
 import React from "react";
+import { getStudentStatusGroup } from "../../lib/studentStatusGroups";
 import { Activity, BookOpen, Calendar, Check, Clock, Crown, Eye, FileText, GraduationCap, MessageCircle, MessageSquare, ShieldAlert, Users, X } from "lucide-react";
 import { formatRupiah, parsePrice } from "../MobileDashboardView";
 import { matchesClassLevel, alumniClassNameFor, resolveClassQuota } from "../../lib/classQuota";
@@ -18,10 +19,17 @@ export default function MobilePilihKelasSubpage({ currentUser, isUserAlumni, mon
     (() => {
                 const getStudentsInClass = (className: string) => {
                   const students = (systemState.activeStudents || []).filter(
-                    (s: any) => matchesClassLevel(s.assignedClass || s.class, className)
+                    // Expelled students no longer take a seat (23-10-2026).
+                    (s: any) => matchesClassLevel(s.assignedClass || s.class, className) && getStudentStatusGroup(s.status) !== "Dikeluarkan"
                   );
+                  // Student accounts only (a Sensei assigned to the class is not a
+                  // participant), and not the accounts of expelled students.
+                  const expelledIds = new Set((systemState.activeStudents || [])
+                    .filter((st: any) => getStudentStatusGroup(st.status) === "Dikeluarkan")
+                    .map((st: any) => st.id));
                   const usersWithClass = (systemState.users || []).filter(
-                    (u: any) => matchesClassLevel(u.assignedClass, className)
+                    (u: any) => matchesClassLevel(u.assignedClass, className) &&
+                      (u.role === "Siswa" || u.role === "Alumni") && !expelledIds.has(u.studentId)
                   );
                   
                   const seen = new Set();

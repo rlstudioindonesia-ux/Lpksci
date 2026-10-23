@@ -87,7 +87,7 @@ function isAuthEnforced(): boolean {
 // Still open with enforcement on: the public website reads a trimmed state,
 // and the registration form uploads documents before an account exists.
 const PUBLIC_WHEN_ENFORCED = new Set(["GET /state", "POST /upload"]);
-const STAFF_ONLY_API = new Set(["/sync/reload", "/state/reload-firestore", "/vvip/analyze"]);
+const STAFF_ONLY_API = new Set(["/sync/reload", "/state/reload-firestore", "/vvip/analyze", "/broadcast-notification"]);
 app.use("/api", (req, res, next) => {
   const authUser = resolveSessionUser(req.headers, state?.users);
   (req as any).authUser = authUser;
@@ -1627,18 +1627,26 @@ app.post("/api/state/update", async (req, res) => {
 // Broadcast notification endpoint (for job orders, daily schedules, announcements to all registered accounts)
 app.post("/api/broadcast-notification", (req, res) => {
   try {
-    const { title, body, type, url, id } = req.body;
+    const { title, body, type, url, id, targetAudience, jobId, jobType, targetStudentIds } = req.body;
     if (!title || !body) {
       return res.status(400).json({ error: "title and body are required" });
     }
-    const notifItem = {
+    // 23-10-2026: keep who the notification is for. These fields used to be
+    // dropped here, and this copy overwrote the browser's Firestore document,
+    // so a job recommendation for one student (or an alumni-only job) was
+    // shown to every student.
+    const notifItem: any = {
       id: id || `notif_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
       title,
       body,
       type: type || "announcement",
       url: url || "/",
       createdAt: Date.now(),
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
+      targetAudience: targetAudience || "Semua",
+      ...(jobId ? { jobId } : {}),
+      ...(jobType ? { jobType } : {}),
+      ...(Array.isArray(targetStudentIds) && targetStudentIds.length > 0 ? { targetStudentIds } : {}),
     };
     if (!(state as any).broadcastNotifications) {
       (state as any).broadcastNotifications = [];

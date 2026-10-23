@@ -1315,6 +1315,9 @@ export default function App() {
     setOriginalUser(null);
     setActiveTab("frontend");
     clearSession();
+    // Reload as a visitor so the logged-out screen no longer holds the previous
+    // account's data (with security stage 2 a visitor gets trimmed data).
+    try { setTimeout(() => window.dispatchEvent(new Event("lpk-refresh-state")), 0); } catch (e) {}
     if (typeof window !== "undefined") {
       localStorage.removeItem("lpk_auth_session");
       localStorage.removeItem("lpk_original_session");
