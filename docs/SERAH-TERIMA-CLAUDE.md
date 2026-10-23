@@ -52,6 +52,8 @@ Skill Claude Code ada di `.claude/skills/` (`alur-perubahan`, `aturan-data-siswa
 - **Buku Kas**: entri pemasukan otomatis mengikuti pembayaran (`src/lib/paymentLedger.ts`).
 - Jangan fallback ke `"SIS-001"` untuk akun tanpa studentId.
 - Jenis kelamin dinormalisasi lewat `normalizeGender` (`src/lib/gender.ts`).
+- **Update pendaftar tidak pernah membuat pendaftar baru** (`src/lib/registrationUpdate.ts`): target = pendaftar (id) → siswa aktif (id) → pendaftar (email/nama unik) → 404. Pendaftar asli hanya lewat `/api/register`.
+- **Hapus pendaftar tidak menghapus siswa aktif**; akun login ikut terhapus hanya lewat id/email dan tidak untuk pendaftar "hantu" (id sama dengan siswa aktif, `isPhantomRegistration`).
 
 ## PR yang sudah di-merge di sesi ini
 
@@ -60,7 +62,8 @@ Skill Claude Code ada di `.claude/skills/` (`alur-perubahan`, `aturan-data-siswa
 - #65 diff kelas/pengaturan (bab tidak tertutup lagi)
 - #66 sertifikat di rapor Admin/VVIP, status tidak tertimpa form edit, jenis kelamin, nilai berbobot, tanpa SIS-001, CV per studentId, rumus Siswa Aktif, dokumen ini
 - #67 nilai < 75 ikut rata-rata, essay diperketat, tab Alumni = Di Jepang
-- berikutnya: skill `.claude/skills` + `CLAUDE.md`
+- #68 skill `.claude/skills` + `CLAUDE.md`
+- berikutnya: pendaftar "hantu" di Siswa Baru (update berkas siswa aktif membuat pendaftar baru), hapus pendaftar tidak lagi menghapus siswa aktif
 
 ## Tindak lanjut terbuka
 
@@ -71,4 +74,5 @@ Skill Claude Code ada di `.claude/skills/` (`alur-perubahan`, `aturan-data-siswa
    - `firestore.rules` terbuka penuh.
 2. **Sudah diputuskan pemilik (23-10-2026) dan diterapkan:** nilai < 75 ikut rata-rata, essay diperketat, tab Alumni = Di Jepang. Sisa: rata-rata nilai & kehadiran di peramban masih mencocokkan siswa lewat nama juga (sengaja dibiarkan karena data lama); essay tanpa kunci jawaban tetap dianggap benar (ditinjau Sensei).
 3. **Data lama yang mungkin sudah rusak** (perbaikan hanya mencegah kejadian baru): siswa berstatus "Terverifikasi"/"Disetujui" (dari form edit lama), tagihan `PAY-<6 huruf>-…` yang tertukar, entri Buku Kas yang saling menimpa. Bisa dibuat skrip pemeriksa bila pemilik minta.
-4. Semua perubahan belum diverifikasi langsung di produksi — minta pemilik menguji alur utama setelah deploy.
+4. **Pendaftar "hantu" yang sudah terlanjur ada** di Siswa Baru (ID-nya sama dengan siswa aktif, biasanya `SIS-…`) boleh dihapus Admin; sejak perbaikan ini penghapusan tidak menyentuh siswa aktif/akunnya. Belum dibersihkan otomatis (menunggu persetujuan pemilik).
+5. Semua perubahan belum diverifikasi langsung di produksi — minta pemilik menguji alur utama setelah deploy.
