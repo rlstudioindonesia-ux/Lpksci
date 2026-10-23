@@ -63,7 +63,8 @@ Skill Claude Code ada di `.claude/skills/` (`alur-perubahan`, `aturan-data-siswa
 - #66 sertifikat di rapor Admin/VVIP, status tidak tertimpa form edit, jenis kelamin, nilai berbobot, tanpa SIS-001, CV per studentId, rumus Siswa Aktif, dokumen ini
 - #67 nilai < 75 ikut rata-rata, essay diperketat, tab Alumni = Di Jepang
 - #68 skill `.claude/skills` + `CLAUDE.md`
-- berikutnya: pendaftar "hantu" di Siswa Baru (update berkas siswa aktif membuat pendaftar baru), hapus pendaftar tidak lagi menghapus siswa aktif
+- #69 pendaftar "hantu" di Siswa Baru (update berkas siswa aktif membuat pendaftar baru), hapus pendaftar tidak lagi menghapus siswa aktif
+- berikutnya: pembersihan otomatis pendaftar hantu + tutup celah auto-sync yang menulis ulang siswa aktif sebagai pendaftar
 
 ## Tindak lanjut terbuka
 
@@ -74,5 +75,5 @@ Skill Claude Code ada di `.claude/skills/` (`alur-perubahan`, `aturan-data-siswa
    - `firestore.rules` terbuka penuh.
 2. **Sudah diputuskan pemilik (23-10-2026) dan diterapkan:** nilai < 75 ikut rata-rata, essay diperketat, tab Alumni = Di Jepang. Sisa: rata-rata nilai & kehadiran di peramban masih mencocokkan siswa lewat nama juga (sengaja dibiarkan karena data lama); essay tanpa kunci jawaban tetap dianggap benar (ditinjau Sensei).
 3. **Data lama yang mungkin sudah rusak** (perbaikan hanya mencegah kejadian baru): siswa berstatus "Terverifikasi"/"Disetujui" (dari form edit lama), tagihan `PAY-<6 huruf>-…` yang tertukar, entri Buku Kas yang saling menimpa. Bisa dibuat skrip pemeriksa bila pemilik minta.
-4. **Pendaftar "hantu" yang sudah terlanjur ada** di Siswa Baru (ID-nya sama dengan siswa aktif, biasanya `SIS-…`) boleh dihapus Admin; sejak perbaikan ini penghapusan tidak menyentuh siswa aktif/akunnya. Belum dibersihkan otomatis (menunggu persetujuan pemilik).
+4. **Pendaftar "hantu" dibersihkan otomatis** (disetujui pemilik 23-10-2026): `cleanupPhantomRegistrations` berjalan setiap server memuat/resync data; menghapus pendaftar yang ID-nya sama dengan siswa aktif atau tanpa nama/email/HP. Hanya pendaftar yang dihapus, siswa aktif & akun tidak disentuh. Jumlahnya tercatat di log server (`[Cleanup]`).
 5. Semua perubahan belum diverifikasi langsung di produksi — minta pemilik menguji alur utama setelah deploy.
