@@ -1294,7 +1294,7 @@ export default function AdminView({
       setSalarySubTab("hr");
     }
   }, [currentUser]);
-  const [hrFilterMonth, setHrFilterMonth] = useState(new Date().toISOString().substring(0, 7));
+  const [hrFilterMonth, setHrFilterMonth] = useState(todayLocalISO().substring(0, 7));
   const [selectedStaffForQuickPay, setSelectedStaffForQuickPay] = useState<string | null>(null);
   const [quickPayAmount, setQuickPayAmount] = useState<string>("4500000");
   const [quickPayNotes, setQuickPayNotes] = useState<string>("");

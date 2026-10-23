@@ -1,7 +1,7 @@
 import React from "react";
 import { Activity, AlertCircle, Award, BookOpen, Calculator, Calendar, CheckCheck, CheckCircle, ChevronDown, ChevronRight, Clock, DollarSign, Download, Edit, Eye, FileText, Filter, Globe, GraduationCap, History, Laptop, LogIn, RefreshCw, RotateCcw, Search, Shield, ShieldCheck, Smartphone, TrendingUp, UserCheck, Users, UserX } from "lucide-react";
 import { createSvgAvatar, getSafePhotoUrl } from "../../lib/storageHelper";
-import { calculateAge, todayLocalISO } from "../../lib/dateUtils";
+import { calculateAge, todayLocalISO, toLocalISODate } from "../../lib/dateUtils";
 import { computeAttendanceRate } from "../../lib/attendanceMetrics";
 import { isGradedAssessment } from "../../lib/scoreAveraging";
 import { hasStaffOversight } from "../../lib/permissions";
@@ -116,12 +116,12 @@ export default function VvipFullEvalSegment({ activeStudents, classFilter, class
   // Determine target date range
   const targetDateInfo = React.useMemo(() => {
     const now = new Date();
-    let targetDateStr = now.toISOString().split("T")[0];
+    let targetDateStr = toLocalISODate(now);
     let label = `Hari Ini (${now.toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })})`;
 
     if (staffLoginDateMode === "yesterday") {
       const y = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-      targetDateStr = y.toISOString().split("T")[0];
+      targetDateStr = toLocalISODate(y);
       label = `Kemarin (${y.toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })})`;
     } else if (staffLoginDateMode === "custom" && staffLoginCustomDate) {
       targetDateStr = staffLoginCustomDate;
@@ -156,7 +156,9 @@ export default function VvipFullEvalSegment({ activeStudents, classFilter, class
           const logD = new Date(ts);
           return logD >= sevenDaysAgo && logD <= now;
         } else {
-          return ts.startsWith(targetDateInfo.targetDateStr);
+          // Local (WIB) calendar day: comparing the UTC ISO prefix put early-
+          // morning logins under the previous day.
+          return toLocalISODate(ts) === targetDateInfo.targetDateStr;
         }
       });
 
@@ -165,7 +167,7 @@ export default function VvipFullEvalSegment({ activeStudents, classFilter, class
         const lastActiveTs = u.lastActive;
         const matchesActive = staffLoginDateMode === "7days"
           ? (new Date(lastActiveTs) >= sevenDaysAgo && new Date(lastActiveTs) <= now)
-          : lastActiveTs.startsWith(targetDateInfo.targetDateStr);
+          : toLocalISODate(lastActiveTs) === targetDateInfo.targetDateStr;
 
         const alreadyExists = dateLogs.some((l: any) => {
           const ts = l.timestamp || l.time;

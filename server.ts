@@ -511,7 +511,9 @@ app.post("/api/upload", async (req, res) => {
     }
 
     const buffer = Buffer.from(base64Content, "base64");
-    const targetFolder = folder || "uploads";
+    // Same sanitising as Firebase Storage uploads: an unsanitised "../.." folder
+    // let the local-disk fallback below write files outside the uploads dir.
+    const targetFolder = String(folder || "uploads").replace(/[^a-zA-Z0-9_.-]/g, "_").replace(/^\.+/, "_") || "uploads";
     
     // 1. Attempt Firebase Storage upload first
     try {

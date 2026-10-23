@@ -485,7 +485,7 @@ export function TeacherDashboardPanel({
       type: reportType,
       content: reportText,
       link: reportLink,
-      date: new Date().toISOString().split('T')[0]
+      date: todayLocalISO()
     });
     alert("Laporan berhasil dikirim");
     setShowTeacherModal(null);
