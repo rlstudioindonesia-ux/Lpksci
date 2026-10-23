@@ -165,8 +165,10 @@ export default function ProgressBelajarView({
   const handleSaveMetrics = async () => {
     if (!selectedStudentId || !activeStudent) return;
 
+    // Kirim hanya kolom yang diubah: mengirim seluruh objek siswa ikut menimpa
+    // status dengan salinan lama di peramban (status "reset" ke Belajar).
     const updatedStudentPayload = {
-      ...activeStudent,
+      id: activeStudent.id,
       mathScore: editMath,
       fiveSScore: editFiveS,
       ethicsScore: editEthics,
@@ -189,8 +191,9 @@ export default function ProgressBelajarView({
     setIsSubmittingJobForm(true);
     setJobFormSuccess("");
 
+    // Hanya kolom pemantauan pasca-Job (lihat catatan di handleSaveMetrics).
     const updatedStudentPayload: Partial<ActiveStudent> = {
-      ...activeStudent,
+      id: activeStudent.id,
       jobTestimonial,
       jobSoMitra,
       jobCompanyJapan,

@@ -121,6 +121,7 @@ import { CHAPTERS_LIST } from "../chapters";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import PembayaranSiswaView, { getStudentPayments } from "./PembayaranSiswaView";
+import { countStudentsByStatusGroup, studentMatchesStatusGroup } from "../lib/studentStatusGroups";
 
 export function parsePrice(val: any): number {
   if (val === undefined || val === null) return 0;
@@ -655,12 +656,13 @@ export default function AdminView({
   const activeStudents = useMemo(() => systemState.activeStudents || [], [systemState.activeStudents]);
 
   const classTabs = useMemo(() => {
+    const grouped = countStudentsByStatusGroup(activeStudents);
     const counts = {
-      belajar: activeStudents.filter((s: any) => !["Lulus", "Di Jepang", "Diklat SO", "On Proges Job", "On Progres JFT/JLPT/SSW"].includes(s.status || "")).length,
-      job: activeStudents.filter((s: any) => s.status === "On Proges Job").length,
-      diklat: activeStudents.filter((s: any) => s.status === "Diklat SO").length,
-      jepang: activeStudents.filter((s: any) => s.status === "Di Jepang").length,
-      jft: activeStudents.filter((s: any) => s.status === "On Progres JFT/JLPT/SSW" || s.status === "Lulus").length,
+      belajar: grouped["Belajar"],
+      job: grouped["On Proges Job"],
+      diklat: grouped["Diklat SO"],
+      jepang: grouped["Di Jepang"],
+      jft: grouped["On Progres JFT/JLPT/SSW"],
     };
 
     return [
@@ -1754,7 +1756,7 @@ export default function AdminView({
           const isAlumni = ["Lulus", "Di Jepang"].includes(s.status);
 
           if (filterStatus !== "All") {
-            if (s.status !== filterStatus) return false;
+            if (!studentMatchesStatusGroup(s, filterStatus)) return false;
           } else {
             if (siswaTab === "alumni" && !isAlumni) return false;
             if (siswaTab === "aktif" && isAlumni) return false;

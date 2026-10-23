@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   FileText,
   Printer,
@@ -18,6 +18,7 @@ import {
 import { uploadFileToFirebase } from "../lib/storageHelper";
 import { calculateAge } from "../lib/dateUtils";
 import { ActiveStudent } from "../types";
+import { shouldReloadCvForm } from "../lib/cvFormSync";
 
 interface StudentCvViewProps {
   student: ActiveStudent;
@@ -66,9 +67,23 @@ export default function StudentCvView({
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
+  // Unsaved local edits; while true, background state refetches (every ~25s,
+  // new object each time) must not overwrite what the student is typing.
+  const hasUnsavedChangesRef = useRef(false);
+  const loadedStudentIdRef = useRef<string | null>(null);
+
   // Initialize local state from student prop
   useEffect(() => {
     if (student) {
+      if (!shouldReloadCvForm({
+        previousStudentId: loadedStudentIdRef.current,
+        nextStudentId: student.id,
+        hasUnsavedChanges: hasUnsavedChangesRef.current,
+      })) {
+        return;
+      }
+      loadedStudentIdRef.current = student.id;
+      hasUnsavedChangesRef.current = false;
       setFormData({
         name: student.name || "",
         gender: student.gender || "Laki-laki",
@@ -131,6 +146,7 @@ export default function StudentCvView({
   }, [student]);
 
   const handleFieldChange = (field: keyof ActiveStudent, value: any) => {
+    hasUnsavedChangesRef.current = true;
     setFormData((prev) => ({
       ...prev,
       [field]: value
@@ -228,6 +244,7 @@ export default function StudentCvView({
       };
       const result = await onUpdateStudent(payload);
       if (result) {
+        hasUnsavedChangesRef.current = false;
         setSaveSuccess(true);
         setTimeout(() => setSaveSuccess(false), 3000);
       } else {
@@ -243,6 +260,7 @@ export default function StudentCvView({
 
   const handleAutofill = () => {
     if (confirm("Apakah Anda ingin mengisi otomatis data yang sudah ada di sistem LPK?")) {
+      hasUnsavedChangesRef.current = true;
       setFormData((prev) => ({
         ...prev,
         name: student.name || prev.name,

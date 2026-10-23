@@ -104,6 +104,13 @@ export interface RegisteredStudent {
   docCV5?: string;
   docMoU?: string;
   docKontrak?: string;
+  // Berkas tambahan (lib/studentDocuments.ts)
+  docSertifikatJFT?: string;
+  docSertifikatSSW1?: string;
+  docSertifikatSSW2?: string;
+  docSertifikatLPK?: string;
+  docCOE?: string;
+  docCV?: string;
   verifiedDocs?: string[];
 }
 
@@ -164,6 +171,13 @@ export interface ActiveStudent {
   docCV5?: string;
   docMoU?: string;
   docKontrak?: string;
+  // Berkas tambahan (lib/studentDocuments.ts)
+  docSertifikatJFT?: string;
+  docSertifikatSSW1?: string;
+  docSertifikatSSW2?: string;
+  docSertifikatLPK?: string;
+  docCOE?: string;
+  docCV?: string;
   sensei?: string;
   senseiId?: string;
   date?: string; // Tgl pendaftaran / penerimaan

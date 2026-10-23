@@ -98,6 +98,7 @@ import VvipGajiSegment from "./vvip/VvipGajiSegment";
 import VvipGajiSummarySegment from "./vvip/VvipGajiSummarySegment";
 import VvipExecSegment from "./vvip/VvipExecSegment";
 import VvipKalenderSegment from "./vvip/VvipKalenderSegment";
+import { countStudentsByStatusGroup, getStudentStatusGroup, studentMatchesStatusGroup, isStudentStillActive } from "../lib/studentStatusGroups";
 
 interface VvipViewProps {
   currentUser?: UserAccount | null;
@@ -323,7 +324,7 @@ export default function VvipView({
   ).length, [activeStudents]);
   
   const studyingCount = useMemo(() => activeStudents.filter(
-    (s) => !["Lulus", "Di Jepang", "Diklat SO", "On Proges Job", "On Progres JFT/JLPT/SSW"].includes(s.status || ""),
+    (s) => studentMatchesStatusGroup(s, "Belajar"),
   ).length, [activeStudents]);
   
   const totalLunasRevenue = useMemo(() => systemState.payments

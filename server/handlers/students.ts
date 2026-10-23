@@ -1,7 +1,10 @@
 import type { Request, Response } from "express";
-import { syncEntityToFirestore, syncEntityToFirestoreAsync, deleteEntityFromFirestore, uploadBufferToFirebaseStorage, touchSyncMeta } from "../../src/db/firebase-adapter.ts";
+import { syncEntityToFirestore, syncEntityToFirestoreAsync, deleteEntityFromFirestore, uploadBufferToFirebaseStorage, touchSyncMeta, getEntityFromFirestore, getLastLocalWriteAt } from "../../src/db/firebase-adapter.ts";
 import { hashPassword, isHashedPassword } from "../auth-utils.ts";
 import { invalidateStateCache } from "../stateCache.ts";
+import { EXTRA_STUDENT_DOCUMENT_FIELDS } from "../../src/lib/studentDocuments.ts";
+
+const STRIPPED_PLACEHOLDERS = new Set(["[BERKAS_TERSIMPAN]", "[FOTO_TERSIMPAN]", "[BUKTI_TERSIMPAN]"]);
 
 async function uploadBase64IfPresent(dataStr: string | undefined, prefix: string, folder: string): Promise<string> {
   if (!dataStr || typeof dataStr !== "string" || !dataStr.startsWith("data:")) {
@@ -160,6 +163,11 @@ export async function handleStudentsState(req: Request, res: Response, dataType:
       }
 
       if (action === "update" || action === "edit" || action === "update_status") {
+        // /api/state replaces heavy base64 fields with a placeholder; a client echoing
+        // the whole student object back must not overwrite the real file with it.
+        for (const key of Object.keys(payload || {})) {
+          if (STRIPPED_PLACEHOLDERS.has(payload[key])) delete payload[key];
+        }
         const {
           id,
           status,
@@ -234,6 +242,11 @@ export async function handleStudentsState(req: Request, res: Response, dataType:
         let effectivePhoto = profilePicture || docFoto;
 
         const processUpdateStudent = async () => {
+          for (const field of EXTRA_STUDENT_DOCUMENT_FIELDS) {
+            if (typeof payload[field] === "string" && payload[field].startsWith("data:")) {
+              payload[field] = await uploadBase64IfPresent(payload[field], `${field}_${id || "student"}`, "student_docs");
+            }
+          }
           if (effectivePhoto && typeof effectivePhoto === "string" && effectivePhoto.startsWith("data:")) {
             effectivePhoto = await uploadBase64IfPresent(effectivePhoto, `student_${id || "photo"}`, "profile_pictures");
           }
@@ -256,6 +269,20 @@ export async function handleStudentsState(req: Request, res: Response, dataType:
           let finalDocKontrak = docKontrak !== undefined ? await uploadBase64IfPresent(docKontrak, `docKontrak_${id || "student"}`, "student_docs") : undefined;
 
           if (index !== -1) {
+            // This instance's in-memory copy can be older than Firestore (another
+            // Cloud Run instance may have changed the student's status since).
+            // Saving would then write the stale status back over the real one,
+            // which is how statuses kept "resetting" to Belajar. Refresh the
+            // record from Firestore first - unless this instance wrote it itself
+            // a moment ago and that write may still be in flight.
+            const currentId = state.activeStudents[index]?.id;
+            if (currentId && Date.now() - getLastLocalWriteAt("activeStudents", currentId) > 5000) {
+              const fresh = await getEntityFromFirestore("activeStudents", currentId);
+              if (fresh) {
+                state.activeStudents[index] = { ...state.activeStudents[index], ...fresh, id: currentId };
+              }
+            }
+
             // Guarantee all scores and fields in payload are copied to memory & Firestore
             Object.keys(payload).forEach((key) => {
               if (key !== "id" && payload[key] !== undefined) {

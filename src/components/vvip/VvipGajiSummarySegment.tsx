@@ -1,6 +1,7 @@
 import React from "react";
 import { Activity, Map, TrendingUp } from "lucide-react";
 import { Area, AreaChart, CartesianGrid, Cell, Legend, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { countStudentsByStatusGroup, getStudentStatusGroup, studentMatchesStatusGroup, isStudentStillActive } from "../../lib/studentStatusGroups";
 
 interface VvipGajiSummarySegmentProps {
   COLORS: any;
@@ -243,7 +244,7 @@ export default function VvipGajiSummarySegment({ COLORS, STATUS_COLORS, activeSt
                     { label: "🇯🇵 4. DI JEPANG", statusKey: "Di Jepang", desc: "Alumni sukses yang telah bermigrasi dan bekerja aktif di prefektur Jepang.", colorClass: "bg-emerald-500", textClass: "text-emerald-700", bgClass: "bg-emerald-50/70 border-emerald-100" },
                     { label: "🎓 5. SERTIFIKASI JFT/JLPT/SSW", statusKey: "On Progres JFT/JLPT/SSW", desc: "Siswa telah lulus ujian sertifikasi kemampuan JFT-Basic/JLPT & SSW.", colorClass: "bg-violet-500", textClass: "text-violet-700", bgClass: "bg-violet-50/70 border-violet-100" }
                   ].map((item) => {
-                    const count = activeStudents.filter(s => item.statusKey === "Belajar" ? !["Lulus", "Di Jepang", "Diklat SO", "On Proges Job", "On Progres JFT/JLPT/SSW"].includes(s.status || "") : (item.statusKey === "On Progres JFT/JLPT/SSW" ? (s.status === "On Progres JFT/JLPT/SSW" || s.status === "Lulus") : s.status === item.statusKey)).length;
+                    const count = activeStudents.filter(s => studentMatchesStatusGroup(s, item.statusKey)).length;
                     const percentage = activeStudents.length > 0 ? Math.round((count / activeStudents.length) * 100) : 0;
                     return (
                       <div key={item.label} className={`p-3.5 rounded-2xl border text-left flex flex-col justify-between space-y-2 ${item.bgClass}`}>

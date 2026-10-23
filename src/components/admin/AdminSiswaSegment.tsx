@@ -4,6 +4,7 @@ import { ConfirmButton } from "../ConfirmButton";
 import { createSvgAvatar, getSafePhotoUrl } from "../../lib/storageHelper";
 import { computeAttendanceRate } from "../../lib/attendanceMetrics";
 import { JAPAN_PREFECTURES } from "../../types";
+import { countStudentsByStatusGroup, getStudentStatusGroup, studentMatchesStatusGroup, isStudentStillActive } from "../../lib/studentStatusGroups";
 
 interface AdminSiswaSegmentProps {
   checkSyncStatus: any;
@@ -377,6 +378,7 @@ export default function AdminSiswaSegment({ checkSyncStatus, filterClass, filter
                             <th className="px-3 py-3">📋 Sertifikasi JFT/jlpt/SSW</th>
                             <th className="px-3 py-3">📘 Diklat SO</th>
                             <th className="px-3 py-3">🇯🇵 Jepang</th>
+                              <th className="px-3 py-3">❌ Keluar</th>
                             <th className="px-3 py-3 text-right">Aksi</th>
                           </tr>
                         </thead>
@@ -401,11 +403,14 @@ export default function AdminSiswaSegment({ checkSyncStatus, filterClass, filter
                             const isSelected = siswaTab === "aktif" && filterClass === className;
     
                             // Breakdown stats per class
-                            const belajarCount = classStudents.filter((s: any) => s.status === "Belajar").length;
-                            const jobCount = classStudents.filter((s: any) => s.status === "On Proges Job").length;
-                            const jftCount = classStudents.filter((s: any) => s.status === "On Progres JFT/JLPT/SSW").length;
-                            const diklatCount = classStudents.filter((s: any) => s.status === "Diklat SO").length;
-                            const jepangCount = classStudents.filter((s: any) => s.status === "Di Jepang" || s.status === "Lulus").length;
+                            // Breakdown per kelas memakai rumus yang sama dengan tabel status (lib/studentStatusGroups)
+                            const grouped = countStudentsByStatusGroup(classStudents);
+                            const belajarCount = grouped["Belajar"];
+                            const jobCount = grouped["On Proges Job"];
+                            const jftCount = grouped["On Progres JFT/JLPT/SSW"];
+                            const diklatCount = grouped["Diklat SO"];
+                            const jepangCount = grouped["Di Jepang"];
+                            const keluarCount = grouped["Dikeluarkan"];
     
                             const colors = [
                               "text-blue-400",
@@ -466,6 +471,7 @@ export default function AdminSiswaSegment({ checkSyncStatus, filterClass, filter
                                 <td className="px-3 py-3"><Badge count={jftCount} label="Sertifikasi JFT/jlpt/SSW" cls="bg-sky-500/20 text-sky-300" /></td>
                                 <td className="px-3 py-3"><Badge count={diklatCount} label="Diklat" cls="bg-indigo-500/20 text-indigo-300" /></td>
                                 <td className="px-3 py-3"><Badge count={jepangCount} label="Jepang" cls="bg-emerald-500/20 text-emerald-300" /></td>
+                                <td className="px-3 py-3"><Badge count={keluarCount} label="Keluar" cls="bg-rose-500/20 text-rose-300" /></td>
                                 <td className="px-3 py-3 text-right">
                                   <span className="inline-flex items-center gap-1 text-[9px] font-bold text-slate-400 group-hover:text-indigo-300 transition-colors whitespace-nowrap">
                                     {isSelected ? "Reset" : "Lihat"}
@@ -515,7 +521,7 @@ export default function AdminSiswaSegment({ checkSyncStatus, filterClass, filter
                               <td className="px-3 py-3 text-center font-black text-emerald-400 text-sm">
                                 {alumniStudents.length}
                               </td>
-                              <td className="px-3 py-3 text-emerald-300 text-[9px] font-bold" colSpan={5}>
+                              <td className="px-3 py-3 text-emerald-300 text-[9px] font-bold" colSpan={6}>
                                 🇯🇵 {alumniStudents.length} Bekerja di Jepang
                               </td>
                               <td className="px-3 py-3 text-right">
@@ -559,7 +565,7 @@ export default function AdminSiswaSegment({ checkSyncStatus, filterClass, filter
                               if (filterClass === "Belum Diplot" && s.class) return false;
                               if (filterClass !== "Belum Diplot" && s.class !== filterClass) return false;
                             }
-                            return s.status === st.id || (st.id === "On Progres JFT/JLPT/SSW" && s.status === "Lulus");
+                            return studentMatchesStatusGroup(s, st.id);
                           }).length;
     
                           return (

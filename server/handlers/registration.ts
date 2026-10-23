@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import { syncEntityToFirestore, deleteEntityFromFirestore, uploadBufferToFirebaseStorage, touchSyncMeta } from "../../src/db/firebase-adapter.ts";
 import { hashPassword, isHashedPassword } from "../auth-utils.ts";
 import { invalidateStateCache } from "../stateCache.ts";
+import { EXTRA_STUDENT_DOCUMENT_FIELDS } from "../../src/lib/studentDocuments.ts";
 
 async function uploadBase64IfPresent(dataStr: string | undefined, prefix: string, folder: string): Promise<string> {
   if (!dataStr || typeof dataStr !== "string" || !dataStr.startsWith("data:")) {
@@ -72,6 +73,9 @@ export async function handleRegistrationState(req: Request, res: Response, dataT
           existingActive.docCV5 = match.docCV5 || existingActive.docCV5;
           existingActive.docMoU = match.docMoU || existingActive.docMoU;
           existingActive.docKontrak = match.docKontrak || existingActive.docKontrak;
+          for (const field of EXTRA_STUDENT_DOCUMENT_FIELDS) {
+            if (match[field]) existingActive[field] = match[field];
+          }
         } else {
           let idNum = state.activeStudents.length + 1;
           let newId = `SIS-${idNum.toString().padStart(3, "0")}`;
@@ -112,7 +116,8 @@ export async function handleRegistrationState(req: Request, res: Response, dataT
             docCV4: match.docCV4 || "",
             docCV5: match.docCV5 || "",
             docMoU: match.docMoU || "",
-            docKontrak: match.docKontrak || ""
+            docKontrak: match.docKontrak || "",
+            ...Object.fromEntries(EXTRA_STUDENT_DOCUMENT_FIELDS.map((field) => [field, match[field] || ""]))
           });
         }
 
@@ -237,7 +242,8 @@ export async function handleRegistrationState(req: Request, res: Response, dataT
         const docFields = [
           "docFoto", "docAkta", "docIjazahSD", "docIjazahSMP", "docIjazahSMA",
           "docKK", "docKTP", "docTranskip", "docPraMCU", "docVaksin",
-          "docCV1", "docCV2", "docCV3", "docCV4", "docCV5", "docMoU", "docKontrak", "proofOfPayment"
+          "docCV1", "docCV2", "docCV3", "docCV4", "docCV5", "docMoU", "docKontrak", "proofOfPayment",
+          ...EXTRA_STUDENT_DOCUMENT_FIELDS
         ];
 
         for (const field of docFields) {
@@ -295,6 +301,9 @@ export async function handleRegistrationState(req: Request, res: Response, dataT
             if (student.docCV5) state.activeStudents[actIndex].docCV5 = student.docCV5;
             if (student.docMoU) state.activeStudents[actIndex].docMoU = student.docMoU;
             if (student.docKontrak) state.activeStudents[actIndex].docKontrak = student.docKontrak;
+            for (const field of EXTRA_STUDENT_DOCUMENT_FIELDS) {
+              if (student[field]) state.activeStudents[actIndex][field] = student[field];
+            }
             if (student.verifiedDocs) state.activeStudents[actIndex].verifiedDocs = student.verifiedDocs;
 
             syncEntityToFirestore("activeStudents", state.activeStudents[actIndex].id, state.activeStudents[actIndex]);

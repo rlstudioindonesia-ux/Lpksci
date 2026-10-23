@@ -6,6 +6,7 @@ import { createSvgAvatar, getSafePhotoUrl } from "../../lib/storageHelper";
 import { resolveGoogleSignupRole } from "../../lib/googleAuthProvisioning";
 import { isAndroidWebView } from "../MobileDashboardView";
 import RunningTextTicker from "../RunningTextTicker";
+import { countStudentsByStatusGroup, getStudentStatusGroup, studentMatchesStatusGroup, isStudentStillActive } from "../../lib/studentStatusGroups";
 
 interface MobileBerandaSubpageProps {
   currentMobileSlide: any;
@@ -537,7 +538,7 @@ export default function MobileBerandaSubpage({ currentMobileSlide, currentUser, 
                         </div>
                       ) : currentUser.role === "Pengajar" ? (() => {
                         const myClass = systemState.customization?.lmsClasses?.find(c => c.name === currentUser.assignedClass);
-                        const studentCount = systemState.activeStudents?.filter(s => s.class === currentUser.assignedClass && s.status !== "Di Jepang").length || 0;
+                        const studentCount = systemState.activeStudents?.filter(s => s.class === currentUser.assignedClass && isStudentStillActive(s)).length || 0;
                         const activeChapters = myClass?.chapters?.filter(c => c.isActive !== false).length || 50;
                         return (
                           <div className="mt-1.5 space-y-0.5 text-[9px] leading-tight font-medium text-slate-500">

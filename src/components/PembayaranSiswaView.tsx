@@ -1195,7 +1195,7 @@ export default function PembayaranSiswaView({
                                     const isAct = (systemState.activeStudents || []).some(s => s.id === studentObj.id);
                                     try {
                                       if (isAct) {
-                                        await onUpdateState("activeStudents", "update", { ...studentObj, class: newClass });
+                                        await onUpdateState("activeStudents", "update", { id: studentObj.id, class: newClass });
                                       } else {
                                         await onUpdateState("registeredStudents", "update", { ...studentObj, class: newClass });
                                       }
