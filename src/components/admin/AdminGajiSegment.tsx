@@ -638,9 +638,9 @@ export default function AdminGajiSegment({ currentUser, editingSalId, hrFilterMo
                       let allOnTime = 0;
                       let allTotal = 0;
                       (systemState.logs || []).filter(l => l.type === "PRESENSI_PENGAJAR" && ((l.timestamp && toLocalISODate(l.timestamp).startsWith(hrFilterMonth)) || (l.time && l.time.startsWith(hrFilterMonth)))).forEach(log => {
-                        if (log.description.includes("MASUK")) {
+                        if ((log.description || "").includes("MASUK")) {
                           allTotal++;
-                          const match = log.description.match(/MASUK\s*-\s*(\d{2}):(\d{2}):(\d{2})/i);
+                          const match = (log.description || "").match(/MASUK\s*-\s*(\d{2}):(\d{2}):(\d{2})/i);
                           let isLate = false;
                           if (match) {
                             const hrVal = parseInt(match[1]);
@@ -776,9 +776,9 @@ export default function AdminGajiSegment({ currentUser, editingSalId, hrFilterMo
                                       let late = 0;
                                       
                                       staffLogs.forEach(l => {
-                                        if (l.description.includes("MASUK")) {
+                                        if ((l.description || "").includes("MASUK")) {
                                           checkIns++;
-                                          const match = l.description.match(/MASUK\s*-\s*(\d{2}):(\d{2}):(\d{2})/i);
+                                          const match = (l.description || "").match(/MASUK\s*-\s*(\d{2}):(\d{2}):(\d{2})/i);
                                           let isLate = false;
                                           if (match) {
                                             const hrVal = parseInt(match[1]);

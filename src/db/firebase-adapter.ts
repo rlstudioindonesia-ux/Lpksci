@@ -427,6 +427,8 @@ export async function loadStateFromFirestore(fallbackState: any) {
 
     const collResults = [...batch1Results, ...batch2Results, ...batch3aResults, ...batch3bResults, ...batch3cResults];
 
+    // Items read from Firestore during this load (see the merge rule below).
+    const loadedThisPass = new WeakSet<any>();
     collResults.forEach(({ collName, docs }) => {
       // Map alternative collection names to canonical state property
       let canonicalName = collName;
@@ -481,10 +483,24 @@ export async function loadStateFromFirestore(fallbackState: any) {
           return item.id || (item.studentId && item.chapterNumber ? `${item.studentId}_${item.chapterNumber}_${item.subject || ''}` : item.username || item.email || JSON.stringify(item));
         };
 
-        // 1. First add existing loaded / fallback items
+        // 1. Existing in-memory items. Firestore is authoritative: an item that is
+        //    no longer in Firestore was deleted (possibly by another instance) and
+        //    used to be kept here forever, so deleted payments, ledger entries,
+        //    lessons, messages ... reappeared after every background resync. Only
+        //    items this instance wrote moments ago (write may still be in flight)
+        //    or items without a stable id are carried over.
+        //    (lmsClasses keeps the old union: it is also loaded from system/lmsClasses.)
         const existingItems = Array.isArray(loadedState[canonicalName]) ? loadedState[canonicalName] : fallbackItems;
+        const resyncNow = Date.now();
         existingItems.forEach((item: any) => {
           if (!item) return;
+          const stableId = item.id || item.username;
+          const keepAnyway =
+            canonicalName === "lmsClasses" ||
+            loadedThisPass.has(item) || // e.g. chapterAssessments already merged from the legacy "assessments" collection
+            !stableId ||
+            resyncNow - Math.max(getLastLocalWriteAt(collName, String(stableId)), getLastLocalWriteAt(canonicalName, String(stableId))) <= RECENT_LOCAL_WRITE_MS;
+          if (!keepAnyway) return;
           const key = getItemKey(item);
           if (key) itemMap.set(String(key).toLowerCase(), item);
         });
@@ -492,6 +508,7 @@ export async function loadStateFromFirestore(fallbackState: any) {
         // 2. Overwrite / merge with Firestore authoritative docs
         docs.forEach((item: any) => {
           if (!item) return;
+          loadedThisPass.add(item);
           const key = getItemKey(item);
           if (key) {
             const lowKey = String(key).toLowerCase();
@@ -699,14 +716,22 @@ export function setSyncInstanceId(id: string) {
 }
 
 /** Last time THIS instance wrote/deleted the given record (0 if never). */
+/** How long a local write is assumed to still be in flight / not yet readable. */
+export const RECENT_LOCAL_WRITE_MS = 2 * 60 * 1000;
+
 export function getLastLocalWriteAt(collectionName: string, id: string): number {
   return localWriteAt.get(`${collectionName}:${id}`) || 0;
 }
 
 function noteLocalWrite(collectionName: string, id: string) {
-  if (!TRACKED_CHANGE_COLLECTIONS.has(collectionName)) return;
-  if (localWriteAt.size > 2000) localWriteAt.clear();
-  localWriteAt.set(`${collectionName}:${id}`, Date.now());
+  const now = Date.now();
+  if (localWriteAt.size > 5000) {
+    // Drop old entries only: recent ones protect in-flight writes (see loadStateFromFirestore).
+    for (const [key, at] of localWriteAt) {
+      if (now - at > 10 * 60 * 1000) localWriteAt.delete(key);
+    }
+  }
+  localWriteAt.set(`${collectionName}:${id}`, now);
 }
 
 function publishEntityChange(collectionName: string, id: string) {
