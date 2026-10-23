@@ -1,6 +1,8 @@
 import React from "react";
 import { Image as ImageIcon, Lock, CheckSquare, CreditCard } from "lucide-react";
 import { getStudentPayments } from "../PembayaranSiswaView";
+import { buildBillingEntries } from "../../lib/paymentOwner";
+import { findStudentForUser } from "../../lib/recordMatching";
 import { TeacherDashboardPanel } from "../TeacherDashboardPanel";
 import { isAdminTier } from "../../lib/permissions";
 
@@ -16,6 +18,10 @@ interface MobilePembayaranSubpageProps {
 }
 
 export default function MobilePembayaranSubpage({ currentUser, handleUpdateState, onOpenLogin, selectedStudent, setActivePaymentDetail, setActiveSubpage, setSelectedStudent, systemState }: MobilePembayaranSubpageProps) {
+  // A student's own bills come from their student record (id), not the account name.
+  const ownStudent: any = currentUser
+    ? findStudentForUser(systemState?.activeStudents, currentUser) || findStudentForUser(systemState?.registeredStudents, currentUser)
+    : undefined;
   const isStaff = currentUser && (currentUser.role === "Pengajar" || isAdminTier(currentUser.role));
   const [staffTab, setStaffTab] = React.useState<"presensi" | "keuangan">("presensi");
 
@@ -98,31 +104,30 @@ export default function MobilePembayaranSubpage({ currentUser, handleUpdateState
                     /* ADMIN & VVIP WORKFLOW: STATS & STUDENT REKAP FILTER */
                     <div className="space-y-4 animate-fade-in text-xs font-sans">
                       {(() => {
-                        const allStudentNames = Array.from(
-                          new Set([
-                            ...(systemState.activeStudents || []).map(
-                              (s) => s.name,
-                            ),
-                            ...(systemState.registeredStudents || []).map(
-                              (s) => s.name,
-                            ),
-                          ]),
-                        )
-                          .filter(Boolean)
-                          .sort();
-    
-                        let totalLunasGross = 0;
-                        let totalTunggakanGross = 0;
-    
-                        allStudentNames.forEach((name) => {
-                          const studentPays = getStudentPayments(
-                            name,
+                        // Same-named students are listed (and billed) separately (23-10-2026).
+                        const billingEntries = buildBillingEntries([
+                          ...(systemState.activeStudents || []),
+                          ...(systemState.registeredStudents || []),
+                        ]);
+                        const allStudentNames = billingEntries.map((e) => e.label);
+                        const billsFor = (label: string) => {
+                          const ref = billingEntries.find((e) => e.label === label) || { name: label, id: undefined };
+                          return getStudentPayments(
+                            ref.name,
                             systemState.payments || [],
                             systemState.costConfig,
                             systemState.activeStudents,
                             systemState.registeredStudents,
                             systemState.customization,
+                            ref.id,
                           );
+                        };
+    
+                        let totalLunasGross = 0;
+                        let totalTunggakanGross = 0;
+    
+                        allStudentNames.forEach((name) => {
+                          const studentPays = billsFor(name);
                           studentPays.forEach((p) => {
                             if (p.status === "Lunas") totalLunasGross += p.amount;
                             else totalTunggakanGross += p.amount;
@@ -205,14 +210,7 @@ export default function MobilePembayaranSubpage({ currentUser, handleUpdateState
                                   selectedStudent || allStudentNames[0];
                                 if (!activeStud) return null;
     
-                                const listPays = getStudentPayments(
-                                  activeStud,
-                                  systemState.payments || [],
-                                  systemState.costConfig,
-                                  systemState.activeStudents,
-                                  systemState.registeredStudents,
-                                  systemState.customization,
-                                );
+                                const listPays = billsFor(activeStud);
                                 const totalSiswaPaid = listPays
                                   .filter((p) => p.status === "Lunas")
                                   .reduce((s, c) => s + c.amount, 0);
@@ -282,12 +280,13 @@ export default function MobilePembayaranSubpage({ currentUser, handleUpdateState
                       </div>
     
                       {getStudentPayments(
-                        currentUser.name,
+                        ownStudent?.name || currentUser.name,
                         systemState.payments || [],
                         systemState.costConfig,
                         systemState.activeStudents,
                         systemState.registeredStudents,
                         systemState.customization,
+                        ownStudent?.id,
                       ).map((payment, i) => {
                         const isPaid = payment.status === "Lunas";
                         return (

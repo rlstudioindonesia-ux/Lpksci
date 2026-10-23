@@ -5,6 +5,8 @@ import { invalidateStateCache } from "../stateCache.ts";
 import { EXTRA_STUDENT_DOCUMENT_FIELDS } from "../../src/lib/studentDocuments.ts";
 import { findRecordIndex } from "../../src/lib/recordMatching.ts";
 import { findRegistrationUpdateTarget, isConvertedRegistration, visibleRegistrations } from "../../src/lib/registrationUpdate.ts";
+import { movePaymentsToStudent } from "./finance.ts";
+import { paymentMatchesStudent } from "../../src/lib/paymentOwner.ts";
 import { normalizeGender } from "../../src/lib/gender.ts";
 import { todayJakartaISO } from "../../src/lib/dateUtils.ts";
 import { nextSequentialId, collectUsedStudentIds } from "../../src/lib/idGenerator.ts";
@@ -226,6 +228,9 @@ export async function handleRegistrationState(req: Request, res: Response, dataT
           syncEntityToFirestore("users", newUserObj.username, newUserObj);
         }
 
+        // Bills made at registration (linked to the REG id) move to the new student id.
+        movePaymentsToStudent(state, state.registeredStudents[index].id, assignedStudentId);
+
         // REMOVE from registeredStudents to avoid double data (siswa baru becomes empty for this student)
         const approvedStudent = state.registeredStudents[index];
         state.registeredStudents.splice(index, 1);
@@ -359,7 +364,7 @@ export async function handleRegistrationState(req: Request, res: Response, dataT
           // If marked as Lunas from admin panel, sync to payments and cash ledger
           if (payload.paymentStatus === "Lunas") {
             const student = state.registeredStudents[index];
-            const pIndex = state.payments.findIndex(p => p.studentName === student.name && p.category.includes("Pendaftaran"));
+            const pIndex = state.payments.findIndex(p => paymentMatchesStudent(p, student) && String(p.category || "").includes("Pendaftaran"));
             
             if (pIndex !== -1) {
                state.payments[pIndex].status = "Lunas";

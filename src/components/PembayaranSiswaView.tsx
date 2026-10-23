@@ -1,4 +1,6 @@
 import { defaultStudentPaymentId, studentPaymentKey } from "../lib/paymentIds";
+import { paymentMatchesStudent, buildBillingEntries } from "../lib/paymentOwner";
+import { findStudentForUser } from "../lib/recordMatching";
 import { uniqueIdSuffix } from "../lib/idGenerator";
 import { todayLocalISO } from "../lib/dateUtils";
 import React, { useState } from "react";
@@ -49,14 +51,21 @@ export function getStudentPayments(
   costConfig?: SystemState['costConfig'],
   activeStudents?: any[],
   registeredStudents?: any[],
-  customization?: SystemState['customization']
+  customization?: SystemState['customization'],
+  studentId?: string
 ): PaymentRecord[] {
   if (!studentName) return [];
 
-  // Find all actual payments for this student
-  const studentActualPayments = (allPayments || []).filter(p => 
-    (p.studentName || "").trim().toLowerCase() === (studentName || "").trim().toLowerCase()
-  );
+  // Bills are matched by student id when known, by name for old/manual bills
+  // (src/lib/paymentOwner.ts) - same-named students no longer share bills.
+  const ref = { id: studentId, name: studentName };
+  const studentActualPayments = (allPayments || []).filter(p => paymentMatchesStudent(p, ref));
+  const nameKey = (studentName || "").trim().toLowerCase();
+  const sameName = (s: any) => (s.name || "").trim().toLowerCase() === nameKey;
+  const isThisStudent = (s: any) => studentId ? s.id === studentId : sameName(s);
+  const nameIsShared = [...(activeStudents || []), ...(registeredStudents || [])].filter(sameName).length > 1;
+  // Default (not yet saved) bill ids must differ between same-named students.
+  const defaultKey = studentId && nameIsShared ? `${studentName}-${studentId}` : studentName;
 
   // Check if student has cleared all bills marker
   const isClearedAll = studentActualPayments.some(p => 
@@ -65,19 +74,13 @@ export function getStudentPayments(
 
   // Check if this student is an Alumni
   const isAlumni = (activeStudents || []).some(s =>
-    (s.name || "").trim().toLowerCase() === (studentName || "").trim().toLowerCase() &&
-    (isStudentAlumni(s) || s.status === "Alumni")
+    isThisStudent(s) && (isStudentAlumni(s) || s.status === "Alumni")
   ) || (registeredStudents || []).some(s =>
-    (s.name || "").trim().toLowerCase() === (studentName || "").trim().toLowerCase() &&
-    (isStudentAlumni(s) || s.status === "Alumni")
+    isThisStudent(s) && (isStudentAlumni(s) || s.status === "Alumni")
   );
 
   if (isAlumni) {
-    const studentObj = (activeStudents || []).find(s => 
-      (s.name || "").trim().toLowerCase() === (studentName || "").trim().toLowerCase()
-    ) || (registeredStudents || []).find(s =>
-      (s.name || "").trim().toLowerCase() === (studentName || "").trim().toLowerCase()
-    );
+    const studentObj = (activeStudents || []).find(isThisStudent) || (registeredStudents || []).find(isThisStudent);
     
     const studentClass = studentObj ? (studentObj.class || studentObj.assignedClass || "") : "";
     
@@ -112,8 +115,9 @@ export function getStudentPayments(
         }
       } else {
         result.push({
-          id: defaultStudentPaymentId(studentName, "AL"),
+          id: defaultStudentPaymentId(defaultKey, "AL"),
           studentName,
+          ...(studentId ? { studentId } : {}),
           category: defaultAlumniCategory.category,
           amount: defaultAlumniCategory.amount,
           date: todayLocalISO(),
@@ -151,7 +155,7 @@ export function getStudentPayments(
 
     // For each default category, find ALL matching actual payments for this student
     defaultCategories.forEach((cat) => {
-      const defaultId = defaultStudentPaymentId(studentName, cat.idSuffix);
+      const defaultId = defaultStudentPaymentId(defaultKey, cat.idSuffix);
 
       // All actual payments in DB that match this default category
       const matching = studentActualPayments.filter(p =>
@@ -180,6 +184,7 @@ export function getStudentPayments(
         result.push({
           id: defaultId,
           studentName,
+          ...(studentId ? { studentId } : {}),
           category: cat.category,
           amount: cat.amount,
           date: todayLocalISO(),
@@ -258,6 +263,13 @@ export default function PembayaranSiswaView({
   
   // Creation form states
   const [formStudentName, setFormStudentName] = useState("");
+  // Billing list label -> student (filled once the lists are built below).
+  const billingByLabelRef = React.useRef(new Map<string, { label: string; id?: string; name: string }>());
+  const refOf = (label: string) => billingByLabelRef.current.get(label) || { label, name: String(label || ""), id: undefined as string | undefined };
+  const billsFor = (label: string) => {
+    const r = refOf(label);
+    return getStudentPayments(r.name, systemState.payments || [], systemState.costConfig, systemState.activeStudents, systemState.registeredStudents, systemState.customization, r.id);
+  };
   const [formCategory, setFormCategory] = useState("Custom Tagihan");
   const [formAmount, setFormAmount] = useState(1000000);
   const [formStatus, setFormStatus] = useState<"Lunas" | "Belum Bayar" | "Cicilan">("Belum Bayar");
@@ -335,7 +347,11 @@ export default function PembayaranSiswaView({
 
   const handleDeletePayment = async (paymentId: string, paymentRecord?: PaymentRecord) => {
     const allPays = systemState.payments || [];
-    const targetStudent = paymentRecord?.studentName || selectedStudent;
+    const selRef = refOf(selectedStudent);
+    const targetRef = paymentRecord
+      ? { id: paymentRecord.studentId || selRef.id, name: paymentRecord.studentName || selRef.name }
+      : selRef;
+    const targetStudent = targetRef.name;
     const targetCategory = paymentRecord?.category || "";
 
     // Find all matching payments in DB for this student and ID or category
@@ -343,7 +359,7 @@ export default function PembayaranSiswaView({
       p.id === paymentId || 
       (
         targetStudent && targetCategory &&
-        (p.studentName || "").trim().toLowerCase() === String(targetStudent).trim().toLowerCase() &&
+        paymentMatchesStudent(p, targetRef) &&
         (
           (p.category || "").trim().toLowerCase() === String(targetCategory).trim().toLowerCase() ||
           (targetCategory.includes("Pendaftaran") && (p.category || "").toLowerCase().includes("pendaftaran")) ||
@@ -363,10 +379,11 @@ export default function PembayaranSiswaView({
         });
       }
     } else {
-      const targetPay = paymentRecord || getStudentPayments(selectedStudent, allPays, systemState.costConfig, systemState.activeStudents, systemState.registeredStudents, systemState.customization).find(p => p.id === paymentId);
+      const targetPay = paymentRecord || billsFor(selectedStudent).find(p => p.id === paymentId);
       await onUpdateState('payments', 'add', {
         id: paymentId,
         studentName: targetStudent,
+        ...(targetRef.id ? { studentId: targetRef.id } : {}),
         category: targetCategory || targetPay?.category || "Tagihan",
         amount: targetPay?.amount || 0,
         date: targetPay?.date || todayLocalISO(),
@@ -382,9 +399,11 @@ export default function PembayaranSiswaView({
       alert("Silakan pilih nama siswa.");
       return;
     }
+    const formRef = refOf(formStudentName);
     const payload = {
-      id: `PAY-${studentPaymentKey(formStudentName)}-${uniqueIdSuffix()}`,
-      studentName: formStudentName,
+      id: `PAY-${studentPaymentKey(formRef.name)}-${uniqueIdSuffix()}`,
+      studentName: formRef.name,
+      ...(formRef.id ? { studentId: formRef.id } : {}),
       category: formCategory,
       amount: Number(formAmount),
       date: todayLocalISO(),
@@ -500,24 +519,28 @@ export default function PembayaranSiswaView({
     (systemState.payments || []).map(p => (p.studentName || "").trim()).filter(Boolean)
   ));
 
-  // Build dynamic unique students collection using active, registered, and manual lists
-  const allStudentNames = Array.from(new Set([
-    ...Array.from(registeredStudentNamesSet),
-    ...manualPaymentStudentNames
-  ])).filter(Boolean).sort();
+  // One list entry per student (23-10-2026): students sharing a name get
+  // "Name (SIS-001)" labels so their bills are no longer merged; names that only
+  // exist in bills (manual receipts) stay as they are.
+  const billingEntries = buildBillingEntries(
+    [...(systemState.activeStudents || []), ...(systemState.registeredStudents || [])],
+    [...(systemState.users || []).map(u => u.name || ""), ...manualPaymentStudentNames]
+  );
+  billingByLabelRef.current = new Map(billingEntries.map(e => [e.label, e]));
+  const allStudentNames = billingEntries.map(e => e.label);
 
-  const alumniStudentNames = Array.from(new Set([
-    ...(systemState.activeStudents || []).filter((s: any) =>
-      isStudentAlumni(s) || s.status === "Alumni"
-    ).map(s => s.name),
-    ...(systemState.registeredStudents || []).filter((s: any) =>
-      isStudentAlumni(s) || s.status === "Alumni"
-    ).map(s => s.name)
-  ])).filter(Boolean).sort();
+  const alumniStudents = [...(systemState.activeStudents || []), ...(systemState.registeredStudents || [])]
+    .filter((s: any) => isStudentAlumni(s) || s.status === "Alumni");
+  const alumniIds = new Set(alumniStudents.map((s: any) => s.id).filter(Boolean));
+  const alumniNames = new Set(alumniStudents.map((s: any) => (s.name || "").trim().toLowerCase()));
+  const alumniStudentNames = billingEntries
+    .filter(e => e.id ? alumniIds.has(e.id) : alumniNames.has(e.name.trim().toLowerCase()))
+    .map(e => e.label);
 
   const activeStudentNames = allStudentNames.filter(name => !alumniStudentNames.includes(name));
 
-  const isSelectedStudentManual = Boolean(selectedStudent) && typeof selectedStudent === "string" && !registeredStudentNamesSet.has(selectedStudent.trim());
+  const isManualLabel = (label: string) => !refOf(label).id && !registeredStudentNamesSet.has(refOf(label).name.trim());
+  const isSelectedStudentManual = Boolean(selectedStudent) && typeof selectedStudent === "string" && isManualLabel(selectedStudent);
 
   const handleOpenSyncModal = (manualName: string) => {
     if (!manualName) return;
@@ -594,7 +617,7 @@ export default function PembayaranSiswaView({
   };
 
   allStudentNames.forEach(name => {
-    const studentPayments = getStudentPayments(name, systemState.payments || [], systemState.costConfig, systemState.activeStudents, systemState.registeredStudents, systemState.customization);
+    const studentPayments = billsFor(name);
     studentPayments.forEach(p => {
       let isLunas = p.status === "Lunas";
       let amount = p.amount;
@@ -622,7 +645,9 @@ export default function PembayaranSiswaView({
   const lunasPercentage = grandTotalExpected > 0 ? (totalLunasGross / grandTotalExpected) * 100 : 0;
 
   const allPays = systemState.payments || [];
-  const currentSiswaPayments = getStudentPayments(currentUser.name, allPays, systemState.costConfig, systemState.activeStudents, systemState.registeredStudents, systemState.customization);
+  // A student's own bills: found through their student record (id), not the account name.
+  const ownStudentRecord: any = findStudentForUser(systemState.activeStudents, currentUser) || findStudentForUser(systemState.registeredStudents, currentUser);
+  const currentSiswaPayments = getStudentPayments(ownStudentRecord?.name || currentUser.name, allPays, systemState.costConfig, systemState.activeStudents, systemState.registeredStudents, systemState.customization, ownStudentRecord?.id);
 
   return (
     <div className="p-3 sm:p-6 text-left max-w-7xl mx-auto space-y-6">
@@ -919,7 +944,7 @@ export default function PembayaranSiswaView({
                       <div className="space-y-1 max-h-[420px] overflow-y-auto pr-1">
                         {paginatedNames.map(name => {
                           const isSelected = selectedStudent === name;
-                          const studentPays = getStudentPayments(name, systemState.payments || [], systemState.costConfig, systemState.activeStudents, systemState.registeredStudents, systemState.customization);
+                          const studentPays = billsFor(name);
                           const isFullyPaid = studentPays.length > 0 && studentPays.every(p => p.status === "Lunas");
                           const hasPending = studentPays.some(p => p.status === "Pending");
                           
@@ -936,7 +961,7 @@ export default function PembayaranSiswaView({
                               <div className="truncate pr-2 text-left">
                                 <div className="flex items-center gap-1.5 flex-wrap">
                                   <span className="truncate block font-semibold">{name}</span>
-                                  {typeof name === "string" && !registeredStudentNamesSet.has(name.trim()) && (
+                                  {typeof name === "string" && isManualLabel(name) && (
                                     <span 
                                       className={`text-[8px] px-1 py-0.2 rounded font-black shrink-0 ${
                                         isSelected 
@@ -1055,7 +1080,7 @@ export default function PembayaranSiswaView({
                           confirmMessage={`Apakah Anda yakin ingin menghapus seluruh rincian riwayat tagihan/pembayaran milik "${selectedStudent}"? Data profil & akun siswa TIDAK akan terhapus.`}
                           onConfirmClick={async () => {
                             // Tandai semua pembayaran milik siswa sebagai dihapus
-                            const studentPayments = systemState.payments?.filter(p => (p.studentName || "").trim().toLowerCase() === String(selectedStudent || "").trim().toLowerCase()) || [];
+                            const studentPayments = systemState.payments?.filter(p => paymentMatchesStudent(p, refOf(selectedStudent))) || [];
                             for (const p of studentPayments) {
                               await onUpdateState('payments', 'update', { ...p, status: "Dihapus", isDeleted: true });
                             }
@@ -1106,7 +1131,7 @@ export default function PembayaranSiswaView({
 
                     {/* Check if any payment requires verification */}
                     {(() => {
-                      const studentPays = getStudentPayments(selectedStudent, systemState.payments || [], systemState.costConfig, systemState.activeStudents, systemState.registeredStudents, systemState.customization);
+                      const studentPays = billsFor(selectedStudent);
                       const pendingVerifyList = studentPays.filter(p => p.status === "Pending");
                       if (pendingVerifyList.length === 0) return null;
                       return (
@@ -1135,21 +1160,18 @@ export default function PembayaranSiswaView({
                     })()}
 
                     {(() => {
+                      const selRef = refOf(selectedStudent);
+                      const isSelected = (s: any) => selRef.id ? s.id === selRef.id : (s.name || "").trim().toLowerCase() === selRef.name.trim().toLowerCase();
                       const isAlumni = ((systemState.activeStudents || []) as any[]).some(s =>
-                        (s.name || "").trim().toLowerCase() === (selectedStudent || "").trim().toLowerCase() &&
-                        (isStudentAlumni(s) || s.status === "Alumni")
+                        isSelected(s) && (isStudentAlumni(s) || s.status === "Alumni")
                       ) || ((systemState.registeredStudents || []) as any[]).some(s =>
-                        (s.name || "").trim().toLowerCase() === (selectedStudent || "").trim().toLowerCase() &&
-                        (isStudentAlumni(s) || s.status === "Alumni")
+                        isSelected(s) && (isStudentAlumni(s) || s.status === "Alumni")
                       );
 
                       if (!isAlumni) return null;
 
-                      const studentObj = ((systemState.activeStudents || []) as any[]).find(s => 
-                        (s.name || "").trim().toLowerCase() === (selectedStudent || "").trim().toLowerCase()
-                      ) || ((systemState.registeredStudents || []) as any[]).find(s =>
-                        (s.name || "").trim().toLowerCase() === (selectedStudent || "").trim().toLowerCase()
-                      ) as any;
+                      const studentObj = ((systemState.activeStudents || []) as any[]).find(isSelected) ||
+                        ((systemState.registeredStudents || []) as any[]).find(isSelected) as any;
 
                       const studentClass = studentObj ? (studentObj.class || studentObj.assignedClass || "") : "";
                       const classNameToShow = studentClass || "";
@@ -1224,7 +1246,7 @@ export default function PembayaranSiswaView({
 
                     {/* Timeline lists */}
                     <div className="space-y-3">
-                      {getStudentPayments(selectedStudent, systemState.payments || [], systemState.costConfig, systemState.activeStudents, systemState.registeredStudents, systemState.customization).map((p, index) => {
+                      {billsFor(selectedStudent).map((p, index) => {
                         return (
                           <div key={p.id} className="relative p-3.5 bg-slate-50 hover:bg-slate-100/70 rounded-2xl border border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs text-left transition duration-150">
                             <div className="space-y-2 flex-1 min-w-0">
@@ -1304,7 +1326,7 @@ export default function PembayaranSiswaView({
 
                     {/* Summary of Student balance */}
                     {(() => {
-                      const studentPays = getStudentPayments(selectedStudent, systemState.payments || [], systemState.costConfig, systemState.activeStudents, systemState.registeredStudents, systemState.customization);
+                      const studentPays = billsFor(selectedStudent);
                       const totalSiswaPaid = studentPays.filter(p => p.status === "Lunas").reduce((acc, curr) => acc + curr.amount, 0);
                       const totalSiswaExpected = studentPays.reduce((acc, curr) => acc + curr.amount, 0);
                       const isSiswaLunasAll = studentPays.every(p => p.status === "Lunas");

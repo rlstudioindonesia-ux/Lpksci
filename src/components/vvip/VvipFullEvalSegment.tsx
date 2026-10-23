@@ -1,4 +1,5 @@
 import React from "react";
+import { paymentMatchesStudent } from "../../lib/paymentOwner";
 import { Activity, AlertCircle, Award, BookOpen, Calculator, Calendar, CheckCheck, CheckCircle, ChevronDown, ChevronRight, Clock, DollarSign, Download, Edit, Eye, FileText, Filter, Globe, GraduationCap, History, Laptop, LogIn, RefreshCw, RotateCcw, Search, Shield, ShieldCheck, Smartphone, TrendingUp, UserCheck, Users, UserX } from "lucide-react";
 import { createSvgAvatar, getSafePhotoUrl } from "../../lib/storageHelper";
 import { calculateAge, todayLocalISO, toLocalISODate } from "../../lib/dateUtils";
@@ -1746,7 +1747,7 @@ export default function VvipFullEvalSegment({ activeStudents, classFilter, class
                         </div>
                         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                            {rekapSiswaAktif.slice(0, 6).map(s => {
-                             const studentPayments = (systemState.payments || []).filter(p => p.studentName === s.name);
+                             const studentPayments = (systemState.payments || []).filter(p => paymentMatchesStudent(p, s));
                              const totalPaid = studentPayments.filter(p => p.status === "Lunas").reduce((sum, p) => sum + p.amount, 0);
                              const pendingCount = studentPayments.filter(p => p.status === "Cicilan" || p.status === "Pending").length;
     

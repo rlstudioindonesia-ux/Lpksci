@@ -69,7 +69,10 @@ export function scopeStateForViewer(payload: any, viewer: { username?: string; r
     .map((u) => (me && norm(u.username) === me ? u : pick(u, PUBLIC_USER_FIELDS)));
   if (scoped.unfilteredUsers) scoped.unfilteredUsers = undefined;
 
-  scoped.payments = viewer ? (payload.payments || []).filter((p: any) => p && ownNames.has(norm(p.studentName))) : [];
+  // Bills linked by student id; old bills by name (src/lib/paymentOwner.ts).
+  scoped.payments = viewer
+    ? (payload.payments || []).filter((p: any) => p && (p.studentId ? ownIds.has(norm(p.studentId)) : ownNames.has(norm(p.studentName))))
+    : [];
   scoped.attendance = viewer ? (payload.attendance || []).filter((a: any) => a && ownIds.has(norm(a.studentId))) : [];
   scoped.chapterAssessments = viewer
     ? (payload.chapterAssessments || []).map((c: any) => {
