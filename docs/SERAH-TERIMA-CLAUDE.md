@@ -38,6 +38,7 @@ Skill Claude Code ada di `.claude/skills/` (`alur-perubahan`, `aturan-data-siswa
 | Rata-rata nilai **ikut menghitung nilai < 75** (status "Selesai Belajar" dengan skor) | `src/lib/scoreAveraging.ts` (`isGradedAssessment`) |
 | Essay ketat: harus sama dengan kunci/varian (abaikan huruf besar, spasi, tanda baca), typo 1 huruf untuk jawaban >= 5 huruf; "mengandung kunci" TIDAK lagi benar | `src/lib/essayAnswer.ts` |
 | Tab **Alumni** = hanya siswa **Di Jepang** | `isAlumniTabStudent` |
+| **Rujukan alumni**: kode tidak peka huruf besar/spasi; tidak dihitung: ditolak, rujukan diri sendiri, duplikat pendaftar-siswa; "Sukses" = jadi Siswa Aktif atau Di Jepang; total ikut pendaftar yang menunggu | `src/lib/referrals.ts` |
 | 6 berkas tambahan: Sertifikat JFT/JLPT/NAT, SSW 1, SSW 2, LPK SCI, COE, CV | `src/lib/studentDocuments.ts` |
 | Tanggal "hari ini" = WIB (peramban: `todayLocalISO`, server: `todayJakartaISO`) | `src/lib/dateUtils.ts` |
 
@@ -64,7 +65,8 @@ Skill Claude Code ada di `.claude/skills/` (`alur-perubahan`, `aturan-data-siswa
 - #67 nilai < 75 ikut rata-rata, essay diperketat, tab Alumni = Di Jepang
 - #68 skill `.claude/skills` + `CLAUDE.md`
 - #69 pendaftar "hantu" di Siswa Baru (update berkas siswa aktif membuat pendaftar baru), hapus pendaftar tidak lagi menghapus siswa aktif
-- berikutnya: pembersihan otomatis pendaftar hantu + tutup celah auto-sync yang menulis ulang siswa aktif sebagai pendaftar
+- #70 pembersihan otomatis pendaftar hantu + tutup celah auto-sync yang menulis ulang siswa aktif sebagai pendaftar
+- berikutnya: satu rumus rujukan alumni (Admin/VVIP/dasbor alumni), pengurutan aman untuk data tanpa tanggal/nama
 
 ## Tindak lanjut terbuka
 

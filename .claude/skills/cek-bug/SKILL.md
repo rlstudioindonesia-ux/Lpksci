@@ -17,8 +17,14 @@ description: Cara mencari bug di LPK SCI saat pemilik meminta "cek bug lainnya" 
 ## Area yang sudah diperiksa (Okt 2026)
 Status/jumlah siswa, sinkron antar-instance, CV, berkas & sertifikat, nilai/kuis/essay, ID, Buku Kas/pembayaran, absen/presensi & tanggal, hapus akun/siswa, pendaftaran & persetujuan, Job Order, kelas/pengaturan, inventaris, upload, ETag/resync.
 
+Afiliasi/referral & Alumni dashboard (satu rumus di `src/lib/referrals.ts`), kalender/acara (urutan aman untuk data tanpa tanggal).
+
 ## Belum diperiksa mendalam
-Galeri/slideshow, notifikasi (`src/lib/notifications.ts`), Afiliasi/referral, kalender/acara, pajak, Android/PWA, peta sebaran, Alumni dashboard.
+Notifikasi (`src/lib/notifications.ts`), pajak, Android/PWA, peta sebaran.
+
+## Temuan yang belum diperbaiki (perlu keputusan pemilik)
+- Galeri/slideshow disimpan sebagai seluruh daftar dari peramban; menghapus foto terakhir galeri memunculkan lagi foto bawaan.
+- `syncCustomizationToFirestore` menulis seluruh pengaturan dari memori instance (galeri, kelas, kustomisasi) - bisa menimpa perubahan dari instance lain yang belum tersinkron.
 
 ## Cara melapor ke pemilik
 Tabel "Bug → akibatnya bagi pengguna", bahasa sederhana. Hal yang mengubah aturan bisnis atau berisiko menghapus data: **tanya dulu**, jangan langsung diubah. Masalah login/keamanan: ditunda sampai pemilik setuju.

@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { collectReferrals, isSuccessfulReferral, normalizeReferralCode } from "../lib/referrals";
 import { 
   GraduationCap, 
   Copy, 
@@ -66,20 +67,12 @@ export default function AlumniDashboardView({
     setTimeout(() => setQuestionSent(false), 5000);
   };
 
-  // Calculate referral stats. Registration stores the code the applicant
-  // typed as `referrer` (not `referrerCode` - that field is never written
-  // anywhere), and a student cannot be counted as their own referral: some
-  // applicants fill the optional "Kode Referral" field with their own email
-  // or name, which later resolves back to their own account once their
-  // username (their email) exists.
-  const myReferrals = systemState?.activeStudents?.filter(
-    (s: any) =>
-      s.referrer?.toLowerCase().trim() === referralCode.toLowerCase().trim() &&
-      s.name?.toLowerCase().trim() !== referralCode.toLowerCase().trim()
-  ) || [];
-
-  const activeCount = myReferrals.filter((s: any) => s.status === "Aktif").length;
-  const inJapanCount = myReferrals.filter((s: any) => s.status === "Di Jepang").length;
+  // Same referral list as the Admin/VVIP Afiliasi pages (src/lib/referrals.ts):
+  // pending applicants count toward the total, "Sukses" = friends who became an
+  // active student or are already in Japan.
+  const myReferrals = collectReferrals(systemState?.registeredStudents, systemState?.activeStudents, systemState?.users)
+    .filter((r) => r.referrer === normalizeReferralCode(referralCode));
+  const successfulReferrals = myReferrals.filter(isSuccessfulReferral).length;
 
   const jobOrders = (systemState?.jobOrders || []).filter((j: any) => j.status === "Aktif");
   
@@ -97,7 +90,7 @@ export default function AlumniDashboardView({
         if (e.date && e.date < todayStr) return false;
         return e.targets && (e.targets.includes("Alumni") || e.targets.includes("Umum"));
       })
-      .sort((a: any, b: any) => a.date.localeCompare(b.date));
+      .sort((a: any, b: any) => String(a.date ?? "").localeCompare(String(b.date ?? "")));
   }, [systemState?.events, todayStr]);
 
   return (
@@ -301,7 +294,7 @@ export default function AlumniDashboardView({
                     <span className="text-rose-600 block text-sm font-black">{myReferrals.length}</span> Total Teman
                   </div>
                   <div className="bg-white border border-slate-100 px-3 py-1.5 rounded-lg shadow-2xs">
-                    <span className="text-teal-600 block text-sm font-black">{activeCount + inJapanCount}</span> Sukses
+                    <span className="text-teal-600 block text-sm font-black">{successfulReferrals}</span> Sukses
                   </div>
                 </div>
               </div>
