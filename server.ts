@@ -4,6 +4,7 @@ import path from "path";
 import { createServer as createViteServer } from "vite";
 import dotenv from "dotenv";
 import fs from "fs";
+import nodeCrypto from "crypto";
 import { getStudentStatusGroup, isAlumniStatusValue } from "./src/lib/studentStatusGroups.ts";
 import { findRecordIndex, findStudentUserIndex } from "./src/lib/recordMatching.ts";
 import { testConnection, loadStateFromFirestore, syncEntityToFirestore, syncEntityToFirestoreAsync, syncCustomizationToFirestore, syncGalleriesToFirestore, syncLmsClassToFirestore, syncAllLmsClassesToFirestore, deleteEntityFromFirestore, uploadBufferToFirebaseStorage, getUserFromFirestore, getEntityFromFirestore, db, touchSyncMeta, setSyncInstanceId, parseSyncChangeValue, SYNC_CHANGES_DOC_ID, mergeEntityFieldsToFirestore } from "./src/db/firebase-adapter.ts";
@@ -14,6 +15,8 @@ import { createSessionToken, resolveSessionUser, readBearerToken, hasStrongSessi
 import { verifyFirebaseIdToken } from "./server/googleIdToken.ts";
 import { evaluatePasswordLogin, validateNewPassword } from "./src/lib/loginPolicy.ts";
 import { resolveGoogleSignupRole } from "./src/lib/googleAuthProvisioning.ts";
+import { authorizeStateUpdate } from "./src/lib/apiAccess.ts";
+import { scopeStateForViewer, isStaffViewer } from "./src/lib/stateScope.ts";
 import firebaseAppletConfig from "./firebase-applet-config.json";
 import { handleStateUpdate } from "./server/handlers/index.ts";
 import { hideConvertedRegistrations } from "./server/handlers/registration.ts";
@@ -62,9 +65,38 @@ const PUBLIC_API_PATHS = new Set([
   "/auth/validate", "/auth/google", "/auth/change-password", "/auth/reset-with-email", "/broadcast-notifications",
 ]);
 const anonymousApiCalls = new Map<string, { count: number; firstAt: string; lastAt: string }>();
+function recordAuthAudit(key: string) {
+  const nowIso = new Date().toISOString();
+  const entry = anonymousApiCalls.get(key);
+  if (entry) {
+    entry.count++;
+    entry.lastAt = nowIso;
+  } else {
+    anonymousApiCalls.set(key, { count: 1, firstAt: nowIso, lastAt: nowIso });
+    console.warn(`🔓 [Auth audit] ${key}`);
+  }
+}
+// Security stage 2 (23-10-2026): enforcement is a switch. It only turns on
+// when AUTH_ENFORCE=1 AND a strong SESSION_SECRET are configured on Cloud Run;
+// otherwise everything below is only recorded (see GET /api/auth/audit).
+function isAuthEnforced(): boolean {
+  return process.env.AUTH_ENFORCE === "1" && hasStrongSessionSecret();
+}
+// Still open with enforcement on: the public website reads a trimmed state,
+// and the registration form uploads documents before an account exists.
+const PUBLIC_WHEN_ENFORCED = new Set(["GET /state", "POST /upload"]);
+const STAFF_ONLY_API = new Set(["/sync/reload", "/state/reload-firestore", "/vvip/analyze"]);
 app.use("/api", (req, res, next) => {
   const authUser = resolveSessionUser(req.headers, state?.users);
   (req as any).authUser = authUser;
+  if (isAuthEnforced()) {
+    if (!authUser && !PUBLIC_API_PATHS.has(req.path) && !PUBLIC_WHEN_ENFORCED.has(`${req.method} ${req.path}`)) {
+      return res.status(401).json({ error: "Sesi Anda sudah berakhir. Silakan login ulang.", code: "AUTH_REQUIRED" });
+    }
+    if (STAFF_ONLY_API.has(req.path) && !isStaffViewer(authUser)) {
+      return res.status(403).json({ error: "Khusus staf.", code: "FORBIDDEN" });
+    }
+  }
   if (!authUser && !PUBLIC_API_PATHS.has(req.path)) {
     const body: any = req.body || {};
     const key = `${req.method} ${req.path}${body.dataType ? ` ${body.dataType}/${body.action || ""}` : ""}${readBearerToken(req.headers) ? " (token tidak sah)" : ""}`;
@@ -742,6 +774,25 @@ function getOrBuildStateJson(): { json: string; etag: string; version: number } 
   return { json: jsonStr, etag, version: currentVersion };
 }
 
+// Per-viewer trimmed copies of the state for the current version (stage 2).
+let scopedStateCache = new Map<string, { version: number; json: string }>();
+let scopedStateObject: { version: number; payload: any } | null = null;
+function getScopedStateJson(viewer: any, version: number, fullJson: string): { json: string; etag: string } {
+  const viewerKey = viewer ? String(viewer.username || "").toLowerCase() : "-anon-";
+  const etagSuffix = nodeCrypto.createHash("sha1").update(viewerKey).digest("hex").slice(0, 10);
+  const etag = `W/"s-${SERVER_INSTANCE_ID}-${version}-${etagSuffix}"`;
+  const hit = scopedStateCache.get(viewerKey);
+  if (hit && hit.version === version) return { json: hit.json, etag };
+  if (!scopedStateObject || scopedStateObject.version !== version) {
+    scopedStateObject = { version, payload: JSON.parse(fullJson) };
+    scopedStateCache = new Map();
+  }
+  const json = JSON.stringify(scopeStateForViewer(scopedStateObject.payload, viewer));
+  if (scopedStateCache.size > 3000) scopedStateCache.clear();
+  scopedStateCache.set(viewerKey, { version, json });
+  return { json, etag };
+}
+
 let lastSelfHealResyncAt = 0;
 
 app.get("/api/state", async (req, res) => {
@@ -761,7 +812,15 @@ app.get("/api/state", async (req, res) => {
     }
   } catch (e) {}
 
-  const { json, etag } = getOrBuildStateJson();
+  const built = getOrBuildStateJson();
+  let { json, etag } = built;
+
+  // Stage 2: non-staff only receive their own records and public fields.
+  if (isAuthEnforced() && !isStaffViewer((req as any).authUser)) {
+    const scoped = getScopedStateJson((req as any).authUser, built.version, json);
+    json = scoped.json;
+    etag = scoped.etag;
+  }
 
   // Support conditional requests: if client already has this version, respond instantly with 304 (0 bytes transferred)
   const clientEtag = req.headers["if-none-match"];
@@ -1291,7 +1350,7 @@ app.get("/api/auth/audit", (req, res) => {
   const entries = Array.from(anonymousApiCalls.entries())
     .map(([key, v]) => ({ key, ...v }))
     .sort((a, b) => b.count - a.count);
-  return res.json({ strongSecret: hasStrongSessionSecret(), instanceStartedEntries: entries.length, entries });
+  return res.json({ strongSecret: hasStrongSessionSecret(), enforced: isAuthEnforced(), instanceStartedEntries: entries.length, entries });
 });
 
 app.post("/api/register", async (req, res) => {
@@ -1437,9 +1496,29 @@ app.post("/api/register", async (req, res) => {
 
 // Update standard datasets from the Admin Portal or LMS E-Benkyou
 app.post("/api/state/update", async (req, res) => {
-  const { dataType, action, payload, userRole } = req.body;
+  let { dataType, action, payload, userRole } = req.body;
   if (!dataType || !action) {
     return res.status(400).json({ error: "Missing parameter" });
+  }
+
+  // Stage 2 (23-10-2026): who may change what (src/lib/apiAccess.ts). With
+  // enforcement off this is only recorded as "would be refused".
+  const authUser = (req as any).authUser;
+  const access = authorizeStateUpdate(authUser, dataType, action, payload, {
+    activeStudents: state.activeStudents,
+    registeredStudents: state.registeredStudents,
+    payments: state.payments,
+    messages: state.messages,
+    lmsComments: state.lmsComments,
+  });
+  if (!access.allowed) {
+    if (isAuthEnforced()) {
+      return res.status(authUser ? 403 : 401).json({ error: access.reason || "Tidak diizinkan.", code: authUser ? "FORBIDDEN" : "AUTH_REQUIRED" });
+    }
+    recordAuthAudit(`AKAN DITOLAK [${authUser?.role || "tanpa login"}] ${dataType}/${action}: ${access.reason}`);
+  } else if (isAuthEnforced()) {
+    payload = access.payload;
+    req.body.payload = payload;
   }
 
   // Hook sync logic post-response using monkeypatch

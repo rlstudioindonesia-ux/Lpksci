@@ -74,7 +74,8 @@ Skill Claude Code ada di `.claude/skills/` (`alur-perubahan`, `aturan-data-siswa
 - #74 status "Lulus" tetap siswa (kelas/sensei/akun tidak diubah)
 - #75 siswa bernama sama tidak lagi melihat/mengubah data siswa lain (`findStudentForUser` di ~20 layar + notifikasi)
 - #76 keamanan Tahap 1 (tiket sesi, aturan kata sandi, Google diverifikasi server, audit log-only)
-- berikutnya: reset kata sandi lewat email yang benar-benar berlaku (tautan email + server), tutup reset lama yang membocorkan tautan
+- #77 reset kata sandi lewat email yang benar-benar berlaku (tautan email + server), tutup reset lama yang membocorkan tautan
+- berikutnya: keamanan Tahap 2 di balik sakelar (hak akses per peran, data dipangkas per peran, Midtrans simulasi ditutup)
 
 ## Tindak lanjut terbuka
 
@@ -87,13 +88,14 @@ Skill Claude Code ada di `.claude/skills/` (`alur-perubahan`, `aturan-data-siswa
      - email berisi "admin" tidak lagi otomatis Admin;
      - `/api/auth/validate` memakai tiket bila ada.
      - Permintaan TANPA tiket masih DIIZINKAN tetapi DICATAT (`GET /api/auth/audit`, khusus Admin/VVIP, per instance).
-   - **Sebelum Tahap 2:**
-     - pemilik harus mengisi env `SESSION_SECRET` (>= 16 karakter acak) di Cloud Run; tanpa itu tiket bisa dipalsukan (`strongSecret:false` di audit);
-     - tinjau audit. Diperkirakan masih anonim: gambar/berkas lewat `<img src="/api/...">` (perlu tiket lewat query/cookie), pendaftaran publik, `GET /api/state` untuk pengunjung.
-   - **Tahap 2:**
-     - tolak permintaan tanpa tiket + hak akses per peran di `/api/state/update`;
-     - `GET /api/state` dipangkas per peran;
-     - sesi lama (sebelum Tahap 1) harus login ulang.
+   - **Tahap 2 (kode SELESAI, sakelar MATI):**
+     - `src/lib/apiAccess.ts` (`authorizeStateUpdate`): hak akses per peran di `/api/state/update`. Admin/VVIP semua. Pengajar: data mengajar, siswa (update), kelas via `customization` (hanya kunci kelas), izin/laporan/kontrak atas nama sendiri. Siswa/Alumni: data sendiri saja, kolom staf dibuang (status, kelas, nilai, dll.); tagihan hanya unggah bukti dan status dipaksa "Pending".
+     - `src/lib/stateScope.ts` (`scopeStateForViewer`): `GET /api/state` dipangkas untuk non-staf. Siswa: data sendiri penuh, data orang lain hanya kolom publik, tanpa jawaban kuis orang lain. Tanpa staff-only (`cashLedger`, `salaries`, `taxes`, `logs`, `inventory`, HR). Pengunjung: data situs publik saja.
+     - Middleware menolak tanpa tiket (401 `AUTH_REQUIRED`; peramban otomatis minta login ulang). Tetap terbuka: `GET /api/state` (dipangkas) dan `POST /api/upload` (formulir pendaftaran).
+     - **Menyala hanya bila** env `AUTH_ENFORCE=1` **dan** `SESSION_SECRET` (>= 16 karakter) diisi di Cloud Run. Selama mati: penolakan dicatat sebagai "AKAN DITOLAK" di `GET /api/auth/audit`.
+     - Urutan menyalakan: isi `SESSION_SECRET` → tunggu semua orang login ulang beberapa hari → cek audit (cari "AKAN DITOLAK" yang ternyata fitur sah, sesuaikan `apiAccess.ts`) → isi `AUTH_ENFORCE=1`.
+     - Ikut diperbaiki: tombol Midtrans (simulasi) tidak lagi menandai tagihan LUNAS sendiri; login Google lewat redirect diverifikasi server (tidak lagi memberi Admin ke email berisi "admin" / Pengajar ke "sensei").
+     - Belum: kunci jawaban kuis (`lmsQuizzes`) masih terkirim ke siswa karena nilai CBT dihitung di peramban; nilai kuis bisa dipalsukan siswa. Perlu penilaian di server (tahap lanjutan).
    - **Tahap 3:**
      - kunci `firestore.rules`. PENTING: server memakai Firebase *client* SDK tanpa login, jadi aturan tidak bisa dikunci sebelum server memakai firebase-admin atau akun layanan;
      - reset kata sandi: SUDAH dikerjakan lebih dulu (pemilik memilih lewat email). Detailnya:

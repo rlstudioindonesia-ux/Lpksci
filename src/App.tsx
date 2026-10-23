@@ -97,7 +97,7 @@ import PrivacyPolicyModal from "./components/PrivacyPolicyModal";
 import LoginModal from "./components/LoginModal";
 import StudentProfilePrompt from "./components/StudentProfilePrompt";
 import ForcePasswordChangeModal from "./components/ForcePasswordChangeModal";
-import { clearSession, setSessionToken, getMustChangePassword, AUTH_CHANGED_EVENT } from "./lib/sessionToken";
+import { clearSession, setSessionToken, getMustChangePassword, AUTH_CHANGED_EVENT, AUTH_REQUIRED_EVENT, loginWithGoogleOnServer } from "./lib/sessionToken";
 import ApkUpdateBanner from "./components/ApkUpdateBanner";
 import ResetPasswordView from "./components/ResetPasswordView";
 import PembayaranSiswaView from "./components/PembayaranSiswaView";
@@ -947,11 +947,27 @@ export default function App() {
       try {
         const result = await getRedirectResult(auth);
         if (result && result.user) {
-          const user = result.user;
-          const email = user.email || "";
-          const name = user.displayName || email.split("@")[0] || "User";
+          // 23-10-2026 (security): verified by the server, which also creates new
+          // accounts. The old browser-side creation gave Admin to any email
+          // containing "admin" and Pengajar to any containing "sensei"/"lanang".
+          const openRoleHome = (u: any) => {
+            if (u.role === "Siswa" || u.role === "Pengajar" || u.role === "Alumni") setActiveTab("lms");
+            if (u.role === "Admin" || u.role === "Admin Super" || u.role === "Admin Biasa") setActiveTab("admin");
+            if (u.role === "VVIP") setActiveTab("vvip");
+          };
+          const serverLogin = await loginWithGoogleOnServer(result.user);
+          if (serverLogin.status === "ok") {
+            setCurrentUser(serverLogin.user);
+            openRoleHome(serverLogin.user);
+            return;
+          }
+          if (serverLogin.status === "error") {
+            alert(serverLogin.message);
+            return;
+          }
 
-          // Fetch latest state if needed
+          // Server unreachable: only existing accounts may continue (no new accounts here).
+          const email = (result.user.email || "").trim().toLowerCase();
           let currentState = systemState;
           if (!currentState.users || currentState.users.length === 0) {
             const response = await fetch("/api/state");
@@ -960,86 +976,21 @@ export default function App() {
               setSystemState(currentState);
             }
           }
-
           const existingUser = currentState.users?.find(
-            (u) => u.email === email || u.username === email,
+            (u) => (u.email || "").toLowerCase() === email || (u.username || "").toLowerCase() === email,
           );
-
-          if (existingUser) {
-            if (existingUser.status === "Suspended") {
-              alert(
-                "Akses Ditolak: Akun Anda telah disuspend oleh Admin atau Direktur.",
-              );
-              return;
-            }
-            const now = new Date().toISOString();
-            handleUpdateState("users", "edit", { username: existingUser.username, lastActive: now });
-            setCurrentUser({ ...existingUser, lastActive: now });
-            if (
-              existingUser.role === "Siswa" ||
-              existingUser.role === "Pengajar"
-            )
-              setActiveTab("lms");
-            if (existingUser.role === "Admin" || existingUser.role === "Admin Super" || existingUser.role === "Admin Biasa") setActiveTab("admin");
-            if (existingUser.role === "VVIP") setActiveTab("vvip");
+          if (!existingUser) {
+            alert("Login Google sedang tidak dapat diverifikasi. Silakan coba lagi beberapa saat lagi.");
             return;
           }
-
-          // Strict Role & Eligibility Enforcement for new auto-created Google logins
-          // Seeded users that are NOT yet in the database will be created ONCE
-          let role: "Admin" | "VVIP" | "Siswa" | "Pengajar" | "Alumni" | "Admin Super" | "Admin Biasa" | null = null;
-
-          if (email === "linggadhani79@gmail.com" || email === "ekaichiro@gmail.com" || email === "rlstudioindonesia@gmail.com") {
-            role = "VVIP";
-          } else if (
-            email === "sakti.wardana@lpksc.id" ||
-            email.includes("admin")
-          ) {
-            role = "Admin";
-          } else if (
-            email === "linggadhani95@gmail.com" ||
-            email === "lanangrudis11@gmail.com" ||
-            email.toLowerCase().includes("sensei") ||
-            email.toLowerCase().includes("lanang")
-          ) {
-            role = "Pengajar";
+          if (existingUser.status === "Suspended") {
+            alert("Akses Ditolak: Akun Anda telah disuspend oleh Admin atau Direktur.");
+            return;
           }
-
-          if (role) {
-            const newUser = {
-              username: email,
-              name: name,
-              email: email,
-              role: role,
-              status: "Active" as const,
-              studentId:
-                role === "Siswa" || role === "Alumni" ? "SIS-013" : undefined,
-              password: "google-auth-user",
-              lastActive: new Date().toISOString()
-            };
-
-            // PERSIST to database so it's not hardcoded next time
-            // This ensures that if the role is changed in VVIP, it stays changed
-            await fetch("/api/state/update", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                dataType: "users",
-                action: "add",
-                payload: newUser
-              })
-            });
-
-            setCurrentUser(newUser);
-            if (newUser.role === "Siswa" || newUser.role === "Pengajar")
-              setActiveTab("lms");
-            if (newUser.role === "Admin" || newUser.role === "Admin Super" || newUser.role === "Admin Biasa") setActiveTab("admin");
-            if (newUser.role === "VVIP") setActiveTab("vvip");
-          } else {
-            alert(
-              "Akses Ditolak: Akun Anda belum terdaftar di sistem. Silakan mendaftar dan menunggu persetujuan (approval) oleh Admin atau Sensei.",
-            );
-          }
+          const now = new Date().toISOString();
+          handleUpdateState("users", "edit", { username: existingUser.username, lastActive: now });
+          setCurrentUser({ ...existingUser, lastActive: now });
+          openRoleHome(existingUser);
         }
       } catch (error) {
         console.error("Redirect sign-in error:", error);
@@ -1338,6 +1289,23 @@ export default function App() {
     return false;
   };
 
+  // Stage 2: the server refused this session (expired, password changed on
+  // another device, or a session from before the security update) -> log in again.
+  const handleLogoutRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    let shown = false;
+    const onAuthRequired = () => {
+      if (!currentUserRef.current || shown) return;
+      shown = true;
+      handleLogoutRef.current();
+      setIsLoginOpen(true);
+      alert("Sesi Anda sudah berakhir atau tidak berlaku lagi. Silakan login ulang.");
+      setTimeout(() => { shown = false; }, 5000);
+    };
+    window.addEventListener(AUTH_REQUIRED_EVENT, onAuthRequired);
+    return () => window.removeEventListener(AUTH_REQUIRED_EVENT, onAuthRequired);
+  }, []);
+
   const handleLogout = () => {
     setCurrentUser(null);
     setOriginalUser(null);
@@ -1348,6 +1316,7 @@ export default function App() {
       localStorage.removeItem("lpk_original_session");
     }
   };
+  handleLogoutRef.current = handleLogout;
 
   const { isMobileDevice, isTablet, isLandscape } = useDeviceDimensions();
   const [preferredDisplayMode, setPreferredDisplayMode] = useState<"auto" | "web" | "mobile">(() => {
