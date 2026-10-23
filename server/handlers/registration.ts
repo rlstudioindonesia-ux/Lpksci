@@ -4,7 +4,7 @@ import { hashPassword, isHashedPassword } from "../auth-utils.ts";
 import { invalidateStateCache } from "../stateCache.ts";
 import { EXTRA_STUDENT_DOCUMENT_FIELDS } from "../../src/lib/studentDocuments.ts";
 import { findRecordIndex } from "../../src/lib/recordMatching.ts";
-import { findRegistrationUpdateTarget, isPhantomRegistration, findPhantomRegistrations } from "../../src/lib/registrationUpdate.ts";
+import { findRegistrationUpdateTarget, isConvertedRegistration, visibleRegistrations } from "../../src/lib/registrationUpdate.ts";
 import { normalizeGender } from "../../src/lib/gender.ts";
 import { todayJakartaISO } from "../../src/lib/dateUtils.ts";
 import { nextSequentialId, collectUsedStudentIds } from "../../src/lib/idGenerator.ts";
@@ -74,19 +74,19 @@ function applySentFieldsToActiveStudent(act: any, sent: any, allowClear = false)
   }
 }
 
-// 23-10-2026 (owner): removes phantom registrants (copies of an active student
-// or empty records) after the state is loaded. Only the registration is
-// deleted; the active student and the login account stay untouched.
-export function cleanupPhantomRegistrations(state: any): number {
-  const phantoms = findPhantomRegistrations(state.registeredStudents, state.activeStudents);
-  if (phantoms.length === 0) return 0;
-  const drop = new Set(phantoms);
-  state.registeredStudents = state.registeredStudents.filter((r: any) => !drop.has(r));
-  for (const reg of phantoms) {
-    if (reg.id) deleteEntityFromFirestore("registeredStudents", reg.id);
+// 23-10-2026 (owner): phantom registrants must never show up, and must not be
+// deleted over and over either. Keep them out of this instance's memory after
+// every load: they are then never served to browsers and never written back
+// to Firestore by a later update. Nothing is deleted.
+export function hideConvertedRegistrations(state: any): number {
+  if (!Array.isArray(state.registeredStudents)) return 0;
+  const visible = visibleRegistrations(state.registeredStudents, state.activeStudents);
+  const hidden = state.registeredStudents.length - visible.length;
+  if (hidden > 0) {
+    state.registeredStudents = visible;
+    console.log(`🙈 [Registrations] Hid ${hidden} registrant(s) that are already active students or empty.`);
   }
-  console.log(`🧹 [Cleanup] Removed ${phantoms.length} phantom registrant(s): ${phantoms.map((r: any) => r.id || "(no id)").join(", ")}`);
-  return phantoms.length;
+  return hidden;
 }
 
 // Registered student approval/rejection workflow
@@ -263,8 +263,8 @@ export async function handleRegistrationState(req: Request, res: Response, dataT
       // 23-10-2026: deleting a registration never deletes an active student any
       // more. The old cascade matched active students by name (deleting another
       // student with the same name) and wiped the real student when an admin
-      // removed a phantom registrant that shares the student's id.
-      if (registeredToDelete && !isPhantomRegistration(registeredToDelete, state.activeStudents)) {
+      // removed a phantom registrant of that student.
+      if (registeredToDelete && !isConvertedRegistration(registeredToDelete, state.activeStudents)) {
         // Cascade delete the registrant's own login account (id or email, not name)
         const userAccount = state.users.find(
           (u: any) => !["Pengajar", "VVIP", "Admin", "Admin Super", "Admin Biasa"].includes(u.role) && (

@@ -1,5 +1,5 @@
 import { isActiveStudent, isAlumniTabStudent } from "./studentStatusGroups";
-import { isPhantomRegistration } from "./registrationUpdate";
+import { isConvertedRegistration } from "./registrationUpdate";
 
 /**
  * Alumni referrals (23-10-2026). The Admin page, the VVIP page and the alumni
@@ -57,7 +57,7 @@ export function collectReferrals(
         normalizeReferralCode(s.referrer) &&
         s.status !== "Ditolak" &&
         // Already a student: counted once, from the active list.
-        !isPhantomRegistration(s, activeList) &&
+        !isConvertedRegistration(s, activeList) &&
         !(s.email && activeEmails.has(normalizeReferralCode(s.email))) &&
         !isSelfReferral(s, s.referrer, users),
     )
