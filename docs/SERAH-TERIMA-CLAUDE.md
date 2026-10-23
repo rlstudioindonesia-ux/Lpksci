@@ -38,6 +38,7 @@ Skill Claude Code ada di `.claude/skills/` (`alur-perubahan`, `aturan-data-siswa
 | Rata-rata nilai **ikut menghitung nilai < 75** (status "Selesai Belajar" dengan skor) | `src/lib/scoreAveraging.ts` (`isGradedAssessment`) |
 | Essay ketat: harus sama dengan kunci/varian (abaikan huruf besar, spasi, tanda baca), typo 1 huruf untuk jawaban >= 5 huruf; "mengandung kunci" TIDAK lagi benar | `src/lib/essayAnswer.ts` |
 | Tab **Alumni** = hanya siswa **Di Jepang** | `isAlumniTabStudent` |
+| **"Lulus" tetap siswa**: kelas & sensei tetap, akun tetap Siswa; alumni hanya "Di Jepang" | `isAlumniStatusValue`, `isStudentAlumni` |
 | **Rujukan alumni**: kode tidak peka huruf besar/spasi; tidak dihitung: ditolak, rujukan diri sendiri, duplikat pendaftar-siswa; "Sukses" = jadi Siswa Aktif atau Di Jepang; total ikut pendaftar yang menunggu | `src/lib/referrals.ts` |
 | 6 berkas tambahan: Sertifikat JFT/JLPT/NAT, SSW 1, SSW 2, LPK SCI, COE, CV | `src/lib/studentDocuments.ts` |
 | Tanggal "hari ini" = WIB (peramban: `todayLocalISO`, server: `todayJakartaISO`) | `src/lib/dateUtils.ts` |
@@ -69,7 +70,8 @@ Skill Claude Code ada di `.claude/skills/` (`alur-perubahan`, `aturan-data-siswa
 - #70 pembersihan otomatis pendaftar hantu + tutup celah auto-sync yang menulis ulang siswa aktif sebagai pendaftar
 - #71 satu rumus rujukan alumni (Admin/VVIP/dasbor alumni), pengurutan aman untuk data tanpa tanggal/nama
 - #72 pendaftar hantu disembunyikan di server (tidak lagi dihapus otomatis berulang)
-- berikutnya: akun siswa tidak lagi jadi Alumni karena nama sama (saat server mulai), impor pajak tidak menghitung pemasukan dua kali
+- #73 akun siswa tidak lagi jadi Alumni karena nama sama (saat server mulai), impor pajak tidak menghitung pemasukan dua kali
+- berikutnya: status "Lulus" tetap siswa (kelas/sensei/akun tidak diubah)
 
 ## Tindak lanjut terbuka
 
@@ -81,5 +83,5 @@ Skill Claude Code ada di `.claude/skills/` (`alur-perubahan`, `aturan-data-siswa
 2. **Sudah diputuskan pemilik (23-10-2026) dan diterapkan:** nilai < 75 ikut rata-rata, essay diperketat, tab Alumni = Di Jepang. Sisa: rata-rata nilai & kehadiran di peramban masih mencocokkan siswa lewat nama juga (sengaja dibiarkan karena data lama); essay tanpa kunci jawaban tetap dianggap benar (ditinjau Sensei).
 3. **Data lama yang mungkin sudah rusak** (perbaikan hanya mencegah kejadian baru): siswa berstatus "Terverifikasi"/"Disetujui" (dari form edit lama), tagihan `PAY-<6 huruf>-…` yang tertukar, entri Buku Kas yang saling menimpa. Bisa dibuat skrip pemeriksa bila pemilik minta.
 4. **Pendaftar "hantu" disembunyikan, TIDAK dihapus otomatis** (keputusan pemilik 23-10-2026, menggantikan pembersihan otomatis #70 yang membuat pendaftar muncul-hilang berulang): `hideConvertedRegistrations` membuang dari memori server (bukan dari Firestore) pendaftar yang orangnya sudah siswa aktif (ID sama, atau email DAN nama sama; kecuali pendaftar alumni berstatus "Disetujui") dan pendaftar kosong. Berjalan setelah load, resync, dan change feed. Karena tidak ada di memori, pendaftar itu tidak pernah tampil dan tidak ditulis ulang.
-5. **Status "Lulus" perlu keputusan pemilik**: dihitung Siswa Aktif, tetapi saat status diubah ke Lulus kelas & sensei dikosongkan dan akun dijadikan Alumni (seperti Di Jepang). Lihat skill `cek-bug`.
+5. **Status "Lulus" = tetap siswa** (pemilik 23-10-2026, diterapkan): kelas/sensei tidak dikosongkan, akun tidak dijadikan Alumni. Siswa Lulus yang SEBELUMNYA sudah terlanjur dikosongkan kelasnya/dijadikan Alumni tidak dipulihkan otomatis; Admin cukup memilih kelasnya lagi (akun otomatis kembali Siswa).
 6. Semua perubahan belum diverifikasi langsung di produksi — minta pemilik menguji alur utama setelah deploy.

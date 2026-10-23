@@ -28,8 +28,8 @@ describe("resolveGoogleSignupRole", () => {
     expect(result).toEqual({ role: "Siswa", studentId: "SIS-1", assignedClass: "Kelas A" });
   });
 
-  it("assigns Alumni when the matched active student has graduated (Lulus/Di Jepang)", () => {
-    expect(resolveGoogleSignupRole("a@gmail.com", { id: "S1", status: "Lulus" }, null).role).toBe("Alumni");
+  it("assigns Alumni only when the matched active student is Di Jepang; Lulus stays Siswa (owner, 23-10-2026)", () => {
+    expect(resolveGoogleSignupRole("a@gmail.com", { id: "S1", status: "Lulus" }, null).role).toBe("Siswa");
     expect(resolveGoogleSignupRole("b@gmail.com", { id: "S2", status: "Di Jepang" }, null).role).toBe("Alumni");
   });
 

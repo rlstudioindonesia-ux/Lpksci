@@ -104,3 +104,12 @@ export function isAlumniTabStudent(student: { status?: string | null } | null | 
   if (!student) return false;
   return getStudentStatusGroup(student.status) === "Di Jepang";
 }
+
+/**
+ * Whether a raw status makes a student an alumni (owner, 23-10-2026): only
+ * "Di Jepang". "Lulus" (passed JFT/JLPT) is still a student - class, sensei
+ * and student account stay.
+ */
+export function isAlumniStatusValue(status: string | null | undefined): boolean {
+  return getStudentStatusGroup(status) === "Di Jepang";
+}

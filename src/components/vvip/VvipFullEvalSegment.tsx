@@ -1183,7 +1183,7 @@ export default function VvipFullEvalSegment({ activeStudents, classFilter, class
                                           <span className="font-black font-mono text-xs text-slate-800">
                                             {rateAtt !== null
                                               ? `${rateAtt}% Hadir`
-                                              : (student.statusPendaftaran || (["Lulus", "Di Jepang"].includes(student.status) ? "Alumni" : "Siswa Baru"))}
+                                              : (student.statusPendaftaran || (isAlumniTabStudent(student) ? "Alumni" : "Siswa Baru"))}
                                           </span>
                                         </div>
                                         <div className="space-y-0.5">
@@ -1475,7 +1475,7 @@ export default function VvipFullEvalSegment({ activeStudents, classFilter, class
     
             {/* TAB B: MONITORING SENSEI */}
             {monitorTab === "rekap_siswa" && (() => {
-              const rekapSiswaAktif = activeStudents.filter(s => !["Lulus", "Di Jepang", "Diklat SO", "On Proges Job", "On Progres JFT/JLPT/SSW", "Berhenti", "Alumni"].includes(s.status || ""));
+              const rekapSiswaAktif = activeStudents.filter(s => isActiveStudent(s));
               return (
               <div className="space-y-6 animate-fade-in text-left">
                 <div className="bg-gradient-to-r from-slate-900 to-indigo-950 p-6 rounded-[2.5rem] text-white shadow-xl relative overflow-hidden border border-white/5">
@@ -1901,7 +1901,7 @@ export default function VvipFullEvalSegment({ activeStudents, classFilter, class
     
             {/* TAB: MONITORING MATERI (LMS E-Benkyou progress, merged from the old standalone LMS monitoring page) */}
             {monitorTab === ("materi" as any) && (() => {
-              const activeSiswaOnly = (systemState.activeStudents || []).filter(s => !["Lulus", "Di Jepang"].includes(s.status || ""));
+              const activeSiswaOnly = (systemState.activeStudents || []).filter(s => isActiveStudent(s));
               const senseiCount = (systemState.users || []).filter(u => hasStaffOversight(u.role)).length || 0;
               const allScores: number[] = [];
               activeSiswaOnly.forEach(s => {
@@ -1995,7 +1995,7 @@ export default function VvipFullEvalSegment({ activeStudents, classFilter, class
                               .filter(c => lmsClassFilter === "all" || c === lmsClassFilter)
                               .map((className, i) => {
                                 const classUsers = (systemState.users || []).filter(u => u.assignedClass === className);
-                                const classStudents = (systemState.activeStudents || []).filter(s => (s.class === className || (s as any).assignedClass === className) && !["Lulus", "Di Jepang"].includes(s.status || ""));
+                                const classStudents = (systemState.activeStudents || []).filter(s => (s.class === className || (s as any).assignedClass === className) && isActiveStudent(s));
                                 const classSensei = classUsers.filter(u => hasStaffOversight(u.role));
                                 const classProgressList = studentProgress(classStudents);
                                 const avgProgress = classProgressList.length > 0 ? Math.round(classProgressList.reduce((a, b) => a + b, 0) / classProgressList.length) : 0;

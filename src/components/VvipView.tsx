@@ -100,7 +100,7 @@ import VvipGajiSegment from "./vvip/VvipGajiSegment";
 import VvipGajiSummarySegment from "./vvip/VvipGajiSummarySegment";
 import VvipExecSegment from "./vvip/VvipExecSegment";
 import VvipKalenderSegment from "./vvip/VvipKalenderSegment";
-import { countStudentsByStatusGroup, getStudentStatusGroup, studentMatchesStatusGroup, isStudentStillActive, countActiveStudents } from "../lib/studentStatusGroups";
+import { countStudentsByStatusGroup, getStudentStatusGroup, studentMatchesStatusGroup, isStudentStillActive, countActiveStudents, isAlumniTabStudent } from "../lib/studentStatusGroups";
 
 interface VvipViewProps {
   currentUser?: UserAccount | null;
@@ -322,7 +322,7 @@ export default function VvipView({
   }, [systemState.activeStudents, systemState.users]);
   
   const inJapanCount = useMemo(() => activeStudents.filter(
-    (s) => ["Lulus", "Di Jepang"].includes(s.status),
+    (s) => isAlumniTabStudent(s),
   ).length, [activeStudents]);
   
   // "Siswa Aktif" card: owner's formula (lib/studentStatusGroups isActiveStudent)
@@ -1923,7 +1923,7 @@ export default function VvipView({
           const matchedReg = {
             id: matchedRS?.id || student.id,
             name: matchedRS?.name || student.name,
-            status: matchedRS?.status || student.statusPendaftaran || (["Lulus", "Di Jepang"].includes(student.status) ? "Alumni" : "Siswa Aktif"),
+            status: matchedRS?.status || student.statusPendaftaran || (isAlumniTabStudent(student) ? "Alumni" : "Siswa Aktif"),
             email: matchedRS?.email || student.email || "-",
             phone: matchedRS?.phone || student.phone || "-",
             birthDate: matchedRS?.birthDate || student.birthDate || "-",
@@ -3307,7 +3307,7 @@ export default function VvipView({
                       (u.email && st.email && u.email.toLowerCase() === st.email.toLowerCase()) ||
                       (u.studentId && st.id && u.studentId === st.id)
                     )) {
-                      const isAlumni = ["Lulus", "Di Jepang"].includes(st.status || "") || st.kategoriPendaftaran === "Alumni";
+                      const isAlumni = isAlumniTabStudent(st) || st.kategoriPendaftaran === "Alumni";
                       combinedUsers.push({
                         username: uname,
                         name: st.name || "Siswa",

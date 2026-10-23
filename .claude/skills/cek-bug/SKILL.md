@@ -23,7 +23,6 @@ Afiliasi/referral & Alumni dashboard (satu rumus di `src/lib/referrals.ts`), kal
 Notifikasi (`src/lib/notifications.ts`), Android/PWA, peta sebaran.
 
 ## Temuan yang belum diperbaiki (perlu keputusan pemilik)
-- Status **"Lulus"**: aturan pemilik = Siswa Aktif (grup Sertifikasi JFT/JLPT), tetapi banyak kode masih memperlakukannya seperti alumni (kelas & sensei dikosongkan saat status diubah ke Lulus, akun jadi Alumni saat server mulai, beberapa rekap VVIP/hitungan sensei tidak menghitungnya).
 - Galeri/slideshow disimpan sebagai seluruh daftar dari peramban; menghapus foto terakhir galeri memunculkan lagi foto bawaan.
 - `syncCustomizationToFirestore` menulis seluruh pengaturan dari memori instance (galeri, kelas, kustomisasi) - bisa menimpa perubahan dari instance lain yang belum tersinkron.
 

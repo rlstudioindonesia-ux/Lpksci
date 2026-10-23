@@ -987,7 +987,7 @@ export default function AdminSiswaSegment({ checkSyncStatus, filterClass, filter
                         <tbody className="divide-y divide-slate-100">
                           {paginatedSiswaItems.map((teacher: any) => {
                             const studentCount = (systemState.activeStudents || []).filter(
-                              (st: any) => teacher.assignedClass && (st.class || "").toLowerCase() === teacher.assignedClass.toLowerCase() && !["Lulus", "Di Jepang"].includes(st.status)
+                              (st: any) => teacher.assignedClass && (st.class || "").toLowerCase() === teacher.assignedClass.toLowerCase() && isActiveStudent(st)
                             ).length;
                             const presensiCount = (systemState.logs || []).filter(
                               (l: any) => l.type === "PRESENSI_PENGAJAR" && (l.user === teacher.name || l.user === teacher.username)
@@ -1233,7 +1233,6 @@ export default function AdminSiswaSegment({ checkSyncStatus, filterClass, filter
                                       value={s.status}
                                       onChange={async (e) => {
                                         const val = e.target.value as any;
-                                        const isToAlumni = ["Lulus", "Di Jepang"].includes(val);
                                         await onUpdateState(
                                           "activeStudents",
                                           "update_status",
@@ -1657,7 +1656,7 @@ export default function AdminSiswaSegment({ checkSyncStatus, filterClass, filter
                       <div className="space-y-3 animate-fade-in">
                         {paginatedSiswaItems.map((teacher: any) => {
                           const studentCount = (systemState.activeStudents || []).filter(
-                            (st: any) => teacher.assignedClass && (st.class || "").toLowerCase() === teacher.assignedClass.toLowerCase() && !["Lulus", "Di Jepang"].includes(st.status)
+                            (st: any) => teacher.assignedClass && (st.class || "").toLowerCase() === teacher.assignedClass.toLowerCase() && isActiveStudent(st)
                           ).length;
                           const presensiCount = (systemState.logs || []).filter(
                             (l: any) => l.type === "PRESENSI_PENGAJAR" && (l.user === teacher.name || l.user === teacher.username)
@@ -1859,7 +1858,6 @@ export default function AdminSiswaSegment({ checkSyncStatus, filterClass, filter
                                     value={s.status}
                                     onChange={async (e) => {
                                       const val = e.target.value as any;
-                                      const isToAlumni = ["Lulus", "Di Jepang"].includes(val);
                                       await onUpdateState(
                                         "activeStudents",
                                         "update_status",
