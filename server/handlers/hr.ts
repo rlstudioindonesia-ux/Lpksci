@@ -311,8 +311,20 @@ export function handleHrState(req: Request, res: Response, dataType: string, act
         return res.status(404).json({ error: "Contract not found" });
       }
       if (action === "sign") {
-        const { teacherName, date } = payload;
-        const index = state.teacherContracts.findIndex((c: any) => c.teacherName === teacherName);
+        const { teacherName, date, id } = payload;
+        // 23-10-2026: a teacher can have several contracts. Sign the requested
+        // one, else the newest contract still waiting for a signature (the first
+        // match by name could be an old, already signed contract).
+        let index = id ? state.teacherContracts.findIndex((c: any) => c.id === id) : -1;
+        if (index === -1) {
+          const candidates = state.teacherContracts
+            .map((c: any, i: number) => ({ c, i }))
+            .filter(({ c }: any) => c.teacherName === teacherName);
+          const waiting = candidates.filter(({ c }: any) => c.status !== "Disetujui");
+          const pool = waiting.length > 0 ? waiting : candidates;
+          pool.sort((a: any, b: any) => String(b.c.id).localeCompare(String(a.c.id)));
+          index = pool.length > 0 ? pool[0].i : -1;
+        }
         if (index !== -1) {
           state.teacherContracts[index].status = "Disetujui";
           state.teacherContracts[index].signedDate = date || new Date().toISOString();

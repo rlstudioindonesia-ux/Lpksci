@@ -105,7 +105,11 @@ export function authorizeStateUpdate(
       const msg = (ctx.messages || []).find((m: any) => m && m.id === payload?.id);
       return msg && isSelf(user, msg.senderId) ? allow(payload) : deny("Hanya pesan sendiri yang bisa dihapus.");
     }
-    if (action === "clear_chat") return isSelf(user, payload?.myChatId) || payload?.isGroup ? allow(payload) : deny("Bukan percakapan sendiri.");
+    if (action === "clear_chat") {
+      // Clearing a group chat deletes it for every member: staff only.
+      if (payload?.isGroup) return role === "Pengajar" ? allow(payload) : deny("Hanya staf yang bisa mengosongkan grup.");
+      return isSelf(user, payload?.myChatId) ? allow(payload) : deny("Bukan percakapan sendiri.");
+    }
     return deny("Aksi pesan tidak dikenal.");
   }
   if (dataType === "users") {

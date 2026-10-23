@@ -102,13 +102,15 @@ export function scopeStateForViewer(payload: any, viewer: { username?: string; r
     scoped.messages = [];
   } else {
     const usernames = new Set(users.map((u) => norm(u?.username)).filter(Boolean));
+    // "admin_shared" is the admins' shared inbox: a chat with it is private too.
+    const isPerson = (x: string) => usernames.has(x) || x === "admin_shared";
     scoped.messages = (payload.messages || []).filter((m: any) => {
       if (!m) return false;
       const from = norm(m.senderId);
       const to = norm(m.receiverId);
       if (from === me || to === me) return true;
-      // Direct messages between two other people stay private; group chats remain.
-      return !(usernames.has(from) && usernames.has(to));
+      // Direct messages between two other parties stay private; group chats remain.
+      return !(isPerson(from) && isPerson(to));
     });
   }
 
