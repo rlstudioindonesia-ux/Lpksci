@@ -1,4 +1,5 @@
 import React from "react";
+import { collectReferrals, groupReferralsByReferrer, normalizeReferralCode } from "../../lib/referrals";
 import { Award, CheckCircle2, Filter, Plus, Search, Share2, Users } from "lucide-react";
 
 interface AdminAfiliasiSegmentProps {
@@ -23,74 +24,10 @@ export default function AdminAfiliasiSegment({ affiliateSearch, selectedReferrer
                 </div>
     
                 {(() => {
-                  // The "Kode Referral" field on the registration form is free text
-                  // and optional - some applicants fill it with their own email or
-                  // name instead of leaving it blank, and since a student's login
-                  // username is set to their own email at approval, that later
-                  // resolves to a "referral" that is really just themselves. Filter
-                  // those out everywhere so they never inflate an alumni's referral
-                  // count or reward stats.
-                  const isSelfReferral = (s: { id: string; name: string; email?: string }, ref: string) => {
-                    const r = (ref || "").trim().toLowerCase();
-                    if (!r) return false;
-                    if (s?.name && typeof s.name === "string" && s.name.trim().toLowerCase() === r) return true;
-                    if (s?.email && typeof s.email === "string" && s.email.trim().toLowerCase() === r) return true;
-                    const ownUser = (systemState.users || []).find(u => (u.studentId && u.studentId === s.id) || (u.name && u.name === s.name));
-                    return !!ownUser && typeof ownUser.username === "string" && ownUser.username.trim().toLowerCase() === r;
-                  };
-    
-                  // Get all referred students
-                  const allReferred = [
-                    ...(systemState.registeredStudents || []).filter(s => s.referrer && !isSelfReferral(s, s.referrer)).map(s => ({
-                      id: s.id,
-                      name: s.name,
-                      status: s.status,
-                      referrer: s.referrer || "unknown",
-                      date: s.date || "-",
-                      type: 'registered' as const
-                    })),
-                    ...(systemState.activeStudents || []).filter(s => s.referrer && !isSelfReferral(s, s.referrer)).map(s => ({
-                      id: s.id,
-                      name: s.name,
-                      status: s.status,
-                      referrer: s.referrer || "unknown",
-                      date: "-",
-                      type: 'active' as const
-                    }))
-                  ];
-    
-                  // Group stats by referrer
-                  const referrerMap: Record<string, {
-                    username: string;
-                    realName: string;
-                    total: number;
-                    activeCount: number;
-                    registeredCount: number;
-                    students: typeof allReferred;
-                  }> = {};
-    
-                  allReferred.forEach(s => {
-                    const ref = s.referrer;
-                    if (!referrerMap[ref]) {
-                      const matchedUser = (systemState.users || []).find(u => u.username === ref);
-                      referrerMap[ref] = {
-                        username: ref,
-                        realName: matchedUser?.name || ref,
-                        total: 0,
-                        activeCount: 0,
-                        registeredCount: 0,
-                        students: []
-                      };
-                    }
-                    referrerMap[ref].total += 1;
-                    if (s.type === 'active') {
-                      referrerMap[ref].activeCount += 1;
-                    } else {
-                      referrerMap[ref].registeredCount += 1;
-                    }
-                    referrerMap[ref].students.push(s);
-                  });
-    
+                  // One referral list for Admin, VVIP and the alumni dashboard (src/lib/referrals.ts).
+                  const allReferred = collectReferrals(systemState.registeredStudents, systemState.activeStudents, systemState.users);
+                  const referrerMap = groupReferralsByReferrer(allReferred, systemState.users);
+
                   const referrersList = Object.values(referrerMap).sort((a, b) => b.total - a.total);
     
                   // Filter referrers by search query if any
@@ -102,7 +39,7 @@ export default function AdminAfiliasiSegment({ affiliateSearch, selectedReferrer
                   // Filter students to show
                   let displayedStudents = allReferred;
                   if (selectedReferrer !== "all") {
-                    displayedStudents = displayedStudents.filter(s => s.referrer === selectedReferrer);
+                    displayedStudents = displayedStudents.filter(s => s.referrer === normalizeReferralCode(selectedReferrer));
                   }
                   if (affiliateSearch) {
                     displayedStudents = displayedStudents.filter(s => 

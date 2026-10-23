@@ -1043,7 +1043,7 @@ export default function MobileBerandaSubpage({ currentMobileSlide, currentUser, 
                         { id: "galeri", name: "Galeri Foto", icon: ImageIcon, color: "cyan", colorClass: "from-cyan-500 to-cyan-700", access: true },
                       ]
                         .filter(item => item.access)
-                        .sort((a, b) => a.name.localeCompare(b.name))
+                        .sort((a, b) => String(a.name ?? "").localeCompare(String(b.name ?? "")))
                         .map((item) => {
                           const Icon = item.icon;
                           return (
@@ -1098,7 +1098,7 @@ export default function MobileBerandaSubpage({ currentMobileSlide, currentUser, 
                       { id: "loginas", name: "Login Sebagai...", icon: Key, color: "indigo", colorClass: "from-indigo-500 to-indigo-700", access: true, isVvipOnly: true },
                     ]
                       .filter(item => item.access)
-                      .sort((a, b) => a.name.localeCompare(b.name))
+                      .sort((a, b) => String(a.name ?? "").localeCompare(String(b.name ?? "")))
                       .map((item) => {
                         const Icon = item.icon;
                         return (

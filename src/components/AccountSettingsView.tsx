@@ -587,7 +587,7 @@ export default function AccountSettingsView({
       const aTime = a.lastActive ? new Date(a.lastActive).getTime() : 0;
       const bTime = b.lastActive ? new Date(b.lastActive).getTime() : 0;
       if (aTime !== bTime) return bTime - aTime;
-      return a.name.localeCompare(b.name);
+      return String(a.name ?? "").localeCompare(String(b.name ?? ""));
     });
 
   const USERS_PER_PAGE = 10;

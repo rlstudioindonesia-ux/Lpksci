@@ -68,7 +68,7 @@ export default function CalendarView({
 
   const todayStr = getLocalDateString(new Date());
   const events: CalendarEvent[] = [...(systemState.events || [])]
-    .sort((a, b) => a.date.localeCompare(b.date));
+    .sort((a, b) => String(a.date ?? "").localeCompare(String(b.date ?? "")));
   
   // Form State
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
@@ -154,11 +154,11 @@ export default function CalendarView({
     if (showPastInbox) {
       // Past events: keep those before today, sort descending (closest past first)
       list = list.filter(e => e.date < todayStrForInbox);
-      list.sort((a, b) => b.date.localeCompare(a.date));
+      list.sort((a, b) => String(b.date ?? "").localeCompare(String(a.date ?? "")));
     } else {
       // Upcoming events: keep those today or later, sort ascending (closest upcoming first)
       list = list.filter(e => e.date >= todayStrForInbox);
-      list.sort((a, b) => a.date.localeCompare(b.date));
+      list.sort((a, b) => String(a.date ?? "").localeCompare(String(b.date ?? "")));
     }
     
     return list;
