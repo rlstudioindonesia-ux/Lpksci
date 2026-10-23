@@ -73,7 +73,8 @@ Skill Claude Code ada di `.claude/skills/` (`alur-perubahan`, `aturan-data-siswa
 - #73 akun siswa tidak lagi jadi Alumni karena nama sama (saat server mulai), impor pajak tidak menghitung pemasukan dua kali
 - #74 status "Lulus" tetap siswa (kelas/sensei/akun tidak diubah)
 - #75 siswa bernama sama tidak lagi melihat/mengubah data siswa lain (`findStudentForUser` di ~20 layar + notifikasi)
-- berikutnya: keamanan Tahap 1 (tiket sesi, aturan kata sandi, Google diverifikasi server, audit log-only)
+- #76 keamanan Tahap 1 (tiket sesi, aturan kata sandi, Google diverifikasi server, audit log-only)
+- berikutnya: reset kata sandi lewat email yang benar-benar berlaku (tautan email + server), tutup reset lama yang membocorkan tautan
 
 ## Tindak lanjut terbuka
 
@@ -95,7 +96,10 @@ Skill Claude Code ada di `.claude/skills/` (`alur-perubahan`, `aturan-data-siswa
      - sesi lama (sebelum Tahap 1) harus login ulang.
    - **Tahap 3:**
      - kunci `firestore.rules`. PENTING: server memakai Firebase *client* SDK tanpa login, jadi aturan tidak bisa dikunci sebelum server memakai firebase-admin atau akun layanan;
-     - reset kata sandi lewat Admin (pilihan b, default sementara — pemilik belum memilih). `/api/request-reset` masih mengembalikan tautan ke peminta.
+     - reset kata sandi: SUDAH dikerjakan lebih dulu (pemilik memilih lewat email). Detailnya:
+       - `src/lib/emailPasswordReset.ts`: Firebase mengirim tautan masuk lewat email (email-link sign-in), lalu `ResetPasswordView` mengirim ID token terverifikasi ke `/api/auth/reset-with-email`, dan server yang menyimpan sandi baru;
+       - `/api/request-reset` dan `/api/reset-password` lama ditutup (410);
+       - pemilik WAJIB mengaktifkan "Email link (passwordless sign-in)" di Firebase Console > Authentication > Sign-in method > Email/Password.
 2. **Sudah diputuskan pemilik (23-10-2026) dan diterapkan:** nilai < 75 ikut rata-rata, essay diperketat, tab Alumni = Di Jepang. Sisa: rata-rata nilai & kehadiran di peramban masih mencocokkan siswa lewat nama juga (sengaja dibiarkan karena data lama); essay tanpa kunci jawaban tetap dianggap benar (ditinjau Sensei).
 3. **Data lama yang mungkin sudah rusak** (perbaikan hanya mencegah kejadian baru): siswa berstatus "Terverifikasi"/"Disetujui" (dari form edit lama), tagihan `PAY-<6 huruf>-…` yang tertukar, entri Buku Kas yang saling menimpa. Bisa dibuat skrip pemeriksa bila pemilik minta.
 4. **Pendaftar "hantu" disembunyikan, TIDAK dihapus otomatis** (keputusan pemilik 23-10-2026, menggantikan pembersihan otomatis #70 yang membuat pendaftar muncul-hilang berulang): `hideConvertedRegistrations` membuang dari memori server (bukan dari Firestore) pendaftar yang orangnya sudah siswa aktif (ID sama, atau email DAN nama sama; kecuali pendaftar alumni berstatus "Disetujui") dan pendaftar kosong. Berjalan setelah load, resync, dan change feed. Karena tidak ada di memori, pendaftar itu tidak pernah tampil dan tidak ditulis ulang.
