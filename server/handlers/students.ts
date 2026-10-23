@@ -511,24 +511,15 @@ export async function handleStudentsState(req: Request, res: Response, dataType:
               !["Pengajar", "VVIP", "Admin", "Admin Super", "Admin Biasa"].includes(u.role) &&
               u.studentId && u.studentId === actStudent.id
           );
-          const userIndex = linkedUserIndex !== -1 ? linkedUserIndex : state.users.findIndex(
-            (u: any) =>
-              !["Pengajar", "VVIP", "Admin", "Admin Super", "Admin Biasa"].includes(u.role) &&
-              ((u.studentId && u.studentId === id) ||
-                (u.name && u.name.trim().toLowerCase() === actStudent.name.trim().toLowerCase()) ||
-                (actStudent.email && u.email && u.email.trim().toLowerCase() === actStudent.email.trim().toLowerCase()) ||
-                (actStudent.email &&
-                  u.username &&
-                  u.username.trim().toLowerCase() === actStudent.email.trim().toLowerCase()) ||
-                (regIndex !== -1 &&
-                  u.email &&
-                  state.registeredStudents[regIndex].email &&
-                  u.email.trim().toLowerCase() === state.registeredStudents[regIndex].email.trim().toLowerCase()) ||
-                (regIndex !== -1 &&
-                  u.username &&
-                  state.registeredStudents[regIndex].email &&
-                  u.username.trim().toLowerCase() === state.registeredStudents[regIndex].email.trim().toLowerCase()))
-          );
+          // Fallback without a linked account: email / username, then a unique
+          // unlinked name (findStudentUserIndex). The old "id OR name OR email,
+          // first match" could change another same-named student's account -
+          // including its password and role (23-10-2026).
+          const userIndex = linkedUserIndex !== -1 ? linkedUserIndex : findStudentUserIndex(state.users, {
+            id: actStudent.id,
+            email: actStudent.email || (regIndex !== -1 ? state.registeredStudents[regIndex].email : ""),
+            name: actStudent.name,
+          });
 
           if (userIndex !== -1) {
             if (actStudent.name) state.users[userIndex].name = actStudent.name;
