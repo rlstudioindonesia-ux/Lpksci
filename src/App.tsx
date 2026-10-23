@@ -65,6 +65,7 @@ import {
 import { hasStaffOversight } from "./lib/permissions";
 import { findRecordIndex } from "./lib/recordMatching";
 import { mergeRecentLocalItems } from "./lib/recentLocalItems";
+import { diffClassList, diffShallowObject } from "./lib/classListDiff";
 import {
   Bell,
   Volume2,
@@ -1137,10 +1138,24 @@ export default function App() {
     payload: any,
   ): Promise<boolean> => {
     try {
+      // Send only what this device changed for classes/customization, so a stale
+      // copy cannot revert other people's edits (see lib/classListDiff.ts).
+      let wirePayload = payload;
+      const baseClasses = systemState?.customization?.lmsClasses || systemState?.lmsClasses || [];
+      if (dataType === "customization" && action === "update" && payload && typeof payload === "object" && !Array.isArray(payload)) {
+        const partial: any = diffShallowObject(systemState?.customization || {}, payload, ["lmsClasses", "deletedLmsClassId", "renamedClass"]);
+        if (payload.deletedLmsClassId) partial.deletedLmsClassId = payload.deletedLmsClassId;
+        if (payload.renamedClass) partial.renamedClass = payload.renamedClass;
+        if (Array.isArray(payload.lmsClasses)) partial.lmsClassesDiff = diffClassList(baseClasses, payload.lmsClasses);
+        wirePayload = partial;
+      } else if (dataType === "lmsClasses") {
+        const classesList = Array.isArray(payload) ? payload : (payload?.lmsClasses || payload?.classes || [payload]);
+        wirePayload = { lmsClassesDiff: diffClassList(baseClasses, classesList) };
+      }
       const response = await fetch("/api/state/update", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ dataType, action, payload, userRole: currentUser?.role, actingUserName: currentUser?.name }),
+        body: JSON.stringify({ dataType, action, payload: wirePayload, userRole: currentUser?.role, actingUserName: currentUser?.name }),
       });
       if (response.ok) {
         const resData = await response.json().catch(() => null);
