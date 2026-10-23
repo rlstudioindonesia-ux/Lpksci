@@ -986,7 +986,7 @@ export default function MobileDashboardView({
 
       let count = 0;
       if (currentUser.role === "Siswa") {
-        const studentId = currentUser.studentId || "SIS-001";
+        const studentId = currentUser.studentId || "";
         // 1. New lessons/materials
         count += (systemState.lmsLessons || []).length;
 

@@ -1,3 +1,4 @@
+import { findRecordIndex } from "../../lib/recordMatching";
 import React from "react";
 import { AlertCircle, FileText } from "lucide-react";
 import { StudentCvView } from "../MobileDashboardView";
@@ -37,9 +38,11 @@ export default function MobileCvSubpage({ currentUser, handleUpdateState, onOpen
                     }
     
                     const isAdminOrVvip = currentUser.role === "Admin" || currentUser.role === "Admin Super" || currentUser.role === "Admin Biasa" || currentUser.role === "VVIP" || currentUser.role === "Pengajar";
-                    const activeStudent = systemState.activeStudents?.find(
-                      (s) => s.id === selectedCvStudentId || (s.name === currentUser.name && !isAdminOrVvip)
-                    );
+                    // Own CV: linked studentId first, then email / a unique name (a plain
+                    // name match opened another student's CV when names were shared).
+                    const ownIdx = isAdminOrVvip ? -1 : findRecordIndex(systemState.activeStudents, { id: currentUser.studentId, email: currentUser.email, name: currentUser.name });
+                    const activeStudent = (selectedCvStudentId && systemState.activeStudents?.find((s) => s.id === selectedCvStudentId))
+                      || (ownIdx !== -1 ? systemState.activeStudents[ownIdx] : undefined);
     
                     return (
                       <div className="space-y-4">

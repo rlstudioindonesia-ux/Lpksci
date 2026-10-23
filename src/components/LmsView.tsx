@@ -1,3 +1,4 @@
+import { computeQuizScore } from "../lib/quizScoring";
 import { todayLocalISO } from "../lib/dateUtils";
 /**
  * @license
@@ -1988,7 +1989,7 @@ export default function LmsView({
     }
   }, [filteredActiveStudents, selectedStudentId, currentUser]);
 
-  const viewStudentId = (isSiswaOrAlumni ? (matchingStudent?.id || currentUser?.studentId) : selectedStudentId) || (currentUser?.studentId || "SIS-001");
+  const viewStudentId = (isSiswaOrAlumni ? (matchingStudent?.id || currentUser?.studentId) : selectedStudentId) || (currentUser?.studentId || "");
   const viewStudent = (filteredActiveStudents || []).find((s: any) => s.id === viewStudentId) || (filteredActiveStudents || [])[0];
 
   
@@ -2595,7 +2596,8 @@ export default function LmsView({
     };
 
     const correctQuizzesList = filteredQuizzes.filter(isQuizItemCorrect);
-    const totalScore = filteredQuizzes.length > 0 ? Math.round((correctQuizzesList.length / filteredQuizzes.length) * 100) : 0;
+    // Weighted by each question's points, same as the Sensei correction modal.
+    const totalScore = computeQuizScore(filteredQuizzes, isQuizItemCorrect);
     const hasEssayQuizzes = filteredQuizzes.some(q => q.questionType === "essay");
     const hasMcqQuizzes = filteredQuizzes.some(q => q.questionType !== "essay");
 
@@ -2642,7 +2644,13 @@ export default function LmsView({
                (cName && sName === cName);
       });
 
-      const sId = resolvedStudent?.id || currentUser?.studentId || currentUser?.id || "SIS-001";
+      // Never fall back to a fixed "SIS-001": that filed an unresolved student's
+      // quiz result under another (real) student's id.
+      const sId = resolvedStudent?.id || currentUser?.studentId || currentUser?.id || currentUser?.username || "";
+      if (!sId) {
+        alert("Data siswa Anda tidak ditemukan, nilai kuis tidak dapat disimpan. Silakan hubungi admin.");
+        return;
+      }
       const sName = resolvedStudent?.name || currentUser?.name || "Siswa";
 
       const submissionDetails = filteredQuizzes.map(q => {

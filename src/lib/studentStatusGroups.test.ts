@@ -3,12 +3,17 @@ import {
   countStudentsByStatusGroup,
   getStudentStatusGroup,
   studentMatchesStatusGroup,
-  isStudentStillActive,
+  isActiveStudent,
+  countActiveStudents,
 } from "./studentStatusGroups";
 
 describe("getStudentStatusGroup", () => {
   it("counts Lulus under Sertifikasi JFT/JLPT/SSW (same group in every table)", () => {
     expect(getStudentStatusGroup("Lulus")).toBe("On Progres JFT/JLPT/SSW");
+  });
+
+  it("counts the mis-spelt 'On Progres Job' saved by the old VVIP form as On Proges Job", () => {
+    expect(getStudentStatusGroup("On Progres Job")).toBe("On Proges Job");
   });
 
   it("does not count Dikeluarkan as Belajar", () => {
@@ -62,11 +67,21 @@ describe("studentMatchesStatusGroup", () => {
   });
 });
 
-describe("isStudentStillActive", () => {
-  it("excludes students in Japan and expelled students from a class headcount", () => {
-    expect(isStudentStillActive({ status: "Belajar" })).toBe(true);
-    expect(isStudentStillActive({ status: "On Proges Job" })).toBe(true);
-    expect(isStudentStillActive({ status: "Di Jepang" })).toBe(false);
-    expect(isStudentStillActive({ status: "Dikeluarkan" })).toBe(false);
+describe("isActiveStudent (rumus Siswa Aktif)", () => {
+  it("counts Belajar + On Progres Job + On Progres JFT + Lulus sertifikasi", () => {
+    expect(isActiveStudent({ status: "Belajar" })).toBe(true);
+    expect(isActiveStudent({ status: "On Proges Job" })).toBe(true);
+    expect(isActiveStudent({ status: "On Progres JFT/JLPT/SSW" })).toBe(true);
+    expect(isActiveStudent({ status: "Lulus" })).toBe(true);
+  });
+
+  it("excludes Diklat SO, Di Jepang and Dikeluarkan", () => {
+    expect(isActiveStudent({ status: "Diklat SO" })).toBe(false);
+    expect(isActiveStudent({ status: "Di Jepang" })).toBe(false);
+    expect(isActiveStudent({ status: "Dikeluarkan" })).toBe(false);
+  });
+
+  it("counts a list", () => {
+    expect(countActiveStudents([{ status: "Belajar" }, { status: "Lulus" }, { status: "Di Jepang" }, { status: "Diklat SO" }])).toBe(2);
   });
 });

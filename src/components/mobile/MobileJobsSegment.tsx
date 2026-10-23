@@ -40,7 +40,7 @@ export default function MobileJobsSegment({
   // Helpers from main view
   const myActiveStudent = systemState?.activeStudents?.find(s => s.id === currentUser?.studentId || s.name === currentUser?.name);
   const isUserAlumni = currentUser?.role === "Alumni" || isStudentAlumni(myActiveStudent);
-  const stId = currentUser?.studentId || systemState.activeStudents?.find(s => s.name === currentUser?.name)?.id || "SIS-001";
+  const stId = currentUser?.studentId || systemState.activeStudents?.find(s => s.name === currentUser?.name)?.id || "";
   
   return (
             <div className="p-4 space-y-4">
@@ -119,7 +119,7 @@ export default function MobileJobsSegment({
                       systemState.activeStudents?.find(
                         (s) => s.name === currentUser?.name,
                       )?.id ||
-                      "SIS-001";
+                      "";
                     const isInterested = Array.from(new Set([...(job.interestedStudents || []), ...(job.approvedApplicants || [])]))?.includes(stId);
                     const isApproved = Array.from(new Set([...(job.interestedStudents || []), ...(job.approvedApplicants || [])]))?.includes(stId);
                     const isInMyJobs = isInterested || isApproved;
@@ -138,7 +138,7 @@ export default function MobileJobsSegment({
                           systemState.activeStudents?.find(
                             (s) => s.name === currentUser?.name,
                           )?.id ||
-                          "SIS-001";
+                          "";
                         const isInterested =
                           Array.from(new Set([...(job.interestedStudents || []), ...(job.approvedApplicants || [])]))?.includes(stId);
                         const isApproved =
@@ -411,7 +411,7 @@ export default function MobileJobsSegment({
                                     systemState.activeStudents?.find(
                                       (s) => s.name === currentUser?.name,
                                     )?.id ||
-                                    "SIS-001";
+                                    "";
                                   const isInterested =
                                     Array.from(new Set([...(job.interestedStudents || []), ...(job.approvedApplicants || [])]))?.includes(stId);
                                   const isApproved =

@@ -1,3 +1,4 @@
+import { EXTRA_STUDENT_DOCUMENTS } from "../lib/studentDocuments";
 import React, { useState } from "react";
 import { createPortal } from "react-dom";
 import { Activity, Clock, DollarSign, FileText, CheckCircle, Upload, X } from "lucide-react";
@@ -63,6 +64,125 @@ export default function StudentRaporModal({
     { label: "Kartu Tanda Penduduk (KTP)", val: "docKTP" },
     { label: "Transkrip Nilai Akademik", val: "docTranskip" },
   ];
+
+  const extraDocs = EXTRA_STUDENT_DOCUMENTS.map((d) => ({ label: d.label, val: d.field }));
+
+  const renderDocCard = (doc: { label: string; val: string }, idx: number) => {
+                const isVerified = (matchedReg.verifiedDocs || []).includes(doc.val);
+                const rawDoc = (matchedReg as any)[doc.val] || (student as any)[doc.val] || "";
+                const hasDoc = rawDoc && !rawDoc.includes("_default.") && (rawDoc.includes("|") || rawDoc.startsWith("http") || rawDoc.startsWith("data:"));
+                const docUrl = rawDoc.includes("|") ? rawDoc.split("|")[1] : rawDoc;
+
+                return (
+                  <div
+                    key={idx}
+                    className={`flex flex-col p-3 rounded-xl border transition shadow-3xs text-xs space-y-2.5 ${
+                      isVerified
+                        ? "bg-emerald-50/40 border-emerald-200"
+                        : hasDoc
+                        ? "bg-blue-50/30 border-blue-200"
+                        : "bg-slate-50 border-slate-200"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        {isVerified ? (
+                          <span className="h-5 w-5 rounded bg-emerald-100 text-emerald-700 flex items-center justify-center text-[10px] font-black shrink-0">
+                            ✓
+                          </span>
+                        ) : (
+                          <span className="h-5 w-5 rounded bg-slate-200 text-slate-500 flex items-center justify-center text-[10px] font-bold shrink-0">
+                            {idx + 1}
+                          </span>
+                        )}
+                        <span className="font-bold text-slate-800 truncate" title={doc.label}>
+                          {doc.label}
+                        </span>
+                      </div>
+                      <span className={`text-[9px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider shrink-0 ${
+                        isVerified
+                          ? "bg-emerald-100 text-emerald-800"
+                          : hasDoc
+                          ? "bg-blue-100 text-blue-800"
+                          : "bg-slate-200 text-slate-600"
+                      }`}>
+                        {isVerified ? "Terverifikasi" : hasDoc ? "Tersedia" : "Belum Ada"}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2 pt-1 border-t border-slate-200/50">
+                      {hasDoc && (
+                        <a
+                          href={docUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 rounded-lg text-[10px] font-bold transition flex items-center gap-1 shadow-3xs"
+                        >
+                          <FileText className="h-3 w-3 text-indigo-500" />
+                          <span>Buka Berkas</span>
+                        </a>
+                      )}
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const newDocs = isVerified
+                            ? (matchedReg.verifiedDocs || []).filter((d: string) => d !== doc.val)
+                            : [...(matchedReg.verifiedDocs || []), doc.val];
+                          
+                          await onUpdateState("activeStudents", "update_status", {
+                            id: student.id,
+                            verifiedDocs: newDocs,
+                          });
+
+                          if (matchedRS) {
+                            await onUpdateState("registeredStudents", "update", {
+                              id: matchedRS.id,
+                              verifiedDocs: newDocs,
+                            });
+                          }
+                        }}
+                        className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition flex items-center gap-1 shadow-3xs cursor-pointer ${
+                          isVerified
+                            ? "bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200"
+                            : "bg-emerald-600 hover:bg-emerald-700 text-white"
+                        }`}
+                      >
+                        <CheckCircle className="h-3 w-3" />
+                        <span>{isVerified ? "Batal Verif" : "Verifikasi"}</span>
+                      </button>
+
+                      <label className="px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 rounded-lg text-[10px] font-bold transition flex items-center gap-1 shadow-3xs cursor-pointer">
+                        <Upload className="h-3 w-3 text-slate-500" />
+                        <span>Unggah</span>
+                        <input
+                          type="file"
+                          className="hidden"
+                          onChange={async (e) => {
+                            const file = e.target.files?.[0];
+                            if (!file) return;
+                            try {
+                              const url = await uploadFileToFirebase(file, `documents/${student.id}_${doc.val}`);
+                              const docPayload = `${file.name}|${url}`;
+                              await onUpdateState("activeStudents", "update_status", {
+                                id: student.id,
+                                [doc.val]: docPayload,
+                              });
+                              if (matchedRS) {
+                                await onUpdateState("registeredStudents", "update", {
+                                  id: matchedRS.id,
+                                  [doc.val]: docPayload,
+                                });
+                              }
+                            } catch (err: any) {
+                              alert("Gagal mengunggah berkas: " + (err.message || err));
+                            }
+                          }}
+                        />
+                      </label>
+                    </div>
+                  </div>
+                );
+  };
 
   // Fetch actual chapter assessments
   const actualAssessments = (systemState.chapterAssessments || []).filter(
@@ -218,122 +338,29 @@ export default function StudentRaporModal({
                 </div>
 
                 <div className="grid gap-3 sm:grid-cols-2">
-                  {requiredDocs.map((doc, idx) => {
-                    const isVerified = (matchedReg.verifiedDocs || []).includes(doc.val);
-                    const rawDoc = (matchedReg as any)[doc.val] || (student as any)[doc.val] || "";
-                    const hasDoc = rawDoc && !rawDoc.includes("_default.") && (rawDoc.includes("|") || rawDoc.startsWith("http") || rawDoc.startsWith("data:"));
-                    const docUrl = rawDoc.includes("|") ? rawDoc.split("|")[1] : rawDoc;
+                  {requiredDocs.map(renderDocCard)}
+                </div>
+              </div>
 
+              {/* 23-10-2026: sertifikat & dokumen penempatan (lib/studentDocuments) -
+                  sebelumnya hanya bisa diunggah siswa, Admin/VVIP tidak bisa melihat,
+                  mengunggah, atau memverifikasinya di sini. */}
+              <div className="space-y-3 mt-6">
+                <div className="flex items-center justify-between border-b pb-2">
+                  <h4 className="font-extrabold text-[11px] text-slate-400 uppercase tracking-wider">
+                    Sertifikat &amp; Dokumen Penempatan
+                  </h4>
+                  {(() => {
+                    const vCount = extraDocs.filter((d) => (matchedReg.verifiedDocs || []).includes(d.val)).length;
                     return (
-                      <div
-                        key={idx}
-                        className={`flex flex-col p-3 rounded-xl border transition shadow-3xs text-xs space-y-2.5 ${
-                          isVerified
-                            ? "bg-emerald-50/40 border-emerald-200"
-                            : hasDoc
-                            ? "bg-blue-50/30 border-blue-200"
-                            : "bg-slate-50 border-slate-200"
-                        }`}
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-2 min-w-0">
-                            {isVerified ? (
-                              <span className="h-5 w-5 rounded bg-emerald-100 text-emerald-700 flex items-center justify-center text-[10px] font-black shrink-0">
-                                ✓
-                              </span>
-                            ) : (
-                              <span className="h-5 w-5 rounded bg-slate-200 text-slate-500 flex items-center justify-center text-[10px] font-bold shrink-0">
-                                {idx + 1}
-                              </span>
-                            )}
-                            <span className="font-bold text-slate-800 truncate" title={doc.label}>
-                              {doc.label}
-                            </span>
-                          </div>
-                          <span className={`text-[9px] font-black px-1.5 py-0.5 rounded uppercase tracking-wider shrink-0 ${
-                            isVerified
-                              ? "bg-emerald-100 text-emerald-800"
-                              : hasDoc
-                              ? "bg-blue-100 text-blue-800"
-                              : "bg-slate-200 text-slate-600"
-                          }`}>
-                            {isVerified ? "Terverifikasi" : hasDoc ? "Tersedia" : "Belum Ada"}
-                          </span>
-                        </div>
-
-                        <div className="flex items-center gap-2 pt-1 border-t border-slate-200/50">
-                          {hasDoc && (
-                            <a
-                              href={docUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 rounded-lg text-[10px] font-bold transition flex items-center gap-1 shadow-3xs"
-                            >
-                              <FileText className="h-3 w-3 text-indigo-500" />
-                              <span>Buka Berkas</span>
-                            </a>
-                          )}
-                          <button
-                            type="button"
-                            onClick={async () => {
-                              const newDocs = isVerified
-                                ? (matchedReg.verifiedDocs || []).filter((d: string) => d !== doc.val)
-                                : [...(matchedReg.verifiedDocs || []), doc.val];
-                              
-                              await onUpdateState("activeStudents", "update_status", {
-                                id: student.id,
-                                verifiedDocs: newDocs,
-                              });
-
-                              if (matchedRS) {
-                                await onUpdateState("registeredStudents", "update", {
-                                  id: matchedRS.id,
-                                  verifiedDocs: newDocs,
-                                });
-                              }
-                            }}
-                            className={`px-2.5 py-1 rounded-lg text-[10px] font-bold transition flex items-center gap-1 shadow-3xs cursor-pointer ${
-                              isVerified
-                                ? "bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200"
-                                : "bg-emerald-600 hover:bg-emerald-700 text-white"
-                            }`}
-                          >
-                            <CheckCircle className="h-3 w-3" />
-                            <span>{isVerified ? "Batal Verif" : "Verifikasi"}</span>
-                          </button>
-
-                          <label className="px-2.5 py-1 bg-white hover:bg-slate-100 border border-slate-200 text-slate-700 rounded-lg text-[10px] font-bold transition flex items-center gap-1 shadow-3xs cursor-pointer">
-                            <Upload className="h-3 w-3 text-slate-500" />
-                            <span>Unggah</span>
-                            <input
-                              type="file"
-                              className="hidden"
-                              onChange={async (e) => {
-                                const file = e.target.files?.[0];
-                                if (!file) return;
-                                try {
-                                  const url = await uploadFileToFirebase(file, `documents/${student.id}_${doc.val}`);
-                                  const docPayload = `${file.name}|${url}`;
-                                  await onUpdateState("activeStudents", "update_status", {
-                                    id: student.id,
-                                    [doc.val]: docPayload,
-                                  });
-                                  if (matchedRS) {
-                                    await onUpdateState("registeredStudents", "update", {
-                                      id: matchedRS.id,
-                                      [doc.val]: docPayload,
-                                    });
-                                  }
-                                } catch (err: any) {
-                                  alert("Gagal mengunggah berkas: " + (err.message || err));
-                                }
-                              }}
-                            />
-                          </label>
-                        </div>
-                      </div>
+                      <span className={`text-[10px] font-bold px-2.5 py-0.5 rounded-full ${vCount === extraDocs.length ? "text-emerald-600 bg-emerald-50" : "text-slate-500 bg-slate-100"}`}>
+                        {vCount}/{extraDocs.length} Terverifikasi
+                      </span>
                     );
-                  })}
+                  })()}
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {extraDocs.map(renderDocCard)}
                 </div>
               </div>
             </div>

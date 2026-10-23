@@ -4,6 +4,7 @@ import { hashPassword, isHashedPassword } from "../auth-utils.ts";
 import { invalidateStateCache } from "../stateCache.ts";
 import { nextSequentialId, collectUsedStudentIds } from "../../src/lib/idGenerator.ts";
 import { findRecordIndex } from "../../src/lib/recordMatching.ts";
+import { normalizeGender } from "../../src/lib/gender.ts";
 import { EXTRA_STUDENT_DOCUMENT_FIELDS } from "../../src/lib/studentDocuments.ts";
 
 const STRIPPED_PLACEHOLDERS = new Set(["[BERKAS_TERSIMPAN]", "[FOTO_TERSIMPAN]", "[BUKTI_TERSIMPAN]"]);
@@ -281,7 +282,8 @@ export async function handleStudentsState(req: Request, res: Response, dataType:
               }
             });
             if (status) {
-              state.activeStudents[index].status = status;
+              // Canonical spelling (the VVIP edit form used to save "On Progres Job").
+              state.activeStudents[index].status = status === "On Progres Job" ? "On Proges Job" : status;
             }
             if (name) {
               state.activeStudents[index].name = name.trim();
@@ -302,7 +304,8 @@ export async function handleStudentsState(req: Request, res: Response, dataType:
               state.activeStudents[index].birthDate = birthDate;
             }
             if (gender !== undefined) {
-              state.activeStudents[index].gender = gender;
+              // "L"/"P"/"LAKI-LAKI"/... -> "Laki-laki"/"Perempuan" (unknown values kept as sent)
+              state.activeStudents[index].gender = normalizeGender(gender) || gender;
             }
             if (education !== undefined) {
               state.activeStudents[index].education = education;

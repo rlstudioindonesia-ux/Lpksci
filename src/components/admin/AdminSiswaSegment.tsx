@@ -4,7 +4,7 @@ import { ConfirmButton } from "../ConfirmButton";
 import { createSvgAvatar, getSafePhotoUrl } from "../../lib/storageHelper";
 import { computeAttendanceRate } from "../../lib/attendanceMetrics";
 import { JAPAN_PREFECTURES } from "../../types";
-import { countStudentsByStatusGroup, getStudentStatusGroup, studentMatchesStatusGroup, isStudentStillActive } from "../../lib/studentStatusGroups";
+import { countStudentsByStatusGroup, getStudentStatusGroup, studentMatchesStatusGroup, isStudentStillActive, isActiveStudent } from "../../lib/studentStatusGroups";
 
 interface AdminSiswaSegmentProps {
   checkSyncStatus: any;
@@ -69,7 +69,7 @@ export default function AdminSiswaSegment({ checkSyncStatus, filterClass, filter
                       <Users className="h-4 w-4" />
                       <span>Siswa Aktif</span>
                       <div className={`px-2 py-0.5 rounded-lg text-[10px] font-extrabold ${siswaTab === "aktif" ? "bg-white/20 text-white" : "bg-slate-200 text-slate-700"}`}>
-                        {systemState.activeStudents.filter(s => !["Lulus", "Di Jepang"].includes(s.status) && isStudentRoleOnly(s)).length}
+                        {systemState.activeStudents.filter(s => isActiveStudent(s) && isStudentRoleOnly(s)).length}
                       </div>
                     </button>
     

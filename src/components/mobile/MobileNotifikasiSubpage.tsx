@@ -173,7 +173,7 @@ export default function MobileNotifikasiSubpage({ currentUser, systemState }: Mo
                       });
     
                       if (currentUser.role === "Siswa") {
-                        const studentId = currentUser.studentId || "SIS-001";
+                        const studentId = currentUser.studentId || "";
                         
                         // 1. New Material (from lmsLessons)
                         const lessons = systemState.lmsLessons || [];

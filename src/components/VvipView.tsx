@@ -1,3 +1,5 @@
+import { normalizeGender } from "../lib/gender";
+import { EXTRA_STUDENT_DOCUMENTS } from "../lib/studentDocuments";
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -98,7 +100,7 @@ import VvipGajiSegment from "./vvip/VvipGajiSegment";
 import VvipGajiSummarySegment from "./vvip/VvipGajiSummarySegment";
 import VvipExecSegment from "./vvip/VvipExecSegment";
 import VvipKalenderSegment from "./vvip/VvipKalenderSegment";
-import { countStudentsByStatusGroup, getStudentStatusGroup, studentMatchesStatusGroup, isStudentStillActive } from "../lib/studentStatusGroups";
+import { countStudentsByStatusGroup, getStudentStatusGroup, studentMatchesStatusGroup, isStudentStillActive, countActiveStudents } from "../lib/studentStatusGroups";
 
 interface VvipViewProps {
   currentUser?: UserAccount | null;
@@ -323,9 +325,8 @@ export default function VvipView({
     (s) => ["Lulus", "Di Jepang"].includes(s.status),
   ).length, [activeStudents]);
   
-  const studyingCount = useMemo(() => activeStudents.filter(
-    (s) => studentMatchesStatusGroup(s, "Belajar"),
-  ).length, [activeStudents]);
+  // "Siswa Aktif" card: owner's formula (lib/studentStatusGroups isActiveStudent)
+  const studyingCount = useMemo(() => countActiveStudents(activeStudents), [activeStudents]);
   
   const totalLunasRevenue = useMemo(() => systemState.payments
     .filter((p) => p.status === "Lunas")
@@ -447,7 +448,7 @@ export default function VvipView({
       phone: finalPhone,
       district: finalDistrict,
       birthDate: finalBirthDate,
-      gender: finalGender,
+      gender: normalizeGender(finalGender) || finalGender,
       education: finalEducation,
       school: finalSchool,
       graduationYear: finalGraduationYear,
@@ -455,6 +456,11 @@ export default function VvipView({
       program: finalProgram,
       statusPendaftaran: finalStatusPendaftaran,
       status: regMatch?.status || "Terverifikasi",
+      // Progress status of the ACTIVE student, kept apart from `status` (the
+      // registration status above). Saving used to copy "Terverifikasi"/
+      // "Disetujui" into the active student's status - not a valid progress
+      // status, so the student showed (and was counted) as "Belajar".
+      studentStatus: am?.status || "",
       date: regMatch?.date || activeMatch?.date || "-",
       proofOfPayment: regMatch?.proofOfPayment || (activeMatch as any)?.proofOfPayment,
     };
@@ -519,7 +525,7 @@ export default function VvipView({
           japaneseLevel: payload.japaneseLevel,
           statusPendaftaran: payload.statusPendaftaran,
           class: payload.program !== undefined ? payload.program : activeInfo.class,
-          status: payload.status || activeInfo.status,
+          status: (payload as any).studentStatus || activeInfo.status,
           prefecture: payload.prefecture !== undefined ? payload.prefecture : activeInfo.prefecture,
           city: payload.city !== undefined ? payload.city : activeInfo.city,
           company: payload.company !== undefined ? payload.company : activeInfo.company,
@@ -1946,6 +1952,139 @@ export default function VvipView({
             { label: "Transkrip Nilai Akademik", val: "docTranskip" },
           ];
 
+          // Sertifikat & dokumen penempatan (lib/studentDocuments) juga bisa dikelola VVIP.
+          const extraDocs = EXTRA_STUDENT_DOCUMENTS.map((d) => ({ label: d.label, val: d.field }));
+          const renderDocCard = (doc: { label: string; val: string }, idx: number) => {
+            const isVerified = (matchedReg.verifiedDocs || []).includes(doc.val);
+            const rawDoc = (matchedReg as any)[doc.val] || (student as any)[doc.val] || "";
+            const hasDoc = rawDoc && !rawDoc.includes("_default.") && (rawDoc.includes("|") || rawDoc.startsWith("http") || rawDoc.startsWith("data:"));
+            const docUrl = rawDoc.includes("|") ? rawDoc.split("|")[1] : rawDoc;
+
+            return (
+              <div
+                key={idx}
+                className={`flex flex-col p-3 rounded-xl border transition shadow-3xs text-xs space-y-2.5 ${
+                  isVerified
+                    ? "bg-emerald-50/40 border-emerald-200"
+                    : hasDoc
+                    ? "bg-blue-50/30 border-blue-200"
+                    : "bg-slate-50 border-slate-200"
+                }`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    {isVerified ? (
+                      <span className="h-5 w-5 rounded bg-emerald-100 text-emerald-700 flex items-center justify-center text-[10px] font-black shrink-0">
+                        ✓
+                      </span>
+                    ) : hasDoc ? (
+                      <span className="h-5 w-5 rounded bg-blue-100 text-blue-700 flex items-center justify-center text-[10px] font-black shrink-0">
+                        📄
+                      </span>
+                    ) : (
+                      <span className="h-5 w-5 rounded bg-slate-200 text-slate-500 flex items-center justify-center text-[10px] font-black shrink-0">
+                        -
+                      </span>
+                    )}
+                    <span className="font-semibold text-slate-800 truncate">
+                      {doc.label}
+                    </span>
+                  </div>
+                  <span
+                    className={`text-[9px] font-extrabold px-2 py-0.5 rounded-md font-mono shrink-0 ${
+                      isVerified
+                        ? "text-emerald-700 bg-emerald-100"
+                        : hasDoc
+                        ? "text-blue-700 bg-blue-100"
+                        : "text-slate-500 bg-slate-200"
+                    }`}
+                  >
+                    {isVerified ? "VERIFIED" : hasDoc ? "TERUNGGAH" : "BELUM ADA"}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between gap-1.5 pt-1 border-t border-slate-200/60 flex-wrap">
+                  <div className="flex items-center gap-1.5">
+                    {hasDoc ? (
+                      <button
+                        type="button"
+                        onClick={() => setViewingAttendancePhoto(docUrl)}
+                        className="text-[10px] font-bold bg-white text-indigo-600 hover:text-indigo-800 px-2.5 py-1 rounded-lg border border-slate-200 hover:bg-slate-50 transition flex items-center gap-1 cursor-pointer shadow-3xs"
+                      >
+                        <span>👁️</span> Lihat
+                      </button>
+                    ) : null}
+
+                    <button
+                      type="button"
+                      disabled={isReadOnly}
+                      onClick={async () => {
+                        if (isReadOnly) return;
+                        const currentVerified = matchedReg.verifiedDocs || [];
+                        const newVerified = currentVerified.includes(doc.val)
+                          ? currentVerified.filter(v => v !== doc.val)
+                          : [...currentVerified, doc.val];
+                        
+                        // Update active students
+                        await onUpdateState("activeStudents", "update", {
+                          id: student.id,
+                          verifiedDocs: newVerified,
+                        });
+
+                        // Also update registered students if exists
+                        if (matchedRS) {
+                          await onUpdateState("registeredStudents", "update", {
+                            id: matchedRS.id,
+                            verifiedDocs: newVerified,
+                          });
+                        }
+                      }}
+                      className={`text-[10px] font-bold px-2.5 py-1 rounded-lg transition flex items-center gap-1 cursor-pointer shadow-3xs ${
+                        isVerified
+                          ? "bg-rose-50 text-rose-600 hover:bg-rose-100 border border-rose-200"
+                          : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200"
+                      }`}
+                    >
+                      {isVerified ? "Batal Verif" : "Verifikasi"}
+                    </button>
+                  </div>
+
+                  <label className="text-[10px] font-bold bg-white hover:bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-lg border border-indigo-200 transition cursor-pointer flex items-center gap-1 shadow-3xs">
+                    <span>📤 {hasDoc ? "Ganti" : "Unggah"}</span>
+                    <input
+                      type="file"
+                      className="hidden"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        try {
+                          const downloadUrl = await uploadFileToFirebase(file, "registrations");
+                          const docPayload = `${file.name}|${downloadUrl}`;
+                          
+                          // Update active students
+                          await onUpdateState("activeStudents", "update", {
+                            id: student.id,
+                            [doc.val]: docPayload,
+                          });
+
+                          // Also update registered students if exists
+                          if (matchedRS) {
+                            await onUpdateState("registeredStudents", "update", {
+                              id: matchedRS.id,
+                              [doc.val]: docPayload,
+                            });
+                          }
+                        } catch (err: any) {
+                          alert("Gagal mengunggah berkas: " + (err.message || err));
+                        }
+                      }}
+                    />
+                  </label>
+                </div>
+              </div>
+            );
+          };
+
           // Fetch actual chapter assessments
           const actualAssessments = (
             systemState.chapterAssessments || []
@@ -2136,136 +2275,18 @@ export default function VvipView({
                         </div>
 
                         <div className="grid gap-3 sm:grid-cols-2">
-                          {requiredDocs.map((doc, idx) => {
-                            const isVerified = (matchedReg.verifiedDocs || []).includes(doc.val);
-                            const rawDoc = (matchedReg as any)[doc.val] || (student as any)[doc.val] || "";
-                            const hasDoc = rawDoc && !rawDoc.includes("_default.") && (rawDoc.includes("|") || rawDoc.startsWith("http") || rawDoc.startsWith("data:"));
-                            const docUrl = rawDoc.includes("|") ? rawDoc.split("|")[1] : rawDoc;
-
-                            return (
-                              <div
-                                key={idx}
-                                className={`flex flex-col p-3 rounded-xl border transition shadow-3xs text-xs space-y-2.5 ${
-                                  isVerified
-                                    ? "bg-emerald-50/40 border-emerald-200"
-                                    : hasDoc
-                                    ? "bg-blue-50/30 border-blue-200"
-                                    : "bg-slate-50 border-slate-200"
-                                }`}
-                              >
-                                <div className="flex items-center justify-between gap-2">
-                                  <div className="flex items-center gap-2 min-w-0">
-                                    {isVerified ? (
-                                      <span className="h-5 w-5 rounded bg-emerald-100 text-emerald-700 flex items-center justify-center text-[10px] font-black shrink-0">
-                                        ✓
-                                      </span>
-                                    ) : hasDoc ? (
-                                      <span className="h-5 w-5 rounded bg-blue-100 text-blue-700 flex items-center justify-center text-[10px] font-black shrink-0">
-                                        📄
-                                      </span>
-                                    ) : (
-                                      <span className="h-5 w-5 rounded bg-slate-200 text-slate-500 flex items-center justify-center text-[10px] font-black shrink-0">
-                                        -
-                                      </span>
-                                    )}
-                                    <span className="font-semibold text-slate-800 truncate">
-                                      {doc.label}
-                                    </span>
-                                  </div>
-                                  <span
-                                    className={`text-[9px] font-extrabold px-2 py-0.5 rounded-md font-mono shrink-0 ${
-                                      isVerified
-                                        ? "text-emerald-700 bg-emerald-100"
-                                        : hasDoc
-                                        ? "text-blue-700 bg-blue-100"
-                                        : "text-slate-500 bg-slate-200"
-                                    }`}
-                                  >
-                                    {isVerified ? "VERIFIED" : hasDoc ? "TERUNGGAH" : "BELUM ADA"}
-                                  </span>
-                                </div>
-
-                                <div className="flex items-center justify-between gap-1.5 pt-1 border-t border-slate-200/60 flex-wrap">
-                                  <div className="flex items-center gap-1.5">
-                                    {hasDoc ? (
-                                      <button
-                                        type="button"
-                                        onClick={() => setViewingAttendancePhoto(docUrl)}
-                                        className="text-[10px] font-bold bg-white text-indigo-600 hover:text-indigo-800 px-2.5 py-1 rounded-lg border border-slate-200 hover:bg-slate-50 transition flex items-center gap-1 cursor-pointer shadow-3xs"
-                                      >
-                                        <span>👁️</span> Lihat
-                                      </button>
-                                    ) : null}
-
-                                    <button
-                                      type="button"
-                                      disabled={isReadOnly}
-                                      onClick={async () => {
-                                        if (isReadOnly) return;
-                                        const currentVerified = matchedReg.verifiedDocs || [];
-                                        const newVerified = currentVerified.includes(doc.val)
-                                          ? currentVerified.filter(v => v !== doc.val)
-                                          : [...currentVerified, doc.val];
-                                        
-                                        // Update active students
-                                        await onUpdateState("activeStudents", "update", {
-                                          id: student.id,
-                                          verifiedDocs: newVerified,
-                                        });
-
-                                        // Also update registered students if exists
-                                        if (matchedRS) {
-                                          await onUpdateState("registeredStudents", "update", {
-                                            id: matchedRS.id,
-                                            verifiedDocs: newVerified,
-                                          });
-                                        }
-                                      }}
-                                      className={`text-[10px] font-bold px-2.5 py-1 rounded-lg transition flex items-center gap-1 cursor-pointer shadow-3xs ${
-                                        isVerified
-                                          ? "bg-rose-50 text-rose-600 hover:bg-rose-100 border border-rose-200"
-                                          : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200"
-                                      }`}
-                                    >
-                                      {isVerified ? "Batal Verif" : "Verifikasi"}
-                                    </button>
-                                  </div>
-
-                                  <label className="text-[10px] font-bold bg-white hover:bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-lg border border-indigo-200 transition cursor-pointer flex items-center gap-1 shadow-3xs">
-                                    <span>📤 {hasDoc ? "Ganti" : "Unggah"}</span>
-                                    <input
-                                      type="file"
-                                      className="hidden"
-                                      onChange={async (e) => {
-                                        const file = e.target.files?.[0];
-                                        if (!file) return;
-                                        try {
-                                          const downloadUrl = await uploadFileToFirebase(file, "registrations");
-                                          const docPayload = `${file.name}|${downloadUrl}`;
-                                          
-                                          // Update active students
-                                          await onUpdateState("activeStudents", "update", {
-                                            id: student.id,
-                                            [doc.val]: docPayload,
-                                          });
-
-                                          // Also update registered students if exists
-                                          if (matchedRS) {
-                                            await onUpdateState("registeredStudents", "update", {
-                                              id: matchedRS.id,
-                                              [doc.val]: docPayload,
-                                            });
-                                          }
-                                        } catch (err: any) {
-                                          alert("Gagal mengunggah berkas: " + (err.message || err));
-                                        }
-                                      }}
-                                    />
-                                  </label>
-                                </div>
-                              </div>
-                            );
-                          })}
+                          {requiredDocs.map(renderDocCard)}
+                        </div>
+                        <div className="flex items-center justify-between border-b pb-2 pt-3">
+                          <h4 className="font-extrabold text-[11px] text-slate-400 uppercase tracking-wider">
+                            Sertifikat &amp; Dokumen Penempatan
+                          </h4>
+                          <span className="text-[10px] font-bold px-2.5 py-0.5 rounded-full text-slate-500 bg-slate-100">
+                            {extraDocs.filter(d => (matchedReg.verifiedDocs || []).includes(d.val)).length}/{extraDocs.length} Terverifikasi
+                          </span>
+                        </div>
+                        <div className="grid gap-3 sm:grid-cols-2">
+                          {extraDocs.map(renderDocCard)}
                         </div>
                         <p className="text-[10px] text-slate-450 leading-relaxed italic pt-1">
                           Klik tombol Verifikasi atau Unggah untuk mengelola dan memverifikasi dokumen siswa. Semua data dan berkas tersimpan aman di Firebase Firestore & Firebase Storage LPK SCI.
@@ -2678,17 +2699,18 @@ export default function VvipView({
                       Status Siswa
                     </label>
                     <select
-                      value={vvipRegData.status || ""}
+                      value={vvipRegData.studentStatus || ""}
                       onChange={(e) =>
                         setVvipRegData({
                           ...vvipRegData,
-                          status: e.target.value,
+                          studentStatus: e.target.value,
                         })
                       }
                       className="w-full text-sm font-semibold rounded-xl border border-slate-200 px-3 py-2 outline-none focus:border-indigo-500 transition bg-slate-50 cursor-pointer text-slate-900"
                     >
+                      <option value="">-- Tidak diubah --</option>
                       <option value="Belajar">🇮🇩 BELAJAR</option>
-                      <option value="On Progres Job">💼 ON PROGRES JOB</option>
+                      <option value="On Proges Job">💼 ON PROGRES JOB</option>
                       <option value="On Progres JFT/JLPT/SSW">📋 ON PROGRES JFT/JLPT/SSW</option>
                       <option value="Diklat SO">📘 DIKLAT SO</option>
                       <option value="Lulus">🎓 LULUS</option>

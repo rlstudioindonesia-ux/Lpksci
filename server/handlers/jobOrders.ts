@@ -183,6 +183,12 @@ export function handleJobOrdersState(req: Request, res: Response, dataType: stri
         return res.status(404).json({ error: "Job order not found" });
       }
 
+      // Applicant actions need a real student id (clients used to fall back to
+      // "SIS-001", filing an unlinked account's application under another student).
+      if (["express_interest", "cancel_interest", "approve_interest", "reject_interest", "submit_applicant_documents", "recommend"].includes(action) && !String(payload?.studentId || "").trim()) {
+        return res.status(400).json({ error: "Data siswa tidak ditemukan untuk akun ini. Hubungi admin untuk menautkan akun." });
+      }
+
       if (action === "express_interest") {
         const { jobOrderId, studentId } = payload;
         const jobIndex = state.jobOrders.findIndex(j => j.id === jobOrderId);

@@ -4,6 +4,7 @@ import { hashPassword, isHashedPassword } from "../auth-utils.ts";
 import { invalidateStateCache } from "../stateCache.ts";
 import { EXTRA_STUDENT_DOCUMENT_FIELDS } from "../../src/lib/studentDocuments.ts";
 import { findRecordIndex } from "../../src/lib/recordMatching.ts";
+import { normalizeGender } from "../../src/lib/gender.ts";
 import { todayJakartaISO } from "../../src/lib/dateUtils.ts";
 import { nextSequentialId, collectUsedStudentIds } from "../../src/lib/idGenerator.ts";
 import { uniqueIdSuffix } from "../../src/lib/idGenerator.ts";
@@ -289,7 +290,7 @@ export async function handleRegistrationState(req: Request, res: Response, dataT
             if (sent.email) act.email = sent.email;
             if (sent.district) act.district = sent.district;
             if (sent.birthDate) act.birthDate = sent.birthDate;
-            if (sent.gender) act.gender = sent.gender;
+            if (sent.gender) act.gender = normalizeGender(sent.gender) || sent.gender;
             if (sent.education) act.education = sent.education;
             if (sent.school) act.school = sent.school;
             if (sent.graduationYear) act.graduationYear = sent.graduationYear;

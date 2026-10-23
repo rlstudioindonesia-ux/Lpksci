@@ -23,7 +23,7 @@ export default function JobsView({ currentUser, systemState, onUpdateState }: Jo
   // applied to AdminView.tsx's recommendableStudents filter (an allow-list here
   // used to omit "Di Jepang" too, since this is a separate duplicate dropdown).
   const graduatedStudents = systemState.activeStudents?.filter(st => st.status !== "Belajar" && st.status !== "Dikeluarkan") || [];
-  const stId = currentUser?.studentId || systemState.activeStudents?.find(s => s.name === currentUser?.name)?.id || "SIS-001";
+  const stId = currentUser?.studentId || systemState.activeStudents?.find(s => s.name === currentUser?.name)?.id || "";
 
   const visibleJobs = systemState.jobOrders?.filter((job: JobOrder) => {
     const isInterested = job.interestedStudents?.includes(stId);

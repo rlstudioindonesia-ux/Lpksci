@@ -19,6 +19,7 @@ import { uploadFileToFirebase } from "../lib/storageHelper";
 import { calculateAge } from "../lib/dateUtils";
 import { ActiveStudent } from "../types";
 import { shouldReloadCvForm } from "../lib/cvFormSync";
+import { normalizeGender } from "../lib/gender";
 
 interface StudentCvViewProps {
   student: ActiveStudent;
@@ -86,7 +87,7 @@ export default function StudentCvView({
       hasUnsavedChangesRef.current = false;
       setFormData({
         name: student.name || "",
-        gender: student.gender || "Laki-laki",
+        gender: normalizeGender(student.gender) || undefined,
         birthDate: student.birthDate || "",
         age: student.age || undefined,
         birthPlace: student.birthPlace || "",
@@ -438,10 +439,11 @@ export default function StudentCvView({
                   <div>
                     <label className="block text-[10px] font-black text-slate-500 uppercase mb-1">Jenis Kelamin</label>
                     <select
-                      value={formData.gender || "Laki-laki"}
+                      value={normalizeGender(formData.gender)}
                       onChange={(e) => handleFieldChange("gender", e.target.value)}
                       className="w-full text-xs p-3 border border-slate-200 rounded-xl outline-none focus:border-indigo-500"
                     >
+                      <option value="">Pilih / 選択</option>
                       <option value="Laki-laki">Laki-laki / 男</option>
                       <option value="Perempuan">Perempuan / 女</option>
                     </select>
@@ -1394,11 +1396,11 @@ export default function StudentCvView({
                       <td className="border border-black p-2" colSpan={2}>
                         <div className="flex gap-6">
                           <label className="flex items-center gap-1.5 cursor-pointer">
-                            <input type="checkbox" checked={formData.gender === "Laki-laki"} readOnly className="h-3.5 w-3.5 accent-black pointer-events-none" />
+                            <input type="checkbox" checked={normalizeGender(formData.gender) === "Laki-laki"} readOnly className="h-3.5 w-3.5 accent-black pointer-events-none" />
                             <span>男 Male</span>
                           </label>
                           <label className="flex items-center gap-1.5 cursor-pointer">
-                            <input type="checkbox" checked={formData.gender === "Perempuan"} readOnly className="h-3.5 w-3.5 accent-black pointer-events-none" />
+                            <input type="checkbox" checked={normalizeGender(formData.gender) === "Perempuan"} readOnly className="h-3.5 w-3.5 accent-black pointer-events-none" />
                             <span>女 Female</span>
                           </label>
                         </div>
