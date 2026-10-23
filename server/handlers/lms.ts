@@ -2,6 +2,8 @@ import type { Request, Response } from "express";
 import { syncEntityToFirestore, deleteEntityFromFirestore, syncEntityToFirestoreAsync, deleteEntityFromFirestoreAsync, uploadBufferToFirebaseStorage, touchSyncMeta } from "../../src/db/firebase-adapter.ts";
 import { invalidateStateCache } from "../stateCache.ts";
 import { isSameSubject, getCanonicalSubjectSlug } from "../../src/lib/subjectHelper.ts";
+import { isQuizInBatchScope } from "../../src/lib/quizBatchScope.ts";
+import { mergeQuizRetake } from "../../src/lib/quizRetake.ts";
 import { todayJakartaISO } from "../../src/lib/dateUtils.ts";
 import { uniqueIdSuffix } from "../../src/lib/idGenerator.ts";
 
@@ -106,21 +108,10 @@ export async function handleLmsState(req: Request, res: Response, dataType: stri
         const index = state.lmsLessons.findIndex(l => l.id === payload.id);
         if (index !== -1) {
           const processEditLesson = async () => {
-            const oldStartTime = state.lmsLessons[index].quizStartTime || "";
-            const oldEndTime = state.lmsLessons[index].quizEndTime || "";
-            const newStartTime = payload.quizStartTime !== undefined ? payload.quizStartTime : oldStartTime;
-            const newEndTime = payload.quizEndTime !== undefined ? payload.quizEndTime : oldEndTime;
-
-            if (oldStartTime !== newStartTime || oldEndTime !== newEndTime) {
-              // Times changed! Clear existing assessments for this lesson so they can redo
-              if (state.chapterAssessments) {
-                const toDelete = state.chapterAssessments.filter(c => c.lessonId === payload.id);
-                for (const rec of toDelete) {
-                  deleteEntityFromFirestore("chapterAssessments", rec.id);
-                }
-                state.chapterAssessments = state.chapterAssessments.filter(c => c.lessonId !== payload.id);
-              }
-            }
+            // 23-10-2026: changing the quiz schedule used to DELETE every student's
+            // grade for this lesson ("so they can redo"), even when only the
+            // deadline was extended. Grades are never deleted here any more (owner's
+            // request); a retake overwrites the record and keeps the best score.
 
             let finalSlidesUrl = payload.slidesUrl !== undefined ? payload.slidesUrl : state.lmsLessons[index].slidesUrl;
             if (finalSlidesUrl && finalSlidesUrl.startsWith("data:")) {
@@ -251,19 +242,10 @@ export async function handleLmsState(req: Request, res: Response, dataType: stri
           const lessonId = (payload.lessonId ? String(payload.lessonId).trim() : "");
           const rawQuizzes = Array.isArray(payload.quizzes) ? payload.quizzes : [];
 
-          // 1. Identify which quizzes in current state belong to this chapter & subject (and subTitle/lessonId if specified)
-          const oldQuizzesForChapter = state.lmsQuizzes.filter((q: any) => {
-            const ch = Number(q.chapterNumber !== undefined ? q.chapterNumber : q.chapterId);
-            const subj = isSameSubject(q.subject, subject);
-            if (ch !== chapterNumber || !subj) return false;
-            if (subTitle) {
-              return (q.subTitle || "").trim().toLowerCase() === subTitle.toLowerCase();
-            }
-            if (lessonId) {
-              return (q.lessonId || "").trim() === lessonId;
-            }
-            return true;
-          });
+          // 1. Existing questions this batch replaces: same chapter, subject, class and
+          //    Sub-Judul/Materi only (see src/lib/quizBatchScope.ts).
+          const batchScope = { chapterNumber, subject, subTitle, lessonId, targetClass, incomingQuizzes: rawQuizzes };
+          const oldQuizzesForChapter = state.lmsQuizzes.filter((q: any) => isQuizInBatchScope(q, batchScope));
 
           // 2. Process all incoming quizzes in parallel for media uploads (if any)
           const seenQuizIds = new Set<string>();
@@ -321,20 +303,9 @@ export async function handleLmsState(req: Request, res: Response, dataType: stri
             await Promise.all(toDelete.map((oldQ: any) => deleteEntityFromFirestoreAsync("lmsQuizzes", oldQ.id)));
           }
 
-          // 4. Update in-memory state: preserve quizzes from other sub-titles in the same chapter
+          // 4. Update in-memory state: keep everything outside this batch's scope
           state.lmsQuizzes = [
-            ...state.lmsQuizzes.filter((q: any) => {
-              const ch = Number(q.chapterNumber !== undefined ? q.chapterNumber : q.chapterId);
-              const subj = isSameSubject(q.subject, subject);
-              if (ch !== chapterNumber || !subj) return true;
-              if (subTitle) {
-                return (q.subTitle || "").trim().toLowerCase() !== subTitle.toLowerCase();
-              }
-              if (lessonId) {
-                return (q.lessonId || "").trim() !== lessonId;
-              }
-              return false;
-            }),
+            ...state.lmsQuizzes.filter((q: any) => !isQuizInBatchScope(q, batchScope) && !newQuizIdSet.has(q.id)),
             ...processedQuizzes
           ];
 
@@ -635,6 +606,10 @@ export async function handleLmsState(req: Request, res: Response, dataType: stri
             submittedAt: payload.submittedAt || (existingRecord ? existingRecord.submittedAt : undefined)
           };
 
+          // Retake: same record is overwritten, but the best CBT score is kept
+          // (src/lib/quizRetake.ts).
+          const savedRecord = mergeQuizRetake(existingRecord, record);
+
           // Remove any duplicate records in memory for this student + chapter + subject
           const oldDuplicateIds: string[] = [];
           if (existingRecord && existingRecord.id && existingRecord.id !== targetId) {
@@ -656,9 +631,9 @@ export async function handleLmsState(req: Request, res: Response, dataType: stri
           index = state.chapterAssessments.findIndex((c: any) => c.id === targetId);
 
           if (index !== -1) {
-            state.chapterAssessments[index] = record;
+            state.chapterAssessments[index] = savedRecord;
           } else {
-            state.chapterAssessments.push(record);
+            state.chapterAssessments.push(savedRecord);
           }
 
           // Delete duplicates from Firestore asynchronously
@@ -668,14 +643,14 @@ export async function handleLmsState(req: Request, res: Response, dataType: stri
 
           // Write to Firestore and await confirmation to guarantee persistence
           try {
-            await syncEntityToFirestoreAsync("chapterAssessments", record.id, record);
+            await syncEntityToFirestoreAsync("chapterAssessments", savedRecord.id, savedRecord);
           } catch (syncErr) {
             console.warn("syncEntityToFirestoreAsync fallback for chapterAssessments:", syncErr);
-            syncEntityToFirestore("chapterAssessments", record.id, record);
+            syncEntityToFirestore("chapterAssessments", savedRecord.id, savedRecord);
           }
-          touchSyncMeta({ source: "api", dataType: "chapterAssessments", id: record.id, action: "upsert" }).catch(() => {});
+          touchSyncMeta({ source: "api", dataType: "chapterAssessments", id: savedRecord.id, action: "upsert" }).catch(() => {});
           if (typeof invalidateStateCache === "function") invalidateStateCache();
-          res.json({ success: true, item: record });
+          res.json({ success: true, item: savedRecord });
           return true;
         };
 
