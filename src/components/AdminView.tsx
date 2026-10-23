@@ -1,4 +1,5 @@
 import { normalizeGender } from "../lib/gender";
+import { findRecordIndex } from "../lib/recordMatching";
 import { uniqueIdSuffix } from "../lib/idGenerator";
 import { planLedgerStudentSync, finalLedgerCode, LEDGER_CATEGORY_CODES } from "../lib/ledgerEdit";
 import { todayLocalISO } from "../lib/dateUtils";
@@ -1531,7 +1532,9 @@ export default function AdminView({
       
       const cleanPayloadName = (payload.name || "").trim().toLowerCase();
       // Update registered student record if it exists
-      const regMatch = systemState.registeredStudents?.find(rs => rs.id === payload.id || (cleanPayloadName && rs.name && String(rs.name).trim().toLowerCase() === cleanPayloadName));
+      // id -> email -> unique name: never the first of several same-named students (23-10-2026).
+      const regMatchIdx = findRecordIndex(systemState.registeredStudents, { id: payload.id, email: payload.email, name: cleanPayloadName });
+      const regMatch = regMatchIdx !== -1 ? systemState.registeredStudents[regMatchIdx] : undefined;
       if (regMatch) {
         const regSuccess = await onUpdateState(
           "registeredStudents",
@@ -1542,9 +1545,10 @@ export default function AdminView({
       }
 
       // Update active student if it exists (or if no registered match)
-      const activeInfo = systemState.activeStudents?.find(
-        (s) => s.id === targetStudentId || s.id === payload.id || (cleanPayloadName && s.name && String(s.name).trim().toLowerCase() === cleanPayloadName)
-      );
+      const activeIdx = findRecordIndex(systemState.activeStudents, { id: targetStudentId || payload.id, email: payload.email, name: cleanPayloadName });
+      const activeInfo = activeIdx !== -1
+        ? systemState.activeStudents[activeIdx]
+        : systemState.activeStudents?.find((s) => !!payload.id && s.id === payload.id);
 
       if (activeInfo) {
         const activeSuccess = await onUpdateState("activeStudents", "update_status", {

@@ -183,10 +183,11 @@ export function handleUsersState(req: Request, res: Response, dataType: string, 
             // Synchronize profile picture, name, and class down to ActiveStudents and registeredStudents if they exist
             const currentUserObj = state.users[index];
             if (["Siswa", "Alumni"].includes(currentUserObj.role)) {
-              const regIndex = state.registeredStudents.findIndex(rs =>
-                (currentUserObj.email && (rs.email || "").trim().toLowerCase() === (currentUserObj.email || "").trim().toLowerCase()) ||
-                (rs.name || "").trim().toLowerCase() === (currentUserObj.name || "").trim().toLowerCase()
-              );
+              // 23-10-2026: linked id -> email -> unique (previous) name. The old
+              // "email OR name, first match" copied one student's photo, name,
+              // class and birth date onto another student with the same name.
+              const lookup = { id: currentUserObj.studentId, email: currentUserObj.email, name: oldData.name || currentUserObj.name };
+              const regIndex = findRecordIndex(state.registeredStudents, lookup);
               if (regIndex !== -1) {
                 let updatedReg = false;
                 if (currentUserObj.profilePicture && state.registeredStudents[regIndex].docFoto !== currentUserObj.profilePicture) {
@@ -202,11 +203,10 @@ export function handleUsersState(req: Request, res: Response, dataType: string, 
                 }
               }
 
-              const actIndex = state.activeStudents.findIndex(s => 
-                (currentUserObj.studentId && s.id === currentUserObj.studentId) || 
-                (regIndex !== -1 && s.id === state.registeredStudents[regIndex].id) ||
-                (currentUserObj.name && (s.name || "").trim().toLowerCase() === (currentUserObj.name || "").trim().toLowerCase())
-              );
+              let actIndex = findRecordIndex(state.activeStudents, lookup);
+              if (actIndex === -1 && regIndex !== -1) {
+                actIndex = state.activeStudents.findIndex((st: any) => st.id === state.registeredStudents[regIndex].id);
+              }
               if (actIndex !== -1) {
                 let updatedAct = false;
                 if (currentUserObj.profilePicture && state.activeStudents[actIndex].profilePicture !== currentUserObj.profilePicture) {

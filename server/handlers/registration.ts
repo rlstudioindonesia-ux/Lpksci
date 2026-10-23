@@ -3,7 +3,7 @@ import { syncEntityToFirestore, deleteEntityFromFirestore, uploadBufferToFirebas
 import { hashPassword, isHashedPassword } from "../auth-utils.ts";
 import { invalidateStateCache } from "../stateCache.ts";
 import { EXTRA_STUDENT_DOCUMENT_FIELDS } from "../../src/lib/studentDocuments.ts";
-import { findRecordIndex } from "../../src/lib/recordMatching.ts";
+import { findRecordIndex, findStudentUserIndex } from "../../src/lib/recordMatching.ts";
 import { findRegistrationUpdateTarget, isConvertedRegistration, visibleRegistrations } from "../../src/lib/registrationUpdate.ts";
 import { movePaymentsToStudent } from "./finance.ts";
 import { paymentMatchesStudent } from "../../src/lib/paymentOwner.ts";
@@ -341,14 +341,9 @@ export async function handleRegistrationState(req: Request, res: Response, dataT
           }
 
           // Sync to users
-          const userIndex = state.users.findIndex(u => 
-            !["Pengajar", "VVIP", "Admin", "Admin Super", "Admin Biasa"].includes(u.role) && (
-              (u.studentId === id) || 
-              (student.email && u.email && u.email.trim().toLowerCase() === student.email.trim().toLowerCase()) ||
-              (student.email && u.username && u.username.trim().toLowerCase() === student.email.trim().toLowerCase()) ||
-              (!student.email && u.name && student.name && u.name.trim().toLowerCase() === student.name.trim().toLowerCase())
-            )
-          );
+          // Linked id -> email/username -> unique unlinked name (never the first of
+          // several same-named accounts).
+          const userIndex = findStudentUserIndex(state.users, { id: student.id || id, email: student.email, name: student.name });
           if (userIndex !== -1) {
             if (student.name) state.users[userIndex].name = student.name;
             if (student.email) state.users[userIndex].email = student.email;
