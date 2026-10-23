@@ -45,6 +45,8 @@ export function getStudentStatusGroup(status: string | null | undefined): Studen
   const s = (status || "").trim();
   if (s === "Lulus") return "On Progres JFT/JLPT/SSW";
   if (s === "Berhenti") return "Dikeluarkan";
+  // Mis-spelt value the VVIP edit form used to save (canonical: "On Proges Job").
+  if (s === "On Progres Job") return "On Proges Job";
   if ((STUDENT_STATUS_GROUP_IDS as string[]).includes(s)) return s as StudentStatusGroupId;
   return "Belajar";
 }

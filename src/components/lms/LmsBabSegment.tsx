@@ -400,7 +400,7 @@ export default function LmsBabSegment({ activeStudentClass, activeStudents, allC
     
                 {/* Overall Progress Tracker */}
                 {(() => {
-                  const studentIdToView = selectedStudentId || (currentUser?.studentId || "SIS-001");
+                  const studentIdToView = selectedStudentId || (currentUser?.studentId || "");
                   const targetStudent = activeStudents.find(s => s.id === studentIdToView || s.name === currentUser?.name);
                   if (!targetStudent) return null;
                   
@@ -458,7 +458,7 @@ export default function LmsBabSegment({ activeStudentClass, activeStudents, allC
                   {/* Left sidebar: grid of Bab */}
                   <div className={`space-y-3 ${isSidebarCollapsed ? 'hidden' : 'w-full'}`}>
                     {(() => {
-                      const studentIdToView = selectedStudentId || (currentUser?.studentId || "SIS-001");
+                      const studentIdToView = selectedStudentId || (currentUser?.studentId || "");
                       const targetStudent = activeStudents.find(s => s.id === studentIdToView || s.name === currentUser?.name);
                       const isFukushu = targetStudent ? ((targetStudent.class || "").toUpperCase().includes("FUKUSHU") || (targetStudent.class || "").toUpperCase().includes("FUKUSU")) : false;
                       const studentClass = activeStudentClass || targetStudent?.class || "";
@@ -743,8 +743,8 @@ export default function LmsBabSegment({ activeStudentClass, activeStudents, allC
                   {/* Right panel: Details and Action form */}
                   <div className="w-full">
                     {(() => {
-                      const studentIdToView = selectedStudentId || (currentUser?.studentId || "SIS-001");
-                      const targetStudent = filteredActiveStudents.find(s => s.id === studentIdToView) || filteredActiveStudents[0] || ({ id: "SIS-001", name: "Siswa LPK", class: "" } as any);
+                      const studentIdToView = selectedStudentId || (currentUser?.studentId || "");
+                      const targetStudent = filteredActiveStudents.find(s => s.id === studentIdToView) || filteredActiveStudents[0] || ({ id: "", name: "Siswa LPK", class: "" } as any);
                       const studentClass = activeStudentClass || targetStudent?.class || "";
                       const activeChaptersList = getClassChaptersList(studentClass, assessmentSubject, true);
                       const chapter = activeChaptersList.find((b: any) => Number(b.number) === Number(selectedBabNumber)) || activeChaptersList[0] || {
@@ -1068,8 +1068,8 @@ export default function LmsBabSegment({ activeStudentClass, activeStudents, allC
     
                             {(() => {
                               const lessons = lmsLessons || systemState?.lmsLessons || [];
-                              const studentIdToView = selectedStudentId || (currentUser?.studentId || "SIS-001");
-                              const targetStudent = filteredActiveStudents.find(s => s.id === studentIdToView) || filteredActiveStudents[0] || ({ id: "SIS-001", name: "Siswa LPK", class: "" } as any);
+                              const studentIdToView = selectedStudentId || (currentUser?.studentId || "");
+                              const targetStudent = filteredActiveStudents.find(s => s.id === studentIdToView) || filteredActiveStudents[0] || ({ id: "", name: "Siswa LPK", class: "" } as any);
                               const studentClass = activeStudentClass || targetStudent?.class || "";
                               const isStaffViewer = ["Admin", "Admin Super", "Admin Biasa", "Pengajar", "VVIP"].includes(currentUser?.role || "");
                               const targetViewerClass = isStaffViewer && selectedClassFilter !== "Semua" && selectedClassFilter !== "Semua Kelas" 
@@ -1659,7 +1659,7 @@ export default function LmsBabSegment({ activeStudentClass, activeStudents, allC
                                                     {currentUser?.role === "Siswa" ? (
                                                       // SISWA INTERFACE
                                                       (() => {
-                                                        const studentId = currentUser?.studentId || currentUser?.username || "SIS-001";
+                                                        const studentId = currentUser?.studentId || currentUser?.username || "";
                                                         const assessment = (systemState?.chapterAssessments || []).find(
                                                           (c) => c.lessonId === lesson.id && c.studentId === studentId
                                                         );

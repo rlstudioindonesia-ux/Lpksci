@@ -11,6 +11,10 @@ describe("getStudentStatusGroup", () => {
     expect(getStudentStatusGroup("Lulus")).toBe("On Progres JFT/JLPT/SSW");
   });
 
+  it("counts the mis-spelt 'On Progres Job' saved by the old VVIP form as On Proges Job", () => {
+    expect(getStudentStatusGroup("On Progres Job")).toBe("On Proges Job");
+  });
+
   it("does not count Dikeluarkan as Belajar", () => {
     expect(getStudentStatusGroup("Dikeluarkan")).toBe("Dikeluarkan");
     expect(getStudentStatusGroup("Berhenti")).toBe("Dikeluarkan");

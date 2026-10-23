@@ -1,3 +1,5 @@
+import { findRecordIndex } from "../lib/recordMatching";
+import { normalizeGender } from "../lib/gender";
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -1031,7 +1033,7 @@ export default function AccountSettingsView({
                           JENIS KELAMIN
                         </label>
                         <select
-                          value={regData.gender || ""}
+                          value={normalizeGender(regData.gender)}
                           onChange={(e) =>
                             setRegData({ ...regData, gender: e.target.value })
                           }
@@ -2206,9 +2208,10 @@ export default function AccountSettingsView({
           </div>
         ) : activeTab === "cv" && (currentUser.role === "Siswa" || currentUser.role === "Alumni") ? (
           (() => {
-            const activeStudent = systemState.activeStudents?.find(
-              (s) => s.id === currentUser.studentId || s.name === currentUser.name
-            );
+            // Linked studentId first, then email / a unique name (a plain name
+            // match could open another student's CV when names were shared).
+            const ownIdx = findRecordIndex(systemState.activeStudents, { id: currentUser.studentId, email: currentUser.email, name: currentUser.name });
+            const activeStudent = ownIdx !== -1 ? systemState.activeStudents[ownIdx] : undefined;
             if (!activeStudent) {
               return (
                 <div className="bg-white rounded-3xl border border-slate-200 p-8 text-center text-slate-500">

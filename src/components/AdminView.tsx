@@ -1,3 +1,4 @@
+import { normalizeGender } from "../lib/gender";
 import { todayLocalISO } from "../lib/dateUtils";
 /**
  * @license
@@ -1460,7 +1461,7 @@ export default function AdminView({
       phone: finalPhone,
       district: finalDistrict,
       birthDate: finalBirthDate,
-      gender: finalGender,
+      gender: normalizeGender(finalGender) || finalGender,
       education: finalEducation,
       school: finalSchool,
       graduationYear: finalGraduationYear,
@@ -1468,6 +1469,11 @@ export default function AdminView({
       program: finalProgram,
       statusPendaftaran: finalStatusPendaftaran,
       status: regMatch?.status || "Terverifikasi",
+      // Progress status of the ACTIVE student, kept apart from `status` (the
+      // registration status above). Saving used to copy "Terverifikasi"/
+      // "Disetujui" into the active student's status - not a valid progress
+      // status, so the student showed (and was counted) as "Belajar".
+      studentStatus: am?.status || "",
       date: regMatch?.date || activeMatch?.date || "-",
       batch: am?.batch || "",
       proofOfPayment: regMatch?.proofOfPayment || (activeMatch as any)?.proofOfPayment,
@@ -1553,7 +1559,7 @@ export default function AdminView({
           japaneseLevel: payload.japaneseLevel,
           statusPendaftaran: payload.statusPendaftaran,
           class: payload.program !== undefined ? payload.program : activeInfo.class,
-          status: payload.status || activeInfo.status,
+          status: (payload as any).studentStatus || activeInfo.status,
           prefecture: payload.prefecture !== undefined ? payload.prefecture : activeInfo.prefecture,
           city: payload.city !== undefined ? payload.city : activeInfo.city,
           company: payload.company !== undefined ? payload.company : activeInfo.company,
