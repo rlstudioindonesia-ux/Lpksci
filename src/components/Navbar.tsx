@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect } from "react";
+import { findStudentForUser } from "../lib/recordMatching";
 import { 
   GraduationCap, LogIn, LogOut, ShieldAlert, Award, BookOpen, FolderOpen, Globe, User,
   Anchor, Compass, Sparkles, Heart, Landmark, Settings, Calendar, MessagesSquare, CreditCard, Briefcase, TrendingUp,
@@ -78,7 +79,7 @@ export default function Navbar({
   const logoUrl = customization?.logoUrl || "/logo.png";
 
   // Role detection variables matched with mobile views
-  const me = systemState?.activeStudents?.find(s => s.id === currentUser?.studentId || s.name === currentUser?.name);
+  const me = findStudentForUser(systemState?.activeStudents, currentUser);
   const isAlumni = currentUser?.role === "Alumni" || isStudentAlumni(me);
   const isSiswa = currentUser?.role === "Siswa";
   const isPengajar = currentUser?.role === "Pengajar";

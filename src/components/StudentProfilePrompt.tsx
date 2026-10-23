@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { findStudentForUser } from "../lib/recordMatching";
 import { createPortal } from "react-dom";
 import { KeyRound, Calendar, ShieldAlert, Eye, EyeOff, UserCheck, CheckCircle2 } from "lucide-react";
 import { UserAccount, SystemState } from "../types";
@@ -20,20 +21,8 @@ export default function StudentProfilePrompt({
 }: StudentProfilePromptProps) {
   // Check student record in activeStudents / registeredStudents / user
   const studentRecord =
-    systemState?.activeStudents?.find(
-      (s) =>
-        (user.studentId && s.id === user.studentId) ||
-        (user.username && s.id === user.username) ||
-        (user.name && s.name?.toLowerCase() === user.name?.toLowerCase()) ||
-        (user.email && s.email?.toLowerCase() === user.email?.toLowerCase())
-    ) ||
-    systemState?.registeredStudents?.find(
-      (r) =>
-        (user.studentId && r.id === user.studentId) ||
-        (user.username && r.id === user.username) ||
-        (user.name && r.name?.toLowerCase() === user.name?.toLowerCase()) ||
-        (user.email && r.email?.toLowerCase() === user.email?.toLowerCase())
-    );
+    findStudentForUser<any>(systemState?.activeStudents, user) ||
+        findStudentForUser<any>(systemState?.registeredStudents, user);
 
   const existingBirthDate =
     studentRecord?.birthDate ||

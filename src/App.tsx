@@ -63,7 +63,7 @@ import {
   BroadcastNotificationItem
 } from "./lib/notifications";
 import { hasStaffOversight } from "./lib/permissions";
-import { findRecordIndex } from "./lib/recordMatching";
+import { findRecordIndex, findStudentForUser } from "./lib/recordMatching";
 import { mergeRecentLocalItems } from "./lib/recentLocalItems";
 import { diffClassList, diffShallowObject } from "./lib/classListDiff";
 import {
@@ -576,20 +576,8 @@ export default function App() {
     let isMissingBirthDate = false;
     if (isStudent) {
       const studentObj =
-        systemState?.activeStudents?.find(
-          (s) =>
-            (user.studentId && s.id === user.studentId) ||
-            (user.username && s.id === user.username) ||
-            (user.name && s.name?.toLowerCase() === user.name?.toLowerCase()) ||
-            (user.email && s.email?.toLowerCase() === user.email?.toLowerCase())
-        ) ||
-        systemState?.registeredStudents?.find(
-          (r) =>
-            (user.studentId && r.id === user.studentId) ||
-            (user.username && r.id === user.username) ||
-            (user.name && r.name?.toLowerCase() === user.name?.toLowerCase()) ||
-            (user.email && r.email?.toLowerCase() === user.email?.toLowerCase())
-        );
+        findStudentForUser<any>(systemState?.activeStudents, user) ||
+        findStudentForUser<any>(systemState?.registeredStudents, user);
 
       const existingBirthDate =
         studentObj?.birthDate ||

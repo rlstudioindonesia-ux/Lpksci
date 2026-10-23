@@ -7,7 +7,7 @@ description: Cara mencari bug di LPK SCI saat pemilik meminta "cek bug lainnya" 
 
 ## Pola bug yang terbukti sering muncul (cari ini dulu)
 1. **Salinan data usang menimpa data baru** — peramban mengirim seluruh objek (`...student`, seluruh `lmsClasses`/`customization`) atau server menulis seluruh objek dari memori instance lain. Cari: `...student`, `...activeStudent`, `syncEntityToFirestore("activeStudents"` di efek samping.
-2. **Pencocokan lewat nama** — `s.name === x.name`, `find(... id || name ...)`. Siswa bernama sama (Muhammad Rizki, Siti Aminah) tertukar.
+2. **Pencocokan lewat nama** — `s.name === x.name`, `find(... id || name ...)`. Siswa bernama sama (Muhammad Rizki, Siti Aminah) tertukar. Siswa yang login → `findStudentForUser(list, currentUser)`; akun dari siswa → `findStudentUserIndex`; record umum → `findRecordIndex`.
 3. **ID tidak unik** — `Date.now().toString().slice(-N)`, `length + 1`, potongan nama (`slice(0, 6)`), fallback `"SIS-001"`.
 4. **Tanggal UTC** — `toISOString().split("T")[0]`, `.startsWith(hari/bulan)` pada timestamp.
 5. **Rumus ganda** — hitungan/filter yang ditulis inline di beberapa layar dengan hasil berbeda (status, siswa aktif, alumni, skor).
@@ -17,10 +17,10 @@ description: Cara mencari bug di LPK SCI saat pemilik meminta "cek bug lainnya" 
 ## Area yang sudah diperiksa (Okt 2026)
 Status/jumlah siswa, sinkron antar-instance, CV, berkas & sertifikat, nilai/kuis/essay, ID, Buku Kas/pembayaran, absen/presensi & tanggal, hapus akun/siswa, pendaftaran & persetujuan, Job Order, kelas/pengaturan, inventaris, upload, ETag/resync.
 
-Afiliasi/referral & Alumni dashboard (satu rumus di `src/lib/referrals.ts`), kalender/acara (urutan aman untuk data tanpa tanggal), pajak (impor bulanan: `src/lib/taxImport.ts`), akun alumni saat server mulai (`findStudentUserIndex`).
+Afiliasi/referral & Alumni dashboard (satu rumus di `src/lib/referrals.ts`), kalender/acara (urutan aman untuk data tanpa tanggal), pajak (impor bulanan: `src/lib/taxImport.ts`), akun alumni saat server mulai (`findStudentUserIndex`), notifikasi & semua pencarian "data siswa milik akun yang login" (`findStudentForUser`).
 
 ## Belum diperiksa mendalam
-Notifikasi (`src/lib/notifications.ts`), Android/PWA, peta sebaran.
+Android/PWA, peta sebaran.
 
 ## Temuan yang belum diperbaiki (perlu keputusan pemilik)
 - Galeri/slideshow disimpan sebagai seluruh daftar dari peramban; menghapus foto terakhir galeri memunculkan lagi foto bawaan.

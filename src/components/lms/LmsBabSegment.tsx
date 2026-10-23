@@ -1,4 +1,5 @@
 import React from "react";
+import { findStudentForUser } from "../../lib/recordMatching";
 import { AlertTriangle, Award, BookOpen, Calculator, ChevronDown, ChevronUp, Download, Edit3, ExternalLink, Eye, FileText, GraduationCap, Lock, PanelLeftClose, Plus, RefreshCw, Trash2, Unlock, Upload, Volume2, X } from "lucide-react";
 import { downloadFile, uploadFileToFirebase, getEmbeddablePdfUrl } from "../../lib/storageHelper";
 import { isAlumniClassName } from "../../lib/alumniStatus";
@@ -401,7 +402,7 @@ export default function LmsBabSegment({ activeStudentClass, activeStudents, allC
                 {/* Overall Progress Tracker */}
                 {(() => {
                   const studentIdToView = selectedStudentId || (currentUser?.studentId || "");
-                  const targetStudent = activeStudents.find(s => s.id === studentIdToView || s.name === currentUser?.name);
+                  const targetStudent = (selectedStudentId ? activeStudents.find(s => s.id === selectedStudentId) : findStudentForUser(activeStudents, currentUser));
                   if (!targetStudent) return null;
                   
                   const studentClass = activeStudentClass || targetStudent.class || "";
@@ -459,7 +460,7 @@ export default function LmsBabSegment({ activeStudentClass, activeStudents, allC
                   <div className={`space-y-3 ${isSidebarCollapsed ? 'hidden' : 'w-full'}`}>
                     {(() => {
                       const studentIdToView = selectedStudentId || (currentUser?.studentId || "");
-                      const targetStudent = activeStudents.find(s => s.id === studentIdToView || s.name === currentUser?.name);
+                      const targetStudent = (selectedStudentId ? activeStudents.find(s => s.id === selectedStudentId) : findStudentForUser(activeStudents, currentUser));
                       const isFukushu = targetStudent ? ((targetStudent.class || "").toUpperCase().includes("FUKUSHU") || (targetStudent.class || "").toUpperCase().includes("FUKUSU")) : false;
                       const studentClass = activeStudentClass || targetStudent?.class || "";
                       const showAll = isSiswaOrAlumni || showAllChapters;

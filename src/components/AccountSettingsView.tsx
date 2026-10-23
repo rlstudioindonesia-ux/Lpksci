@@ -1,4 +1,4 @@
-import { findRecordIndex } from "../lib/recordMatching";
+import { findRecordIndex, findStudentForUser } from "../lib/recordMatching";
 import { normalizeGender } from "../lib/gender";
 /**
  * @license
@@ -82,9 +82,7 @@ export default function AccountSettingsView({
   const [isMenuMinimized, setIsMenuMinimized] = useState(false);
 
   // Local states for updating own profile
-  const myActiveStudent = systemState.activeStudents?.find(
-    (s) => s.id === currentUser?.studentId || s.name === currentUser?.name
-  );
+  const myActiveStudent = findStudentForUser(systemState.activeStudents, currentUser);
   const [name, setName] = useState(currentUser?.name || "");
   const [email, setEmail] = useState(currentUser?.email || "");
   const [password, setPassword] = useState("••••••••");
@@ -505,12 +503,7 @@ export default function AccountSettingsView({
     if (foundReg) {
       registeredStudentInfo = foundReg;
     } else {
-      const foundActive = systemState.activeStudents?.find(
-        (as) =>
-          as.id === currentUser.studentId ||
-          (currentUser.name && as.name === currentUser.name) ||
-          as.email === currentUser.email,
-      );
+      const foundActive = findStudentForUser(systemState.activeStudents, currentUser);
       if (foundActive) {
         registeredStudentInfo = foundActive;
         isFromActiveStudents = true;
@@ -657,11 +650,7 @@ export default function AccountSettingsView({
                     >
                       {currentUser?.role === "Siswa" &&
                       isStudentAlumni(
-                        systemState.activeStudents?.find(
-                          (s) =>
-                            s.id === currentUser?.studentId ||
-                            s.name === currentUser?.name,
-                        ),
+                        findStudentForUser(systemState.activeStudents, currentUser),
                       )
                         ? "Alumni"
                         : (currentUser?.role || "Siswa")}

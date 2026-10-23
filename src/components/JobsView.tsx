@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { findStudentForUser } from "../lib/recordMatching";
 import { Briefcase, MapPin, Building2, User } from 'lucide-react';
 import { UserAccount, SystemState, JobOrder } from '../types';
 import { ConfirmButton } from './ConfirmButton';
@@ -23,7 +24,7 @@ export default function JobsView({ currentUser, systemState, onUpdateState }: Jo
   // applied to AdminView.tsx's recommendableStudents filter (an allow-list here
   // used to omit "Di Jepang" too, since this is a separate duplicate dropdown).
   const graduatedStudents = systemState.activeStudents?.filter(st => st.status !== "Belajar" && st.status !== "Dikeluarkan") || [];
-  const stId = currentUser?.studentId || systemState.activeStudents?.find(s => s.name === currentUser?.name)?.id || "";
+  const stId = currentUser?.studentId || findStudentForUser(systemState.activeStudents, currentUser)?.id || "";
 
   const visibleJobs = systemState.jobOrders?.filter((job: JobOrder) => {
     const isInterested = job.interestedStudents?.includes(stId);

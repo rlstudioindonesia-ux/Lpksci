@@ -90,3 +90,22 @@ export function findStudentUserIndex(
   }
   return -1;
 }
+
+/**
+ * The student record of the logged-in account (23-10-2026). Screens used
+ * `find(s => s.id === user.studentId || s.name === user.name)`, which returns
+ * the FIRST record matching ANY criterion: with two students of the same name,
+ * the one listed first was shown to (and edited by) the other. Now: linked
+ * studentId, then email, then the name only when it is unique.
+ */
+export function findStudentForUser<T = any>(
+  list: T[] | null | undefined,
+  user: { studentId?: string | null; email?: string | null; username?: string | null; name?: string | null } | null | undefined,
+): T | undefined {
+  if (!user || !Array.isArray(list)) return undefined;
+  const username = String(user.username || "");
+  const email = user.email || (username.includes("@") ? username : "");
+  // Old accounts may use the student id as username.
+  const idx = findRecordIndex(list as any[], { id: user.studentId || username, email, name: user.name });
+  return idx === -1 ? undefined : list[idx];
+}

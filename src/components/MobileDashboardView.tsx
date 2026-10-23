@@ -1,4 +1,5 @@
 import { InlineLoginPanel } from "./InlineLoginPanel";
+import { findStudentForUser } from "../lib/recordMatching";
 import { getSafePhotoUrl, createSvgAvatar } from "../lib/storageHelper";
 import { isStudentAlumni } from "../lib/alumniStatus";
 import { hasStaffOversight } from "../lib/permissions";
@@ -420,7 +421,7 @@ export default function MobileDashboardView({
           setSelectedCvStudentId(systemState.activeStudents[0].id);
         }
       } else {
-        const myActive = systemState.activeStudents?.find(s => s.id === currentUser.studentId || s.name === currentUser.name);
+        const myActive = findStudentForUser(systemState.activeStudents, currentUser);
         if (myActive) {
           setSelectedCvStudentId(myActive.id);
         }
@@ -1078,7 +1079,7 @@ export default function MobileDashboardView({
     },
   ];
 
-  const myActiveStudent = systemState?.activeStudents?.find(s => s.id === currentUser?.studentId || s.name === currentUser?.name);
+  const myActiveStudent = findStudentForUser(systemState?.activeStudents, currentUser);
   const isUserAlumni = currentUser?.role === "Alumni" || isStudentAlumni(myActiveStudent);
   const isUserSiswa = currentUser?.role === "Siswa";
 
