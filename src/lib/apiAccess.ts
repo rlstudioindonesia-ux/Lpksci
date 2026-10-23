@@ -168,7 +168,8 @@ export function authorizeStateUpdate(
     if (dataType === "payments" && action === "update_payment") {
       const pay = (ctx.payments || []).find((p: any) => p && p.id === payload?.id);
       const myNames = ownStudentNames(user, ctx);
-      if (!pay || !myNames.has(norm(pay.studentName))) return deny("Hanya tagihan sendiri.");
+      const ownsBill = pay && (pay.studentId ? isMine(pay.studentId) : myNames.has(norm(pay.studentName)));
+      if (!ownsBill) return deny("Hanya tagihan sendiri.");
       // A student only uploads proof; Admin verifies. (The old "Midtrans" button
       // was a simulation that let students mark their own bill as paid.)
       const safe = without(payload, ["isSigned", "signatureDate", "amount", "studentName", "category"]);

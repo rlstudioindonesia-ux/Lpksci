@@ -48,3 +48,7 @@ Entri pemasukan Buku Kas otomatis mengikuti pembayarannya (`planLedgerSyncForPay
 
 ## Ditunda (jangan dikerjakan tanpa persetujuan pemilik)
 Login/keamanan: password `123456`/`adminadmin` diterima untuk akun apa pun, server tanpa autentikasi, `/api/request-reset` mengembalikan tautan reset, `firestore.rules` terbuka. Lihat `docs/SERAH-TERIMA-CLAUDE.md`.
+
+## Tagihan (23-10-2026)
+- Tagihan milik siswa ditentukan oleh `studentId`; `studentName` hanya untuk tampilan & data lama → `paymentMatchesStudent` (`src/lib/paymentOwner.ts`). Jangan memfilter tagihan dengan `p.studentName === nama` lagi.
+- Tagihan baru selalu membawa `studentId`; nama yang dimiliki beberapa siswa tidak pernah ditebak.

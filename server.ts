@@ -20,6 +20,7 @@ import { scopeStateForViewer, isStaffViewer } from "./src/lib/stateScope.ts";
 import firebaseAppletConfig from "./firebase-applet-config.json";
 import { handleStateUpdate } from "./server/handlers/index.ts";
 import { hideConvertedRegistrations } from "./server/handlers/registration.ts";
+import { linkPaymentsToStudents } from "./server/handlers/finance.ts";
 import { invalidateStateCache, getStateVersion, getCachedStateResponse, setCachedStateResponse } from "./server/stateCache.ts";
 import { todayJakartaISO } from "./src/lib/dateUtils.ts";
 import { nextSequentialId, collectUsedStudentIds } from "./src/lib/idGenerator.ts";
@@ -406,6 +407,7 @@ export async function triggerBackgroundResync(force = false): Promise<void> {
       });
       isStateReady = true;
       hideConvertedRegistrations(state);
+      linkPaymentsToStudents(state);
       invalidateStateCache();
       console.log(`🔄 [Resync] Synchronized state with Firestore: ${state.chapterAssessments?.length || 0} assessments, ${state.attendance?.length || 0} attendance, ${state.activeStudents?.length || 0} students`);
     }
@@ -1481,7 +1483,9 @@ app.post("/api/register", async (req, res) => {
     date: todayJakartaISO(),
     status: payStatus as any,
     paymentMethod: paymentMethod || "Virtual Account",
-    proofOfPayment: proofOfPayment || ""
+    proofOfPayment: proofOfPayment || "",
+    // Linked by id, not only by name (src/lib/paymentOwner.ts).
+    studentId: isAlumni && assignedStudentId ? assignedStudentId : newReg.id,
   };
   state.payments.unshift(newPay);
   syncEntityToFirestore('payments', newPay.id, newPay);
@@ -1531,6 +1535,10 @@ app.post("/api/state/update", async (req, res) => {
 
   res.on("finish", async () => {
     invalidateStateCache();
+    // Bills follow renamed / newly linked students (src/lib/paymentOwner.ts).
+    if (["activeStudents", "registeredStudents", "users", "payments"].includes(dataType)) {
+      try { linkPaymentsToStudents(state); } catch (e) {}
+    }
     try {
       if (dataType === "customization") {
          syncCustomizationToFirestore(state.customization);
@@ -1826,6 +1834,7 @@ async function startServer() {
 
         isStateReady = true;
         hideConvertedRegistrations(state);
+        linkPaymentsToStudents(state);
         invalidateStateCache();
         console.log("🔥 Memory state loaded & synchronized with Firestore successfully!");
 

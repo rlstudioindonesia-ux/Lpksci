@@ -50,7 +50,14 @@ Skill Claude Code ada di `.claude/skills/` (`alur-perubahan`, `aturan-data-siswa
 - **Kelas/pengaturan**: App mengirim diff (`lmsClassesDiff`, kunci customization yang berubah), server menerapkan (`src/lib/classListDiff.ts`).
 - **Pencocokan siswa**: id → email → nama unik (`src/lib/recordMatching.ts`); jangan mencocokkan lewat nama saja. Data siswa milik akun yang login: `findStudentForUser`; akun milik siswa: `findStudentUserIndex`.
 - **ID baru**: `uniqueIdSuffix()` / `nextSequentialId()` (`src/lib/idGenerator.ts`); jangan `Date.now().slice(-4)` atau `length + 1`.
-- **ID tagihan bawaan**: `defaultStudentPaymentId` (nama lengkap), `src/lib/paymentIds.ts`.
+- **ID tagihan bawaan**: `defaultStudentPaymentId` (nama lengkap; nama+ID bila ada siswa bernama sama), `src/lib/paymentIds.ts`.
+- **Tagihan milik siswa = `studentId`** (`src/lib/paymentOwner.ts`, 23-10-2026). Aturannya:
+  - `paymentMatchesStudent`: cocok lewat ID bila keduanya punya, lewat nama hanya untuk tagihan lama/manual;
+  - server mengisi `studentId` saat tagihan dibuat; tagihan lama diisi otomatis saat load bila namanya unik (`linkPaymentsToStudents`);
+  - nama di tagihan mengikuti nama siswa terbaru (`syncPaymentStudentNames`);
+  - saat pendaftar disetujui, tagihan pindah REG→SIS (`movePaymentsToStudent`);
+  - halaman tagihan memisahkan siswa bernama sama ("Nama (SIS-001)", `buildBillingEntries`);
+  - siswa melihat tagihannya lewat record siswa (`findStudentForUser`), bukan nama akun.
 - **Buku Kas**: entri pemasukan otomatis mengikuti pembayaran (`src/lib/paymentLedger.ts`).
 - Jangan fallback ke `"SIS-001"` untuk akun tanpa studentId.
 - Jenis kelamin dinormalisasi lewat `normalizeGender` (`src/lib/gender.ts`).
@@ -75,7 +82,8 @@ Skill Claude Code ada di `.claude/skills/` (`alur-perubahan`, `aturan-data-siswa
 - #75 siswa bernama sama tidak lagi melihat/mengubah data siswa lain (`findStudentForUser` di ~20 layar + notifikasi)
 - #76 keamanan Tahap 1 (tiket sesi, aturan kata sandi, Google diverifikasi server, audit log-only)
 - #77 reset kata sandi lewat email yang benar-benar berlaku (tautan email + server), tutup reset lama yang membocorkan tautan
-- berikutnya: keamanan Tahap 2 di balik sakelar (hak akses per peran, data dipangkas per peran, Midtrans simulasi ditutup)
+- #78 keamanan Tahap 2 di balik sakelar (hak akses per peran, data dipangkas per peran, Midtrans simulasi ditutup)
+- berikutnya: tagihan ditautkan ke nomor siswa (siswa bernama sama terpisah, ganti nama tidak melepas tagihan, tagihan ikut saat pendaftar disetujui)
 
 ## Tindak lanjut terbuka
 

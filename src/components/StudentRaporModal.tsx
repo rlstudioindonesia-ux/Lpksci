@@ -1,4 +1,5 @@
 import { EXTRA_STUDENT_DOCUMENTS } from "../lib/studentDocuments";
+import { paymentMatchesStudent } from "../lib/paymentOwner";
 import { isAlumniTabStudent } from "../lib/studentStatusGroups";
 import React, { useState } from "react";
 import { createPortal } from "react-dom";
@@ -410,7 +411,7 @@ export default function StudentRaporModal({
                   </h5>
                   <div className="space-y-2 max-h-[200px] overflow-y-auto pr-1">
                     {(() => {
-                      const payments = (systemState.payments || []).filter((p: any) => p.studentName === student.name);
+                      const payments = (systemState.payments || []).filter((p: any) => paymentMatchesStudent(p, student));
                       if (payments.length === 0) return <p className="text-[10px] text-slate-400 italic">Tidak ada data pembayaran.</p>;
                       return payments.map((p: any) => (
                         <div key={p.id} className="flex flex-col p-2.5 bg-slate-50 rounded-xl text-[10px] gap-1">

@@ -4,6 +4,49 @@ import { todayJakartaISO } from "../../src/lib/dateUtils.ts";
 import { uniqueIdSuffix } from "../../src/lib/idGenerator.ts";
 import { findRecordIndex } from "../../src/lib/recordMatching.ts";
 import { planLedgerSyncForPayment } from "../../src/lib/paymentLedger.ts";
+import { mergeEntityFieldsToFirestore } from "../../src/db/firebase-adapter.ts";
+import {
+  resolveStudentIdByName,
+  planPaymentStudentIdBackfill,
+  planPaymentNameSync,
+  planPaymentOwnerMove,
+  type PaymentFieldChange,
+} from "../../src/lib/paymentOwner.ts";
+
+// 23-10-2026: bills carry `studentId` besides `studentName` (src/lib/paymentOwner.ts).
+function paymentOwnerId(state: any, payload: any, existing?: any): string | undefined {
+  return payload?.studentId || existing?.studentId ||
+    resolveStudentIdByName(payload?.studentName ?? existing?.studentName, state.activeStudents, state.registeredStudents);
+}
+
+export function applyPaymentChanges(state: any, plan: PaymentFieldChange[]): number {
+  let count = 0;
+  for (const { id, changes } of plan) {
+    const p = (state.payments || []).find((x: any) => x && x.id === id);
+    if (!p) continue;
+    Object.assign(p, changes);
+    mergeEntityFieldsToFirestore("payments", id, changes);
+    count++;
+  }
+  return count;
+}
+
+/** Link old bills to the only student with their name, then refresh linked names. */
+export function linkPaymentsToStudents(state: any): number {
+  const n = applyPaymentChanges(state, planPaymentStudentIdBackfill(state.payments, state.activeStudents, state.registeredStudents));
+  if (n > 0) console.log(`🔗 [Payments] Linked ${n} bill(s) to their student id.`);
+  return n + syncPaymentStudentNames(state);
+}
+
+/** Linked bills follow renamed students (run after student/account changes). */
+export function syncPaymentStudentNames(state: any): number {
+  return applyPaymentChanges(state, planPaymentNameSync(state.payments, state.activeStudents, state.registeredStudents));
+}
+
+/** A registration was approved into a new active-student id. */
+export function movePaymentsToStudent(state: any, fromId: string, toId: string): number {
+  return applyPaymentChanges(state, planPaymentOwnerMove(state.payments, fromId, toId));
+}
 
 // Keeps the auto-created Buku Kas income entry (code === payment.id) in step with
 // its payment (see src/lib/paymentLedger.ts).
@@ -94,6 +137,8 @@ export async function handleFinanceState(req: Request, res: Response, dataType: 
         amount: payload.amount !== undefined ? Number(payload.amount) || 0 : 0
       };
       const existingIdx = state.payments.findIndex(p => p.id === payId);
+      const ownerId = paymentOwnerId(state, payload, existingIdx !== -1 ? state.payments[existingIdx] : undefined);
+      if (ownerId) (newPay as any).studentId = ownerId;
       // Re-sending an existing payment without an amount must not zero it.
       if (existingIdx !== -1 && payload.amount === undefined) {
         newPay.amount = Number(state.payments[existingIdx].amount) || 0;
@@ -143,7 +188,8 @@ export async function handleFinanceState(req: Request, res: Response, dataType: 
           category: category || "Pelatihan & Asrama",
           amount: amount ? Number(amount) : 5000000,
           date: todayJakartaISO(),
-          status: "Belum Bayar" as any
+          status: "Belum Bayar" as any,
+          studentId: paymentOwnerId(state, payload),
         };
         state.payments.unshift(newPay);
         index = 0;
@@ -279,9 +325,12 @@ export async function handleFinanceState(req: Request, res: Response, dataType: 
         syncLedgerForPayment(state, { id, status: "Dihapus" });
       }
       if (studentName && category) {
+        // Same-named students: never delete bills linked to another student.
+        const ownerId = paymentOwnerId(state, payload);
         const matching = state.payments.filter(p => 
           (p.studentName || "").trim().toLowerCase() === (studentName || "").trim().toLowerCase() &&
-          (p.category || "").trim().toLowerCase() === (category || "").trim().toLowerCase()
+          (p.category || "").trim().toLowerCase() === (category || "").trim().toLowerCase() &&
+          (!p.studentId || !ownerId || p.studentId === ownerId)
         );
         for (const m of matching) {
           deleteEntityFromFirestore("payments", m.id);
@@ -296,10 +345,12 @@ export async function handleFinanceState(req: Request, res: Response, dataType: 
       const { id, studentName, amount, date, category, status } = payload;
       const targetId = id || payload.id;
       let idx = state.payments.findIndex(p => p.id === targetId);
+      const ownerId = paymentOwnerId(state, payload, idx !== -1 ? state.payments[idx] : undefined);
       if (idx === -1 && studentName && category) {
         idx = state.payments.findIndex(p => 
           (p.studentName || "").trim().toLowerCase() === (studentName || "").trim().toLowerCase() &&
-          (p.category || "").trim().toLowerCase() === (category || "").trim().toLowerCase()
+          (p.category || "").trim().toLowerCase() === (category || "").trim().toLowerCase() &&
+          (!p.studentId || !ownerId || p.studentId === ownerId)
         );
       }
 
@@ -311,6 +362,7 @@ export async function handleFinanceState(req: Request, res: Response, dataType: 
           date: date || state.payments[idx].date,
           category: category || state.payments[idx].category,
           status: status || state.payments[idx].status,
+          ...(ownerId ? { studentId: ownerId } : {}),
         };
         
         syncLedgerForPayment(state, state.payments[idx]);
@@ -326,7 +378,8 @@ export async function handleFinanceState(req: Request, res: Response, dataType: 
           date: date || todayJakartaISO(),
           status: status || "Belum Bayar",
           paymentMethod: "Manual",
-          ...payload
+          ...payload,
+          ...(ownerId ? { studentId: ownerId } : {}),
         };
         state.payments.unshift(newPay);
 

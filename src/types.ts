@@ -293,6 +293,8 @@ export interface AttendanceRecord {
 export interface PaymentRecord {
   id: string;
   studentName: string;
+  /** Owner's student id (23-10-2026); old bills may only have studentName. */
+  studentId?: string;
   category: string;
   amount: number;
   date: string;
