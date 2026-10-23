@@ -1,4 +1,5 @@
 import { InlineLoginPanel } from "./InlineLoginPanel";
+import { requestPasswordResetByEmail } from "../lib/emailPasswordReset";
 import { rememberLoginResponse } from "../lib/sessionToken";
 import { findStudentForUser } from "../lib/recordMatching";
 import { getSafePhotoUrl, createSvgAvatar } from "../lib/storageHelper";
@@ -463,55 +464,12 @@ export default function MobileDashboardView({
     e.preventDefault();
     setResetStatus("idle");
     setResetMessage("");
-
     if (!resetUsername) return;
-    const normalized = resetUsername.trim().toLowerCase();
-    const existingUser = (systemState.unfilteredUsers || systemState.users || [])?.find(
-      (u) => (u.username || "").trim().toLowerCase() === normalized ||
-              (u.email || "").trim().toLowerCase() === normalized,
-    );
-
-    if (existingUser) {
-      if (["Admin", "VVIP", "Admin Super", "Admin Biasa"].includes(existingUser.role)) {
-        setResetStatus("error");
-        setResetMessage("Password akun Admin/VVIP tidak dapat direset secara langsung. Hubungi pusat IT.");
-        return;
-      }
-      
-      if (!existingUser.email) {
-        setResetStatus("error");
-        setResetMessage("Akun ini tidak memiliki email yang terdaftar.");
-        return;
-      }
-
-      try {
-        setResetStatus("idle");
-        setResetMessage("Mengirim permintaan reset...");
-        
-        try {
-          await sendPasswordResetEmail(auth, existingUser.email);
-        } catch (err) {
-          if (err.code === 'auth/user-not-found') {
-             let expectedPassword = (existingUser.password || existingUser.username || "").trim();
-             await createUserWithEmailAndPassword(auth, existingUser.email, expectedPassword);
-             await sendPasswordResetEmail(auth, existingUser.email);
-          } else {
-             throw err;
-          }
-        }
-        
-        setResetStatus("success");
-        setResetMessage("Permintaan reset telah dikirim ke email Anda. Silakan periksa kotak masuk (atau folder spam).");
-        
-      } catch (error) {
-        console.error(error);
-        setResetStatus("error");
-        setResetMessage(`Gagal mengirim email reset: ${error.message}`);
-      }
-    } else {
-      setResetStatus("error");
-      setResetMessage("Username/Email tidak ditemukan di sistem.");
-    }
+    // 23-10-2026: reset via an emailed link verified by the server (src/lib/emailPasswordReset.ts).
+    setResetMessage("Mengirim tautan reset ke email...");
+    const result = await requestPasswordResetByEmail(resetUsername, systemState?.unfilteredUsers || systemState?.users);
+    setResetStatus(result.ok ? "success" : "error");
+    setResetMessage(result.message);
   };
 
   const triggerLogoutConfirm = () => {

@@ -59,7 +59,7 @@ app.use(express.urlencoded({ extended: true, limit: '15mb' }));
 // screens still call the server anonymously; stage 2 will reject them.
 const PUBLIC_API_PATHS = new Set([
   "/health", "/ping", "/login", "/register", "/request-reset", "/reset-password",
-  "/auth/validate", "/auth/google", "/auth/change-password", "/broadcast-notifications",
+  "/auth/validate", "/auth/google", "/auth/change-password", "/auth/reset-with-email", "/broadcast-notifications",
 ]);
 const anonymousApiCalls = new Map<string, { count: number; firstAt: string; lastAt: string }>();
 app.use("/api", (req, res, next) => {
@@ -590,82 +590,63 @@ app.post("/api/upload", async (req, res) => {
   }
 });
 
-app.post("/api/request-reset", async (req, res) => {
-  try {
-    const { username } = req.body;
-    if (!username) return res.status(400).json({ error: "Username/Email required" });
-
-    const normalized = username.trim().toLowerCase();
-    const user = state.users?.find(
-      (u) => (u.username || "").trim().toLowerCase() === normalized ||
-              (u.email || "").trim().toLowerCase() === normalized
-    );
-
-    if (!user) {
-      return res.status(404).json({ error: "Username/Email tidak ditemukan." });
-    }
-
-    if (["Admin", "VVIP", "Admin Super", "Admin Biasa"].includes(user.role)) {
-      return res.status(403).json({ error: "Akun Admin/VVIP tidak dapat direset via link ini." });
-    }
-
-    const token = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-
-    if (!state.passwordResets) state.passwordResets = [];
-    state.passwordResets.push({
-      token,
-      username: user.username,
-      expires: Date.now() + 1000 * 60 * 60 * 24 // 24 hours
-    });
-
-    // In a real app, we would send an email here.
-    // For now, we return the link to be displayed in the UI for demonstration.
-    const resetLink = `/reset-password?token=${token}`;
-
-    return res.json({ success: true, resetLink });
-  } catch (error: any) {
-    console.error("Request-reset API error:", error);
-    return res.status(500).json({ error: error.message || "Internal server error" });
-  }
+// 23-10-2026 (owner: reset by email): the old flow returned the reset link to
+// whoever asked, so anyone could take over a student account by typing its
+// username. Reset now goes through an email link verified by
+// /api/auth/reset-with-email; these two endpoints are closed.
+app.post("/api/request-reset", (req, res) => {
+  return res.status(410).json({ error: "Reset kata sandi sekarang lewat email. Gunakan menu \"Lupa Password\" dan buka tautan yang dikirim ke email Anda." });
 });
 
-app.post("/api/reset-password", async (req, res) => {
+app.post("/api/reset-password", (req, res) => {
+  return res.status(410).json({ error: "Tautan reset lama tidak berlaku lagi. Silakan minta tautan baru lewat menu \"Lupa Password\"." });
+});
+
+// New password after opening the emailed sign-in link: the Firebase ID token
+// (email verified by the link) proves ownership of the account's email.
+app.post("/api/auth/reset-with-email", async (req, res) => {
   try {
-    const { token, newPassword } = req.body;
-    if (!newPassword || String(newPassword).trim().length < 6) {
-      return res.status(400).json({ error: "Password baru minimal 6 karakter." });
+    await ensureStateReady(30000);
+  } catch (e) {}
+  try {
+    const { idToken, newPassword } = req.body || {};
+    const projectId = (firebaseAppletConfig as any)?.projectId || "";
+    const identity = await verifyFirebaseIdToken(idToken, projectId);
+    if (!identity || !identity.emailVerified) {
+      return res.status(401).json({ error: "Tautan email tidak dapat diverifikasi. Silakan minta tautan baru." });
     }
-
-    if (!state.passwordResets) state.passwordResets = [];
-    const resetIndex = state.passwordResets.findIndex((r) => r.token === token);
-
-    if (resetIndex === -1) {
-      return res.status(400).json({ error: "Token tidak valid atau sudah digunakan." });
+    const matches = (state.users || []).filter((u: any) =>
+      (u.email || "").trim().toLowerCase() === identity.email || (u.username || "").trim().toLowerCase() === identity.email
+    );
+    if (matches.length === 0) {
+      return res.status(404).json({ error: "Tidak ada akun LPK SCI dengan email ini." });
     }
-
-    const resetReq = state.passwordResets[resetIndex];
-    if (Date.now() > resetReq.expires) {
-      return res.status(400).json({ error: "Token sudah kadaluarsa." });
+    if (matches.length > 1) {
+      return res.status(409).json({ error: "Email ini dipakai beberapa akun. Silakan hubungi Admin untuk reset." });
     }
-
-    const userIndex = state.users.findIndex((u) => u.username === resetReq.username);
-    if (userIndex !== -1) {
-      state.users[userIndex].password = hashPassword(newPassword);
-
-      // Save state to firestore if needed
-      try {
-        syncEntityToFirestore("users", state.users[userIndex].username, state.users[userIndex]);
-      } catch(e) {}
-
-      // Invalidate token
-      state.passwordResets.splice(resetIndex, 1);
-      return res.json({ success: true });
+    const user = matches[0];
+    if (user.status === "Suspended") {
+      return res.status(403).json({ error: "Akun Anda disuspend. Silakan hubungi Admin." });
     }
-
-    return res.status(404).json({ error: "User tidak ditemukan." });
+    const problem = validateNewPassword(newPassword, user.username);
+    if (problem) return res.status(400).json({ error: problem });
+    user.password = hashPassword(String(newPassword));
+    user.passwordChangedAt = new Date().toISOString();
+    await syncEntityToFirestoreAsync("users", user.username, user);
+    invalidateStateCache();
+    try {
+      const logId = `LOG-PWD-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+      const nowIso = new Date().toISOString();
+      const entry = { id: logId, user: user.name || user.username, username: user.username, role: user.role, action: `Reset Kata Sandi via Email (@${user.username})`, type: "security", details: `Reset lewat tautan email ${identity.email}`, time: nowIso, timestamp: nowIso, status: "Berhasil" };
+      if (!state.logs) state.logs = [];
+      state.logs.unshift(entry);
+      if (state.logs.length > 500) state.logs.pop();
+      syncEntityToFirestore("logs", logId, entry);
+    } catch (e) {}
+    return res.json({ success: true, username: user.username });
   } catch (error: any) {
-    console.error("Reset-password API error:", error);
-    return res.status(500).json({ error: error.message || "Internal server error" });
+    console.error("Reset-with-email API error:", error);
+    return res.status(500).json({ error: "Gagal menyimpan kata sandi baru. Coba lagi." });
   }
 });
 

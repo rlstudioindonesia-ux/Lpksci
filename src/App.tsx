@@ -1390,7 +1390,9 @@ export default function App() {
   const [isResetRoute, setIsResetRoute] = useState(false);
 
   useEffect(() => {
-    if (window.location.search.includes('token=')) {
+    // Emailed reset link (Firebase email-link sign-in adds oobCode) or the old ?token= links.
+    const { pathname, search } = window.location;
+    if (pathname === '/reset-password' || search.includes('oobCode=') || search.includes('token=')) {
       setIsResetRoute(true);
     }
   }, []);
