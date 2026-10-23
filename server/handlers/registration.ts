@@ -5,6 +5,7 @@ import { invalidateStateCache } from "../stateCache.ts";
 import { EXTRA_STUDENT_DOCUMENT_FIELDS } from "../../src/lib/studentDocuments.ts";
 import { findRecordIndex } from "../../src/lib/recordMatching.ts";
 import { todayJakartaISO } from "../../src/lib/dateUtils.ts";
+import { nextSequentialId, collectUsedStudentIds } from "../../src/lib/idGenerator.ts";
 import { uniqueIdSuffix } from "../../src/lib/idGenerator.ts";
 
 async function uploadBase64IfPresent(dataStr: string | undefined, prefix: string, folder: string): Promise<string> {
@@ -83,12 +84,7 @@ export async function handleRegistrationState(req: Request, res: Response, dataT
             if (match[field]) existingActive[field] = match[field];
           }
         } else {
-          let idNum = state.activeStudents.length + 1;
-          let newId = `SIS-${idNum.toString().padStart(3, "0")}`;
-          while (state.activeStudents.some(s => s.id === newId)) {
-            idNum++;
-            newId = `SIS-${idNum.toString().padStart(3, "0")}`;
-          }
+          const newId = nextSequentialId("SIS", collectUsedStudentIds(state));
           assignedStudentId = newId;
           state.activeStudents.push({
             id: assignedStudentId,
@@ -131,7 +127,13 @@ export async function handleRegistrationState(req: Request, res: Response, dataT
 
         // Auto-provision or update a system user account
         const protectedRoles = ["Pengajar", "VVIP", "Admin", "Admin Super", "Admin Biasa"];
-        const existingUser = state.users.find(u => u.username === match.email || u.email === match.email);
+        // Only match by a real email: an empty email used to match any account
+        // whose email is also empty (e.g. auto-created alumni accounts) and
+        // overwrite that account's class/studentId.
+        const matchEmail = (match.email || "").trim().toLowerCase();
+        const existingUser = matchEmail
+          ? state.users.find(u => (u.username || "").trim().toLowerCase() === matchEmail || (u.email || "").trim().toLowerCase() === matchEmail)
+          : undefined;
         if (existingUser) {
           if (!protectedRoles.includes(existingUser.role)) {
             existingUser.assignedClass = payload.class || "";
@@ -148,7 +150,7 @@ export async function handleRegistrationState(req: Request, res: Response, dataT
           }
         } else {
           const newUserObj = {
-            username: match.email,
+            username: matchEmail || assignedStudentId.toLowerCase(),
             name: match.name,
             email: match.email,
             password: isHashedPassword(match.password) ? match.password : hashPassword(match.password || "123456"),

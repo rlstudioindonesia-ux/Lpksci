@@ -16,3 +16,37 @@ export function uniqueIdSuffix(): string {
   const rand = Math.random().toString(36).slice(2, 6).toUpperCase().padEnd(4, "0");
   return `${Date.now()}${String(sequence).padStart(4, "0")}${rand}`;
 }
+
+/**
+ * Next "<PREFIX>-NNN" id that is higher than every id already in use.
+ *
+ * SIS-/JOB- ids used to start from `list.length + 1`: after a deletion that
+ * either collided with an existing id (a new Job Order overwrote another one)
+ * or re-used a deleted student's id, so the new student inherited the old
+ * student's grades, attendance and job recommendations (all keyed by id).
+ * Callers pass every id still referenced anywhere, not just the live list.
+ */
+export function nextSequentialId(prefix: string, usedIds: Iterable<string | null | undefined>, pad = 3): string {
+  const pattern = new RegExp(`^${prefix}-(\\d+)$`, "i");
+  let max = 0;
+  for (const id of usedIds) {
+    const m = pattern.exec(String(id ?? "").trim());
+    if (m) max = Math.max(max, parseInt(m[1], 10));
+  }
+  return `${prefix}-${String(max + 1).padStart(pad, "0")}`;
+}
+
+/** Every student id still referenced in the state (records, accounts, grades, attendance, job orders). */
+export function collectUsedStudentIds(state: any): string[] {
+  const ids: string[] = [];
+  const push = (v: any) => { if (v) ids.push(String(v)); };
+  (state?.activeStudents || []).forEach((s: any) => push(s?.id));
+  (state?.users || []).forEach((u: any) => push(u?.studentId));
+  (state?.attendance || []).forEach((a: any) => push(a?.studentId));
+  (state?.chapterAssessments || []).forEach((c: any) => push(c?.studentId));
+  (state?.jobOrders || []).forEach((j: any) => {
+    [...(j?.recommendations || []), ...(j?.interestedStudents || []), ...(j?.approvedApplicants || [])].forEach(push);
+    Object.keys(j?.applicantDocuments || {}).forEach(push);
+  });
+  return ids;
+}

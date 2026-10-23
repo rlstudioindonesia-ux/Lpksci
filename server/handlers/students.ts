@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import { syncEntityToFirestore, syncEntityToFirestoreAsync, deleteEntityFromFirestore, uploadBufferToFirebaseStorage, touchSyncMeta, getEntityFromFirestore, getLastLocalWriteAt } from "../../src/db/firebase-adapter.ts";
 import { hashPassword, isHashedPassword } from "../auth-utils.ts";
 import { invalidateStateCache } from "../stateCache.ts";
+import { nextSequentialId, collectUsedStudentIds } from "../../src/lib/idGenerator.ts";
 import { findRecordIndex } from "../../src/lib/recordMatching.ts";
 import { EXTRA_STUDENT_DOCUMENT_FIELDS } from "../../src/lib/studentDocuments.ts";
 
@@ -126,12 +127,7 @@ export async function handleStudentsState(req: Request, res: Response, dataType:
       }
       if (action === "add") {
         const { name, batch, class: className, status, prefecture, city, company, latitude, longitude, sensei, graduationYear } = payload;
-        let idNum = state.activeStudents.length + 1;
-        let newId = `SIS-${idNum.toString().padStart(3, "0")}`;
-        while (state.activeStudents.some(s => s.id === newId)) {
-          idNum++;
-          newId = `SIS-${idNum.toString().padStart(3, "0")}`;
-        }
+        const newId = nextSequentialId("SIS", collectUsedStudentIds(state));
 
         const isAlumni = ["Lulus", "Di Jepang"].includes(status || "Di Jepang");
         const finalClass = isAlumni ? "" : (className || "");

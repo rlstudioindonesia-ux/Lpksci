@@ -1,7 +1,7 @@
 import type { Request, Response } from "express";
 import { syncEntityToFirestore, deleteEntityFromFirestore } from "../../src/db/firebase-adapter.ts";
 import { todayJakartaISO } from "../../src/lib/dateUtils.ts";
-import { uniqueIdSuffix } from "../../src/lib/idGenerator.ts";
+import { uniqueIdSuffix, nextSequentialId } from "../../src/lib/idGenerator.ts";
 
 // Job Order applicant pipeline
 // Extracted verbatim from the monolithic /api/state/update handler in server.ts.
@@ -25,7 +25,7 @@ export function handleJobOrdersState(req: Request, res: Response, dataType: stri
         } = payload;
         
         const newJob = {
-          id: `JOB-${(state.jobOrders.length + 1).toString().padStart(3, "0")}`,
+          id: nextSequentialId("JOB", state.jobOrders.map((j: any) => j.id)),
           noReg: noReg || `REG-JOB-${uniqueIdSuffix()}`,
           jobType: jobType || "Tokutei ginou",
           partnerName,

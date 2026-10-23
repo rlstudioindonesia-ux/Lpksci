@@ -39,7 +39,10 @@ export function handleInventoryState(req: Request, res: Response, dataType: stri
         state.inventory[idx] = {
           ...state.inventory[idx],
           itemName: payload.itemName || state.inventory[idx].itemName,
-          amount: Number(payload.amount) || state.inventory[idx].amount,
+          // 0 (stok habis) is a valid amount; only keep the old value when none was sent.
+          amount: payload.amount !== undefined && payload.amount !== "" && !isNaN(Number(payload.amount))
+            ? Number(payload.amount)
+            : state.inventory[idx].amount,
           condition: payload.condition || state.inventory[idx].condition,
           location: payload.location || state.inventory[idx].location,
         };

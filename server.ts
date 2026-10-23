@@ -13,6 +13,7 @@ import { isHashedPassword, hashPassword, verifyPassword, stripPassword } from ".
 import { handleStateUpdate } from "./server/handlers/index.ts";
 import { invalidateStateCache, getStateVersion, getCachedStateResponse, setCachedStateResponse } from "./server/stateCache.ts";
 import { todayJakartaISO } from "./src/lib/dateUtils.ts";
+import { nextSequentialId, collectUsedStudentIds } from "./src/lib/idGenerator.ts";
 import { uniqueIdSuffix } from "./src/lib/idGenerator.ts";
 
 export { invalidateStateCache };
@@ -1194,12 +1195,7 @@ app.post("/api/register", async (req, res) => {
     if (existingActive) {
       assignedStudentId = existingActive.id;
     } else {
-      let idNum = state.activeStudents.length + 1;
-      let newId = `SIS-${idNum.toString().padStart(3, "0")}`;
-      while (state.activeStudents.some(s => s.id === newId)) {
-        idNum++;
-        newId = `SIS-${idNum.toString().padStart(3, "0")}`;
-      }
+      const newId = nextSequentialId("SIS", collectUsedStudentIds(state));
       assignedStudentId = newId;
       const newActiveStudent = {
         id: assignedStudentId,
@@ -1221,7 +1217,10 @@ app.post("/api/register", async (req, res) => {
 
     // Auto-provision or update user account
     const protectedRoles = ["Pengajar", "VVIP", "Admin", "Admin Super", "Admin Biasa"];
-    const existingUser = state.users.find(u => u.username === email || u.email === email);
+    const regEmail = String(email || "").trim().toLowerCase();
+    const existingUser = regEmail
+      ? state.users.find(u => (u.username || "").trim().toLowerCase() === regEmail || (u.email || "").trim().toLowerCase() === regEmail)
+      : undefined;
     if (existingUser) {
       if (!protectedRoles.includes(existingUser.role)) {
         existingUser.assignedClass = "";

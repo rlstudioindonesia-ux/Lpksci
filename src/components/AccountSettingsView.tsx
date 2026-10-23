@@ -368,9 +368,11 @@ export default function AccountSettingsView({
       email: newEmail,
       role: newRole,
       password: newPassword.trim() || "adminadmin",
+      // Tanpa pilihan siswa, biarkan kosong: ID acak SIS-020..SIS-099 dulu
+      // menautkan akun baru ke data siswa lain yang sudah ada.
       studentId:
         newRole === "Siswa" || newRole === "Alumni"
-          ? newStudentId || `SIS-0${Math.floor(Math.random() * 80) + 20}`
+          ? newStudentId || undefined
           : undefined,
       profilePicture: newProfilePicture,
       japaneseLevel: newRole === "Pengajar" ? newJapaneseLevel : undefined,
