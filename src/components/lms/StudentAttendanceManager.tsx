@@ -1,3 +1,4 @@
+import { getStudentStatusGroup } from "../../lib/studentStatusGroups";
 import { todayLocalISO } from "../../lib/dateUtils";
 import React from "react";
 import { createPortal } from "react-dom";
@@ -116,8 +117,11 @@ export function StudentAttendanceManager({
 
   const studentsInClass = React.useMemo(() => {
     if (!selectedClass) return [];
+    // Siswa yang sudah Dikeluarkan tidak ikut diabsen: sebelumnya mereka tetap
+    // terdaftar dan otomatis bernilai "Hadir". (Alumni Di Jepang tetap ikut:
+    // kelas alumni online memang mengabsen mereka.)
     return activeStudents.filter(
-      (s: any) => (s.class || "").toLowerCase().trim() === selectedClass.toLowerCase().trim()
+      (s: any) => (s.class || "").toLowerCase().trim() === selectedClass.toLowerCase().trim() && getStudentStatusGroup(s.status) !== "Dikeluarkan"
     );
   }, [activeStudents, selectedClass]);
 

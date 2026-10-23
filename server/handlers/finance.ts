@@ -86,12 +86,18 @@ export async function handleFinanceState(req: Request, res: Response, dataType: 
         id: payId,
         studentName: payload.studentName || "",
         category: payload.category || "",
-        amount: payload.amount !== undefined ? Number(payload.amount) : 0,
         date: payload.date || todayJakartaISO(),
         status: payload.status || "Belum Bayar",
-        ...payload
+        ...payload,
+        // Spread above must not put a string amount back (string amounts turn
+        // the dashboard totals' "+" into text concatenation).
+        amount: payload.amount !== undefined ? Number(payload.amount) || 0 : 0
       };
       const existingIdx = state.payments.findIndex(p => p.id === payId);
+      // Re-sending an existing payment without an amount must not zero it.
+      if (existingIdx !== -1 && payload.amount === undefined) {
+        newPay.amount = Number(state.payments[existingIdx].amount) || 0;
+      }
       if (existingIdx !== -1) {
         state.payments[existingIdx] = { ...state.payments[existingIdx], ...newPay };
       } else {

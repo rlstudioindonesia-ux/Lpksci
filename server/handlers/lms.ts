@@ -570,15 +570,19 @@ export async function handleLmsState(req: Request, res: Response, dataType: stri
               if (lessonId && c.lessonId && c.lessonId === lessonId) {
                 return (c.studentId || "").trim().toLowerCase() === cleanStudentId.toLowerCase();
               }
-              // The id/name fallbacks are only for legacy records WITHOUT a studentId:
-              // matching by name used to pick another student's record when two
-              // students share a name, and that record was then deleted below as a
-              // "duplicate" - wiping the other student's grade for this chapter.
+              // A record whose studentId is ANOTHER known student is never "the same
+              // student": matching by name used to pick it when two students share a
+              // name, and it was then deleted below as a "duplicate" - wiping the
+              // other student's grade for this chapter. Legacy records (no/unknown
+              // studentId) keep the old id/name fallbacks.
               const recordStudentId = (c.studentId || "").trim().toLowerCase();
-              const sameStudent = recordStudentId
-                ? recordStudentId === cleanStudentId.toLowerCase()
-                : ((cleanStudentId && (c.id || "").toLowerCase().includes(cleanStudentId.toLowerCase())) ||
-                   (finalStudentName && c.studentName && c.studentName.toLowerCase() === finalStudentName.toLowerCase()));
+              const belongsToOtherStudent = !!recordStudentId &&
+                recordStudentId !== cleanStudentId.toLowerCase() &&
+                (state.activeStudents || []).some((s: any) => (s.id || "").trim().toLowerCase() === recordStudentId);
+              const sameStudent = !belongsToOtherStudent && (
+                recordStudentId === cleanStudentId.toLowerCase() ||
+                (cleanStudentId && (c.id || "").toLowerCase().includes(cleanStudentId.toLowerCase())) ||
+                (finalStudentName && c.studentName && c.studentName.toLowerCase() === finalStudentName.toLowerCase()));
               const sameChapter = Number(c.chapterNumber) === cleanChapterNum;
               const sameSubject = isSameSubject(c.subject, cleanSubject);
               return sameStudent && sameChapter && sameSubject;
