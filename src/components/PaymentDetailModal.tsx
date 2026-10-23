@@ -1,3 +1,4 @@
+import { todayLocalISO } from "../lib/dateUtils";
 import React, { useState } from "react";
 import { createPortal } from "react-dom";
 import { PaymentRecord, SystemState, UserAccount } from "../types";
@@ -155,7 +156,7 @@ export default function PaymentDetailModal({ payment, currentUser, systemState, 
     doc.setTextColor(100, 116, 139);
     doc.text("Tanggal Invoice:", pageWidth - 70, 45);
     doc.setFont("helvetica", "bold");
-    doc.text(payment.date || new Date().toISOString().split("T")[0], pageWidth - 15, 45, { align: "right" });
+    doc.text(payment.date || todayLocalISO(), pageWidth - 15, 45, { align: "right" });
     doc.setFont("helvetica", "normal");
     
     // Student Info

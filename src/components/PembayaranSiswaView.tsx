@@ -1,3 +1,4 @@
+import { todayLocalISO } from "../lib/dateUtils";
 import React, { useState } from "react";
 import { createPortal } from "react-dom";
 import { SystemState, UserAccount, PaymentRecord } from "../types";
@@ -113,7 +114,7 @@ export function getStudentPayments(
           studentName,
           category: defaultAlumniCategory.category,
           amount: defaultAlumniCategory.amount,
-          date: new Date().toISOString().split("T")[0],
+          date: todayLocalISO(),
           status: defaultAlumniCategory.defaultStatus,
           paymentMethod: defaultAlumniCategory.defaultMethod
         });
@@ -180,7 +181,7 @@ export function getStudentPayments(
           studentName,
           category: cat.category,
           amount: cat.amount,
-          date: new Date().toISOString().split("T")[0],
+          date: todayLocalISO(),
           status: cat.defaultStatus,
           paymentMethod: cat.defaultMethod || ""
         });
@@ -367,7 +368,7 @@ export default function PembayaranSiswaView({
         studentName: targetStudent,
         category: targetCategory || targetPay?.category || "Tagihan",
         amount: targetPay?.amount || 0,
-        date: targetPay?.date || new Date().toISOString().split("T")[0],
+        date: targetPay?.date || todayLocalISO(),
         status: "Dihapus",
         isDeleted: true
       });
@@ -385,7 +386,7 @@ export default function PembayaranSiswaView({
       studentName: formStudentName,
       category: formCategory,
       amount: Number(formAmount),
-      date: new Date().toISOString().split("T")[0],
+      date: todayLocalISO(),
       status: formStatus,
       paymentMethod: formMethod
     };
@@ -537,7 +538,7 @@ export default function PembayaranSiswaView({
         status: "Aktif",
         statusPendaftaran: "Siswa Aktif",
         class: "Kelas Reguler",
-        registrationDate: new Date().toISOString().split("T")[0]
+        registrationDate: todayLocalISO()
       };
 
       const newUser = {
@@ -1064,7 +1065,7 @@ export default function PembayaranSiswaView({
                               studentName: selectedStudent,
                               category: "ALL_CLEARED",
                               amount: 0,
-                              date: new Date().toISOString().split("T")[0],
+                              date: todayLocalISO(),
                               status: "Dihapus",
                               isDeleted: true,
                               isClearedAll: true

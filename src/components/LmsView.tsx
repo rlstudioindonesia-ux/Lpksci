@@ -1,3 +1,4 @@
+import { todayLocalISO } from "../lib/dateUtils";
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -1225,7 +1226,7 @@ export default function LmsView({
         grade: letterGrade,
         notes: effNotes || "",
         assessedBy: currentUser?.name || "Sensei Utama",
-        assessedDate: new Date().toISOString().split("T")[0],
+        assessedDate: todayLocalISO(),
         timestamp: Date.now()
       };
 
@@ -1509,7 +1510,7 @@ export default function LmsView({
             return {
               ...ch,
               isActive: setActiveFlag,
-              activeDate: setActiveFlag ? (ch.activeDate || new Date().toISOString().split("T")[0]) : ""
+              activeDate: setActiveFlag ? (ch.activeDate || todayLocalISO()) : ""
             };
           }
           if (setActiveFlag && ch.number <= chapterNum) {

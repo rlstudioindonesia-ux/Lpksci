@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import { syncEntityToFirestore, deleteEntityFromFirestore, uploadBufferToFirebaseStorage, mergeEntityFieldsToFirestore } from "../../src/db/firebase-adapter.ts";
+import { todayJakartaISO } from "../../src/lib/dateUtils.ts";
 import { uniqueIdSuffix } from "../../src/lib/idGenerator.ts";
 
 // Attendance, salaries, and teacher leave/report/contract records
@@ -32,7 +33,7 @@ export function handleHrState(req: Request, res: Response, dataType: string, act
           id: `ATT-${uniqueIdSuffix()}`,
           studentId: payload.studentId,
           studentName: payload.studentName,
-          date: payload.date || new Date().toISOString().split("T")[0],
+          date: payload.date || todayJakartaISO(),
           status: payload.status,
           subject: payload.subject,
           notes: payload.notes || "",
@@ -141,7 +142,7 @@ export function handleHrState(req: Request, res: Response, dataType: string, act
         role: payload.role || "Staff",
         amount: Number(payload.amount),
         monthString: payload.monthString || "Bulan Ini",
-        paymentDate: payload.paymentDate || new Date().toISOString().split("T")[0],
+        paymentDate: payload.paymentDate || todayJakartaISO(),
         status: payload.status || "Lunas",
         notes: payload.notes || ""
       };
@@ -238,7 +239,7 @@ export function handleHrState(req: Request, res: Response, dataType: string, act
           content: payload.content || "",
           link: payload.link || "",
           fileUrl: payload.fileUrl || "",
-          submittedDate: payload.submittedDate || payload.date || new Date().toISOString().split("T")[0]
+          submittedDate: payload.submittedDate || payload.date || todayJakartaISO()
         };
         state.teacherReports.unshift(newReport);
         syncEntityToFirestore("teacherReports", newReport.id, newReport);

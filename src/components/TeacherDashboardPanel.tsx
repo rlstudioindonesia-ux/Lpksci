@@ -1,3 +1,4 @@
+import { todayLocalISO, toLocalISODate } from "../lib/dateUtils";
 import React, { useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { UserAccount, SystemState } from "../types";
@@ -354,7 +355,7 @@ export function TeacherDashboardPanel({
       }, 2000);
     } else {
       // 2. Presensi Wajah Rutin
-      const today = new Date().toISOString().split("T")[0];
+      const today = todayLocalISO();
       
       // Validation check for REGULER luring GPS radius. No hardcoded coordinate
       // default: an unconfigured office location must fail safe (geofencing off).
@@ -388,7 +389,7 @@ export function TeacherDashboardPanel({
       const alreadyPresensi = (systemState.logs || []).some(l => {
         if (l.type !== "PRESENSI_PENGAJAR") return false;
         if (l.user !== currentUser.name && l.user !== currentUser.username) return false;
-        if (!l.timestamp || !l.timestamp.startsWith(today)) return false;
+        if (!l.timestamp || toLocalISODate(l.timestamp) !== today) return false;
         
         if (l.clockType) {
           return l.clockType === presensiType;

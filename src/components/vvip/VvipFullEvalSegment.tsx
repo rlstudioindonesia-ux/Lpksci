@@ -1,7 +1,7 @@
 import React from "react";
 import { Activity, AlertCircle, Award, BookOpen, Calculator, Calendar, CheckCheck, CheckCircle, ChevronDown, ChevronRight, Clock, DollarSign, Download, Edit, Eye, FileText, Filter, Globe, GraduationCap, History, Laptop, LogIn, RefreshCw, RotateCcw, Search, Shield, ShieldCheck, Smartphone, TrendingUp, UserCheck, Users, UserX } from "lucide-react";
 import { createSvgAvatar, getSafePhotoUrl } from "../../lib/storageHelper";
-import { calculateAge } from "../../lib/dateUtils";
+import { calculateAge, todayLocalISO } from "../../lib/dateUtils";
 import { computeAttendanceRate } from "../../lib/attendanceMetrics";
 import { isGradedAssessment } from "../../lib/scoreAveraging";
 import { hasStaffOversight } from "../../lib/permissions";
@@ -102,7 +102,7 @@ export default function VvipFullEvalSegment({ activeStudents, classFilter, class
 
   // Staff & Sensei Daily Login Log States
   const [staffLoginDateMode, setStaffLoginDateMode] = React.useState<"today" | "yesterday" | "7days" | "custom">("today");
-  const [staffLoginCustomDate, setStaffLoginCustomDate] = React.useState<string>(() => new Date().toISOString().split("T")[0]);
+  const [staffLoginCustomDate, setStaffLoginCustomDate] = React.useState<string>(() => todayLocalISO());
   const [staffLoginRoleFilter, setStaffLoginRoleFilter] = React.useState<string>("all");
   const [staffLoginSearchQuery, setStaffLoginSearchQuery] = React.useState<string>("");
   const [staffLoginStatusFilter, setStaffLoginStatusFilter] = React.useState<string>("all");

@@ -12,6 +12,7 @@ import { DEFAULT_GALLERY_ITEMS } from "./src/data/defaultGallery.ts";
 import { isHashedPassword, hashPassword, verifyPassword, stripPassword } from "./server/auth-utils.ts";
 import { handleStateUpdate } from "./server/handlers/index.ts";
 import { invalidateStateCache, getStateVersion, getCachedStateResponse, setCachedStateResponse } from "./server/stateCache.ts";
+import { todayJakartaISO } from "./src/lib/dateUtils.ts";
 import { uniqueIdSuffix } from "./src/lib/idGenerator.ts";
 
 export { invalidateStateCache };
@@ -94,7 +95,7 @@ app.get("/robots.txt", (req, res) => {
 
 app.get("/sitemap.xml", (req, res) => {
   res.type("application/xml");
-  const today = new Date().toISOString().split("T")[0];
+  const today = todayJakartaISO();
   const sitemap = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
@@ -1159,7 +1160,7 @@ app.post("/api/register", async (req, res) => {
     education: education || "SMA",
     program: program || "Tokutei Ginou (SSW)",
     japaneseLevel: japaneseLevel || "Belum Belajar",
-    date: new Date().toISOString().split("T")[0],
+    date: todayJakartaISO(),
     timestamp: new Date().toISOString(),
     status: newRegStatus as any,
     docAkta: docAkta || "",
@@ -1251,7 +1252,7 @@ app.post("/api/register", async (req, res) => {
     studentName: name,
     category: isAlumni ? `Registrasi Alumni (Sistem)` : `Pendaftaran Hub (${paymentMethod || "Virtual Account"})`,
     amount: isAlumni ? 0 : (paymentAmount !== undefined ? Number(paymentAmount) : 500000),
-    date: new Date().toISOString().split("T")[0],
+    date: todayJakartaISO(),
     status: payStatus as any,
     paymentMethod: paymentMethod || "Virtual Account",
     proofOfPayment: proofOfPayment || ""

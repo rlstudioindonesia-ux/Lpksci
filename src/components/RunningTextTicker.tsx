@@ -1,3 +1,4 @@
+import { todayLocalISO } from "../lib/dateUtils";
 import React, { useMemo } from "react";
 import { AlertCircle, Megaphone } from "lucide-react";
 
@@ -22,7 +23,7 @@ export default function RunningTextTicker({
       }
 
       // 2. Secondary: Upcoming active events (sorted ascending, max 6 relevant items)
-      const todayStr = new Date().toISOString().split("T")[0];
+      const todayStr = todayLocalISO();
       const upcomingEvents = (Array.isArray(events) ? events : [])
         .filter((e) => e && typeof e === "object" && typeof e.title === "string" && e.title.trim().length > 0 && (!e.date || String(e.date) >= todayStr))
         .sort((a, b) => String(a.date || "").localeCompare(String(b.date || "")))

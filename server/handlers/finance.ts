@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import { syncEntityToFirestore, syncEntityToFirestoreAsync, deleteEntityFromFirestore, touchSyncMeta } from "../../src/db/firebase-adapter.ts";
+import { todayJakartaISO } from "../../src/lib/dateUtils.ts";
 import { uniqueIdSuffix } from "../../src/lib/idGenerator.ts";
 import { findRecordIndex } from "../../src/lib/recordMatching.ts";
 import { planLedgerSyncForPayment } from "../../src/lib/paymentLedger.ts";
@@ -13,7 +14,7 @@ function syncLedgerForPayment(state: any, payment: any) {
     const newLedger = {
       id: `CAS-${uniqueIdSuffix()}`,
       code: payment.id,
-      date: new Date().toISOString().split("T")[0],
+      date: todayJakartaISO(),
       description: `Pembayaran ${payment.category} - ${payment.studentName}`,
       inAmount: plan.inAmount,
       outAmount: 0
@@ -42,7 +43,7 @@ export async function handleFinanceState(req: Request, res: Response, dataType: 
       const newLedger = {
         id: `CAS-${uniqueIdSuffix()}`,
         code: payload.code || "",
-        date: payload.date || new Date().toISOString().split("T")[0],
+        date: payload.date || todayJakartaISO(),
         description: payload.description || "",
         inAmount: Number(payload.inAmount) || 0,
         outAmount: Number(payload.outAmount) || 0,
@@ -86,7 +87,7 @@ export async function handleFinanceState(req: Request, res: Response, dataType: 
         studentName: payload.studentName || "",
         category: payload.category || "",
         amount: payload.amount !== undefined ? Number(payload.amount) : 0,
-        date: payload.date || new Date().toISOString().split("T")[0],
+        date: payload.date || todayJakartaISO(),
         status: payload.status || "Belum Bayar",
         ...payload
       };
@@ -135,7 +136,7 @@ export async function handleFinanceState(req: Request, res: Response, dataType: 
           studentName: studentName || "Siswa LPK",
           category: category || "Pelatihan & Asrama",
           amount: amount ? Number(amount) : 5000000,
-          date: new Date().toISOString().split("T")[0],
+          date: todayJakartaISO(),
           status: "Belum Bayar" as any
         };
         state.payments.unshift(newPay);
@@ -316,7 +317,7 @@ export async function handleFinanceState(req: Request, res: Response, dataType: 
           studentName: studentName || "Siswa LPK",
           category: category || "Pembayaran Pendidikan",
           amount: amount !== undefined ? Number(amount) : 500000,
-          date: date || new Date().toISOString().split("T")[0],
+          date: date || todayJakartaISO(),
           status: status || "Belum Bayar",
           paymentMethod: "Manual",
           ...payload

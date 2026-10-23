@@ -4,6 +4,7 @@ import { hashPassword, isHashedPassword } from "../auth-utils.ts";
 import { invalidateStateCache } from "../stateCache.ts";
 import { EXTRA_STUDENT_DOCUMENT_FIELDS } from "../../src/lib/studentDocuments.ts";
 import { findRecordIndex } from "../../src/lib/recordMatching.ts";
+import { todayJakartaISO } from "../../src/lib/dateUtils.ts";
 import { uniqueIdSuffix } from "../../src/lib/idGenerator.ts";
 
 async function uploadBase64IfPresent(dataStr: string | undefined, prefix: string, folder: string): Promise<string> {
@@ -363,7 +364,7 @@ export async function handleRegistrationState(req: Request, res: Response, dataT
                  const newLedger = {
                    id: `CAS-${uniqueIdSuffix()}`,
                    code: payment.id,
-                   date: new Date().toISOString().split("T")[0],
+                   date: todayJakartaISO(),
                    description: `Pembayaran Pendaftaran - ${payment.studentName}`,
                    inAmount: Number(payment.amount) || Number(student.paymentAmount) || 500000,
                    outAmount: 0

@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import { syncEntityToFirestore, deleteEntityFromFirestore, syncEntityToFirestoreAsync, deleteEntityFromFirestoreAsync, uploadBufferToFirebaseStorage, touchSyncMeta } from "../../src/db/firebase-adapter.ts";
 import { invalidateStateCache } from "../stateCache.ts";
 import { isSameSubject, getCanonicalSubjectSlug } from "../../src/lib/subjectHelper.ts";
+import { todayJakartaISO } from "../../src/lib/dateUtils.ts";
 import { uniqueIdSuffix } from "../../src/lib/idGenerator.ts";
 
 async function uploadBase64IfPresent(dataStr: string | undefined, prefix: string, folder: string): Promise<string> {
@@ -614,7 +615,7 @@ export async function handleLmsState(req: Request, res: Response, dataType: stri
             grade: grade || (existingRecord ? existingRecord.grade : undefined),
             notes: notes !== undefined ? notes : (existingRecord ? existingRecord.notes : ""),
             assessedBy: assessedBy || (existingRecord ? existingRecord.assessedBy : "Sensei Utama"),
-            assessedDate: payload.assessedDate || new Date().toISOString().split("T")[0],
+            assessedDate: payload.assessedDate || todayJakartaISO(),
             timestamp: payload.timestamp || Date.now(),
             subject: subject || (existingRecord ? existingRecord.subject : (subjSlug === "matematika" ? "Matematika" : "Bahasa Jepang")),
             isUnlocked: isUnlocked !== undefined ? !!isUnlocked : (existingRecord ? !!existingRecord.isUnlocked : cleanChapterNum === 1),

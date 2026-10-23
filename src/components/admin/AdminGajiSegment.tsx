@@ -1,3 +1,4 @@
+import { todayLocalISO } from "../../lib/dateUtils";
 import React from "react";
 import { Activity, BarChart3, CheckSquare, ChevronLeft, ChevronRight, PieChart as LucidePieChart, Receipt, Search, TrendingUp, Users, Wallet } from "lucide-react";
 import { ConfirmButton } from "../ConfirmButton";
@@ -174,7 +175,7 @@ export default function AdminGajiSegment({ currentUser, editingSalId, hrFilterMo
                               type="date"
                               required
                               className="w-full text-xs p-2 bg-white border border-slate-300 rounded-lg outline-none"
-                              defaultValue={new Date().toISOString().split("T")[0]}
+                              defaultValue={todayLocalISO()}
                             />
                           </div>
                           <div className="space-y-1">
@@ -963,7 +964,7 @@ export default function AdminGajiSegment({ currentUser, editingSalId, hrFilterMo
                                                           amount: amt,
                                                           monthString: hrFilterMonth,
                                                           status: "Lunas" as const,
-                                                          paymentDate: new Date().toISOString().split("T")[0],
+                                                          paymentDate: todayLocalISO(),
                                                           notes: notesVal
                                                         };
     
@@ -973,7 +974,7 @@ export default function AdminGajiSegment({ currentUser, editingSalId, hrFilterMo
                                                           // Buku Kas Ledger (cashLedger)
                                                           await onUpdateState("cashLedger", "add", {
                                                             code: "P1", // Gaji Karyawan
-                                                            date: new Date().toISOString().split("T")[0],
+                                                            date: todayLocalISO(),
                                                             description: `Gaji Staff: ${u.name} (${formattedMonthStr})`,
                                                             inAmount: 0,
                                                             outAmount: amt

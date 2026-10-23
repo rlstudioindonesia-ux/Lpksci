@@ -1,3 +1,4 @@
+import { todayLocalISO } from "../../lib/dateUtils";
 import React from "react";
 import { createPortal } from "react-dom";
 import { BookOpen, Calendar, ChevronDown, ChevronUp, Clock, Edit3, Save, Search, Trash2, Users, X } from "lucide-react";
@@ -27,7 +28,7 @@ export function StudentAttendanceManager({
 }) {
   const [isOpen, setIsOpen] = React.useState(true);
   const [kegiatan, setKegiatan] = React.useState("");
-  const [date, setDate] = React.useState(new Date().toISOString().split("T")[0]);
+  const [date, setDate] = React.useState(todayLocalISO());
   const [startTime, setStartTime] = React.useState("08:30");
   const [endTime, setEndTime] = React.useState("11:00");
   const [selectedClass, setSelectedClass] = React.useState(defaultClass || "");

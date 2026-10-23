@@ -1,3 +1,4 @@
+import { todayLocalISO } from "../lib/dateUtils";
 import React, { useState } from "react";
 import { ConfirmForm } from "./ConfirmForm";
 import { ConfirmButton } from "./ConfirmButton";
@@ -147,7 +148,7 @@ export default function CalendarView({
 
   const inboxEvents = React.useMemo(() => {
     let list = [...filteredEventsForMe];
-    const todayStrForInbox = new Date().toISOString().split("T")[0];
+    const todayStrForInbox = todayLocalISO();
     
     // Sort logic
     if (showPastInbox) {

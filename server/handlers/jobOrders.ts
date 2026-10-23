@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import { syncEntityToFirestore, deleteEntityFromFirestore } from "../../src/db/firebase-adapter.ts";
+import { todayJakartaISO } from "../../src/lib/dateUtils.ts";
 import { uniqueIdSuffix } from "../../src/lib/idGenerator.ts";
 
 // Job Order applicant pipeline
@@ -63,7 +64,7 @@ export function handleJobOrdersState(req: Request, res: Response, dataType: stri
         if (!state.events) {
           state.events = [];
         }
-        const todayStr = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
+        const todayStr = todayJakartaISO(); // YYYY-MM-DD
         const jobEvent = {
           id: `EV-JOB-${uniqueIdSuffix()}`,
           title: `Lowongan Kerja Baru: ${occupation} di ${location}`,
@@ -119,7 +120,7 @@ export function handleJobOrdersState(req: Request, res: Response, dataType: stri
             if (!state.events) {
               state.events = [];
             }
-            const todayStr = new Date().toISOString().split("T")[0];
+            const todayStr = todayJakartaISO();
             const recEvent = {
               id: `EV-REC-${uniqueIdSuffix()}`,
               title: `Rekomendasi Job Order: ${job.occupation}`,

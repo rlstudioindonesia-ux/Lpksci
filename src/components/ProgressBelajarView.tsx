@@ -1,3 +1,4 @@
+import { todayLocalISO } from "../lib/dateUtils";
 import React, { useState } from "react";
 import { 
   TrendingUp, BookOpen, Clock, Calendar, Search, Award, CheckCircle2, 
@@ -149,7 +150,7 @@ export default function ProgressBelajarView({
       score: gradingStatus === "Telah Dinilai" ? gradingScore : undefined,
       notes: gradingNotes,
       assessedBy: currentUser?.name || "Instruktur",
-      assessedDate: new Date().toISOString().split("T")[0]
+      assessedDate: todayLocalISO()
     };
 
     // Save assessment to firestore
