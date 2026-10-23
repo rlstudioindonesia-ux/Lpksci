@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import { syncEntityToFirestore, syncCustomizationToFirestore, syncLmsClassToFirestore, syncAllLmsClassesToFirestore, deleteEntityFromFirestore, mergeEntityFieldsToFirestore } from "../../src/db/firebase-adapter.ts";
 import { applyClassListDiff } from "../../src/lib/classListDiff.ts";
 import { invalidateStateCache } from "../stateCache.ts";
+import { refreshCustomization } from "../freshRead.ts";
 
 // Site customization/branding + landing config
 // Extracted verbatim from the monolithic /api/state/update handler in server.ts.
@@ -10,6 +11,12 @@ import { invalidateStateCache } from "../stateCache.ts";
 // so the caller (server/handlers/index.ts) can try the next domain in order.
 export async function handleCustomizationState(req: Request, res: Response, dataType: string, action: string, payload: any, state: any): Promise<boolean> {
 
+
+    if ((dataType === "customization" && action === "update") || dataType === "lmsClasses") {
+      // Apply the change to the latest settings/classes, not to this instance's
+      // possibly outdated copy (server/freshRead.ts).
+      await refreshCustomization(state);
+    }
 
     if (dataType === "customization" && action === "update") {
       // Partial update from current clients: apply only the classes they changed

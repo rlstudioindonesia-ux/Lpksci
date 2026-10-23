@@ -16,6 +16,7 @@ import { verifyFirebaseIdToken } from "./server/googleIdToken.ts";
 import { evaluatePasswordLogin, validateNewPassword } from "./src/lib/loginPolicy.ts";
 import { resolveGoogleSignupRole } from "./src/lib/googleAuthProvisioning.ts";
 import { authorizeStateUpdate } from "./src/lib/apiAccess.ts";
+import { gradeSubmissionOnServer } from "./src/lib/quizScoring.ts";
 import { scopeStateForViewer, isStaffViewer } from "./src/lib/stateScope.ts";
 import firebaseAppletConfig from "./firebase-applet-config.json";
 import { handleStateUpdate } from "./server/handlers/index.ts";
@@ -405,6 +406,9 @@ export async function triggerBackgroundResync(force = false): Promise<void> {
           state[key] = loadedState[key];
         }
       });
+      // Arrays only replace memory when non-empty; an intentionally emptied gallery must still win.
+      state.galleriesCleared = !!loadedState.galleriesCleared;
+      if (state.galleriesCleared) state.galleries = [];
       isStateReady = true;
       hideConvertedRegistrations(state);
       linkPaymentsToStudents(state);
@@ -765,7 +769,8 @@ function getOrBuildStateJson(): { json: string; etag: string; version: number } 
     chapterAssessments: (state.chapterAssessments || []).map((c: any) => stripHeavyBase64Shallow(c, "[BERKAS_TERSIMPAN]", PRESERVED_AVATAR_KEYS)),
     customization: {
       ...(state.customization || {}),
-      gallery: (Array.isArray(state.galleries) && state.galleries.length > 0) ? state.galleries : (state.customization?.gallery || []),
+      gallery: (Array.isArray(state.galleries) && state.galleries.length > 0) ? state.galleries : (state.galleriesCleared ? [] : (state.customization?.gallery || [])),
+      galleryCleared: !!state.galleriesCleared,
     },
   };
 
@@ -1525,6 +1530,15 @@ app.post("/api/state/update", async (req, res) => {
     req.body.payload = payload;
   }
 
+  // 23-10-2026: a student's quiz submission is graded on the server from the
+  // stored questions; the score sent by the browser is not trusted. (Only for
+  // identified students, so a Sensei's manual correction is never overridden.)
+  if (dataType === "chapterAssessments" && ["update", "upsert"].includes(String(action).toLowerCase()) &&
+      (authUser?.role === "Siswa" || authUser?.role === "Alumni")) {
+    payload = gradeSubmissionOnServer(payload, state.lmsQuizzes);
+    req.body.payload = payload;
+  }
+
   // Hook sync logic post-response using monkeypatch
   const originalJson = res.json;
   res.json = function(val) {
@@ -1832,6 +1846,8 @@ async function startServer() {
           }
         });
 
+        state.galleriesCleared = !!loadedState.galleriesCleared;
+        if (state.galleriesCleared) state.galleries = [];
         isStateReady = true;
         hideConvertedRegistrations(state);
         linkPaymentsToStudents(state);
@@ -1895,7 +1911,8 @@ async function startServer() {
         }
 
         // Ensure default gallery items are seeded ONLY if collection is completely empty
-        if (!Array.isArray(state.galleries) || state.galleries.length === 0) {
+        // (never when the admin emptied it on purpose).
+        if (!state.galleriesCleared && (!Array.isArray(state.galleries) || state.galleries.length === 0)) {
           console.log("📸 Seeding initial default gallery collection in Firestore...");
           state.galleries = DEFAULT_GALLERY_ITEMS;
           if (state.customization) {

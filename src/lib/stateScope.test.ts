@@ -21,13 +21,17 @@ const payload = {
   ],
   attendance: [{ id: "A1", studentId: "SIS-001" }, { id: "A2", studentId: "SIS-002" }],
   chapterAssessments: [
-    { id: "C1", studentId: "SIS-001", score: 80, studentQuizAnswers: ["a"] },
+    { id: "C1", studentId: "SIS-001", score: 80, studentQuizAnswers: ["a"], details: { quizDetails: [{ quizId: "Q1" }] } },
     { id: "C2", studentId: "SIS-002", score: 90, studentQuizAnswers: ["b"] },
   ],
   messages: [
     { id: "M1", senderId: "budi@x.id", receiverId: "sensei1" },
     { id: "M2", senderId: "sari@x.id", receiverId: "sensei1" },
     { id: "M3", senderId: "sari@x.id", receiverId: "kelas_A" },
+  ],
+  lmsQuizzes: [
+    { id: "Q1", question: "?", correctAnswerIndex: 2 },
+    { id: "Q2", question: "?", correctAnswerIndex: 1, explanation: "karena" },
   ],
   cashLedger: [{ id: "K1" }],
   salaries: [{ id: "G1" }],
@@ -53,6 +57,10 @@ describe("scopeStateForViewer", () => {
     expect(s.messages.map((m: any) => m.id)).toEqual(["M1", "M3"]);
     expect(s.cashLedger).toEqual([]);
     expect(s.salaries).toEqual([]);
+    // Answer key only for the quiz Budi already submitted.
+    expect(s.lmsQuizzes[0].correctAnswerIndex).toBe(2);
+    expect(s.lmsQuizzes[1].correctAnswerIndex).toBeUndefined();
+    expect(s.lmsQuizzes[1].explanation).toBeUndefined();
     expect(s.registeredStudents).toEqual([{ id: "REG-1", name: "Andi", referrer: "alumni1", status: "Pending" }]);
   });
 
@@ -64,6 +72,7 @@ describe("scopeStateForViewer", () => {
     expect(v.users[0].email).toBeUndefined();
     expect(v.payments).toEqual([]);
     expect(v.messages).toEqual([]);
+    expect(v.lmsQuizzes.every((q: any) => q.correctAnswerIndex === undefined)).toBe(true);
     expect(v.customization).toEqual({ themeColor: "blue" });
   });
 });

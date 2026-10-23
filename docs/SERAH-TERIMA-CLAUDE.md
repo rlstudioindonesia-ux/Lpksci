@@ -84,7 +84,8 @@ Skill Claude Code ada di `.claude/skills/` (`alur-perubahan`, `aturan-data-siswa
 - #77 reset kata sandi lewat email yang benar-benar berlaku (tautan email + server), tutup reset lama yang membocorkan tautan
 - #78 keamanan Tahap 2 di balik sakelar (hak akses per peran, data dipangkas per peran, Midtrans simulasi ditutup)
 - #79 tagihan ditautkan ke nomor siswa (siswa bernama sama terpisah, ganti nama tidak melepas tagihan, tagihan ikut saat pendaftar disetujui)
-- berikutnya: edit Buku Kas tidak lagi mengubah kode jadi "P1 Gaji" / tidak menambah nominal tagihan, Lowongan dibaca ulang sebelum ditulis, panel berkas pendaftar hanya kirim kolom yang berubah
+- #80 edit Buku Kas tidak lagi mengubah kode jadi "P1 Gaji" / tidak menambah nominal tagihan, Lowongan dibaca ulang sebelum ditulis, panel berkas pendaftar hanya kirim kolom yang berubah
+- berikutnya: galeri kosong tetap kosong, agenda/materi/pengaturan/galeri dibaca ulang sebelum ditulis (`server/freshRead.ts`), nilai kuis dihitung server, kunci jawaban tidak dikirim sebelum dikumpulkan
 
 ## Tindak lanjut terbuka
 
@@ -104,7 +105,7 @@ Skill Claude Code ada di `.claude/skills/` (`alur-perubahan`, `aturan-data-siswa
      - **Menyala hanya bila** env `AUTH_ENFORCE=1` **dan** `SESSION_SECRET` (>= 16 karakter) diisi di Cloud Run. Selama mati: penolakan dicatat sebagai "AKAN DITOLAK" di `GET /api/auth/audit`.
      - Urutan menyalakan: isi `SESSION_SECRET` → tunggu semua orang login ulang beberapa hari → cek audit (cari "AKAN DITOLAK" yang ternyata fitur sah, sesuaikan `apiAccess.ts`) → isi `AUTH_ENFORCE=1`.
      - Ikut diperbaiki: tombol Midtrans (simulasi) tidak lagi menandai tagihan LUNAS sendiri; login Google lewat redirect diverifikasi server (tidak lagi memberi Admin ke email berisi "admin" / Pengajar ke "sensei").
-     - Belum: kunci jawaban kuis (`lmsQuizzes`) masih terkirim ke siswa karena nilai CBT dihitung di peramban; nilai kuis bisa dipalsukan siswa. Perlu penilaian di server (tahap lanjutan).
+     - Kuis: nilai CBT siswa SELALU dihitung ulang di server (`gradeSubmissionOnServer`, `src/lib/quizScoring.ts`; hanya untuk siswa yang teridentifikasi tiket, koreksi Sensei tidak ditimpa). Kunci jawaban (`QUIZ_ANSWER_KEY_FIELDS`) hanya dikirim ke siswa untuk kuis yang sudah ia kumpulkan (berlaku saat sakelar menyala). Sisa: saat ulang kuis, kunci kuis lama masih terlihat.
    - **Tahap 3:**
      - kunci `firestore.rules`. PENTING: server memakai Firebase *client* SDK tanpa login, jadi aturan tidak bisa dikunci sebelum server memakai firebase-admin atau akun layanan;
      - reset kata sandi: SUDAH dikerjakan lebih dulu (pemilik memilih lewat email). Detailnya:

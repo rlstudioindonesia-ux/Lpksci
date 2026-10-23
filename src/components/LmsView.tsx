@@ -1,5 +1,5 @@
 import { checkEssayAnswer } from "../lib/essayAnswer";
-import { computeQuizScore } from "../lib/quizScoring";
+import { computeQuizScore, isQuizAnswerCorrect } from "../lib/quizScoring";
 import { todayLocalISO } from "../lib/dateUtils";
 /**
  * @license
@@ -2523,24 +2523,8 @@ export default function LmsView({
     const isQuizDeadlinePassed = filteredQuizzes[0]?.deadline ? new Date() > new Date(filteredQuizzes[0].deadline) : false;
     
     // Auto-grading calculations for both MCQ & Essay
-    const isQuizItemCorrect = (q: any) => {
-      if (q.questionType === "essay") {
-        const studentAns = studentQuizEssayAnswers[q.id];
-        const key = q.correctAnswerEssay || q.correctAnswerText;
-        return checkEssayAnswer(studentAns, key);
-      }
-      const rawAns = studentQuizAnswers[q.id];
-      if (rawAns === undefined || rawAns === null) return false;
-      const studentKeys: number[] = Array.isArray(rawAns) ? rawAns.map(Number) : [Number(rawAns)];
-      const correctKeys: number[] = Array.isArray(q.correctAnswerIndices) && q.correctAnswerIndices.length > 0
-        ? q.correctAnswerIndices.map(Number)
-        : [q.correctAnswerIndex !== undefined ? Number(q.correctAnswerIndex) : 0];
-
-      if (studentKeys.length !== correctKeys.length) return false;
-      const sortedStudent = [...studentKeys].sort((a, b) => a - b);
-      const sortedCorrect = [...correctKeys].sort((a, b) => a - b);
-      return sortedStudent.every((val, idx) => val === sortedCorrect[idx]);
-    };
+    // Same check the server uses to grade the submission (src/lib/quizScoring.ts).
+    const isQuizItemCorrect = (q: any) => isQuizAnswerCorrect(q, studentQuizAnswers, studentQuizEssayAnswers);
 
     const correctQuizzesList = filteredQuizzes.filter(isQuizItemCorrect);
     // Weighted by each question's points, same as the Sensei correction modal.
@@ -2656,6 +2640,9 @@ export default function LmsView({
 
       if (onUpdateState) {
         await onUpdateState("chapterAssessments", "update", assessPayload);
+        // The server grades the submission and, once submitted, also sends the
+        // answer key for review: reload the data right away.
+        try { window.dispatchEvent(new Event("lpk-refresh-state")); } catch (e) {}
       } else {
         try {
           await fetch("/api/state/update", {

@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect, useRef, useMemo } from "react";
+import { pickGalleryItems } from "../lib/galleryItems";
 import { ConfirmForm } from "./ConfirmForm";
 import {
   Globe,
@@ -1756,9 +1757,7 @@ export default function FrontendView({
             }
           ];
 
-          const activeItems = (galleries && galleries.length > 0)
-            ? galleries
-            : ((customization?.gallery && customization.gallery.length > 0) ? customization.gallery : defaultGalleryList);
+          const activeItems = pickGalleryItems(galleries, customization?.gallery, customization?.galleryCleared, defaultGalleryList);
 
           return (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 gap-6">
@@ -1880,9 +1879,7 @@ export default function FrontendView({
                 }
               ];
 
-              const activeItems = (galleries && galleries.length > 0)
-                ? galleries
-                : ((customization?.gallery && customization.gallery.length > 0) ? customization.gallery : defaultGalleryList);
+              const activeItems = pickGalleryItems(galleries, customization?.gallery, customization?.galleryCleared, defaultGalleryList);
 
               return (
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 pt-4">
