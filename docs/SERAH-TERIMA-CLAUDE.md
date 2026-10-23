@@ -33,6 +33,9 @@ Terakhir diperbarui: 23-10-2026. Baca berkas ini dulu sebelum melanjutkan pekerj
 | **Nilai kuis tidak pernah dihapus**; ulang kuis menimpa rekaman yang sama, **nilai terbaik** yang disimpan; koreksi Sensei boleh menurunkan nilai | `src/lib/quizRetake.ts`, `server/handlers/lms.ts` |
 | Nilai CBT berbobot poin per soal (sama dengan modal koreksi Sensei) | `src/lib/quizScoring.ts` |
 | Simpan kuis hanya mengganti soal di kelas & sub-judul yang sama | `src/lib/quizBatchScope.ts` |
+| Rata-rata nilai **ikut menghitung nilai < 75** (status "Selesai Belajar" dengan skor) | `src/lib/scoreAveraging.ts` (`isGradedAssessment`) |
+| Essay ketat: harus sama dengan kunci/varian (abaikan huruf besar, spasi, tanda baca), typo 1 huruf untuk jawaban >= 5 huruf; "mengandung kunci" TIDAK lagi benar | `src/lib/essayAnswer.ts` |
+| Tab **Alumni** = hanya siswa **Di Jepang** | `isAlumniTabStudent` |
 | 6 berkas tambahan: Sertifikat JFT/JLPT/NAT, SSW 1, SSW 2, LPK SCI, COE, CV | `src/lib/studentDocuments.ts` |
 | Tanggal "hari ini" = WIB (peramban: `todayLocalISO`, server: `todayJakartaISO`) | `src/lib/dateUtils.ts` |
 
@@ -53,7 +56,8 @@ Terakhir diperbarui: 23-10-2026. Baca berkas ini dulu sebelum melanjutkan pekerj
 - #63 jumlah siswa, status reset, CV, 6 berkas, ID bentrok, Buku Kas, siswa bernama sama, tanggal WIB, nilai kuis
 - #64 data terhapus tidak muncul lagi, ETag per instance, batasi resync paksa
 - #65 diff kelas/pengaturan (bab tidak tertutup lagi)
-- PR berikutnya (sesi ini): sertifikat di rapor Admin/VVIP, status tidak tertimpa form edit, jenis kelamin, nilai berbobot, tanpa SIS-001, CV per studentId, rumus Siswa Aktif, dokumen ini
+- #66 sertifikat di rapor Admin/VVIP, status tidak tertimpa form edit, jenis kelamin, nilai berbobot, tanpa SIS-001, CV per studentId, rumus Siswa Aktif, dokumen ini
+- berikutnya: nilai < 75 ikut rata-rata, essay diperketat, tab Alumni = Di Jepang
 
 ## Tindak lanjut terbuka
 
@@ -62,10 +66,6 @@ Terakhir diperbarui: 23-10-2026. Baca berkas ini dulu sebelum melanjutkan pekerj
    - server tanpa autentikasi (`/api/state`, `/api/state/update` terbuka untuk siapa pun);
    - `/api/request-reset` mengembalikan tautan reset langsung ke peminta;
    - `firestore.rules` terbuka penuh.
-2. **Perlu keputusan pemilik:**
-   - kuis dengan nilai < 75 berstatus "Selesai Belajar" dan **tidak ikut rata-rata** (`isGradedAssessment` hanya "Telah Dinilai"/"Sudah Dinilai");
-   - pencocokan essay longgar: jawaban yang *mengandung* kunci dianggap benar;
-   - tab "Alumni" Admin masih berisi Lulus + Di Jepang, padahal Lulus kini juga dihitung Siswa Aktif;
-   - rata-rata nilai & kehadiran di peramban masih mencocokkan siswa lewat nama juga (sengaja dibiarkan karena data lama).
+2. **Sudah diputuskan pemilik (23-10-2026) dan diterapkan:** nilai < 75 ikut rata-rata, essay diperketat, tab Alumni = Di Jepang. Sisa: rata-rata nilai & kehadiran di peramban masih mencocokkan siswa lewat nama juga (sengaja dibiarkan karena data lama); essay tanpa kunci jawaban tetap dianggap benar (ditinjau Sensei).
 3. **Data lama yang mungkin sudah rusak** (perbaikan hanya mencegah kejadian baru): siswa berstatus "Terverifikasi"/"Disetujui" (dari form edit lama), tagihan `PAY-<6 huruf>-…` yang tertukar, entri Buku Kas yang saling menimpa. Bisa dibuat skrip pemeriksa bila pemilik minta.
 4. Semua perubahan belum diverifikasi langsung di produksi — minta pemilik menguji alur utama setelah deploy.

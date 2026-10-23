@@ -1,3 +1,4 @@
+import { checkEssayAnswer } from "../lib/essayAnswer";
 import { computeQuizScore } from "../lib/quizScoring";
 import { todayLocalISO } from "../lib/dateUtils";
 /**
@@ -2188,61 +2189,7 @@ export default function LmsView({
   const realQuizzes = systemState?.lmsQuizzes || [];
   const quizQuestions = realQuizzes.filter(q => q.subject === "Bahasa Jepang" || q.subject === "SSW");
   
-  const checkEssayAnswer = (studentAns?: string, correctKey?: string): boolean => {
-    if (!studentAns || typeof studentAns !== "string" || !studentAns.trim()) return false;
-    if (!correctKey || typeof correctKey !== "string" || !correctKey.trim()) return true;
-
-    const cleanPunctuation = (s: string) =>
-      s.trim().toLowerCase().replace(/[.,!?:;'"~`\s。、？！「」]/g, "");
-
-    const cleanStudent = cleanPunctuation(studentAns);
-    const cleanKey = cleanPunctuation(correctKey);
-
-    if (!cleanStudent) return false;
-    if (cleanStudent === cleanKey) return true;
-
-    const keyVariants = correctKey
-      .trim()
-      .toLowerCase()
-      .split(/[,;\n\/|]+/)
-      .map(k => k.trim())
-      .filter(Boolean);
-
-    for (const variant of keyVariants) {
-      const cleanVariant = cleanPunctuation(variant);
-      if (!cleanVariant) continue;
-
-      // 1. Exact match (ignoring whitespace & punctuation)
-      if (cleanStudent === cleanVariant) return true;
-
-      // 2. Student answer contains the key variant (e.g. sentence containing the target word)
-      // Only valid if target key has length >= 2 and student answer is longer than key
-      if (cleanVariant.length >= 2 && cleanStudent.length > cleanVariant.length && cleanStudent.includes(cleanVariant)) {
-        return true;
-      }
-
-      // 3. Typo tolerance: strictly for long words (>= 5 chars) with at most 1 character typo
-      if (cleanVariant.length >= 5 && Math.abs(cleanStudent.length - cleanVariant.length) <= 1) {
-        let diff = 0;
-        let i = 0, j = 0;
-        while (i < cleanStudent.length && j < cleanVariant.length) {
-          if (cleanStudent[i] !== cleanVariant[j]) {
-            diff++;
-            if (diff > 1) break;
-            if (cleanStudent.length > cleanVariant.length) i++;
-            else if (cleanStudent.length < cleanVariant.length) j++;
-            else { i++; j++; }
-          } else {
-            i++;
-            j++;
-          }
-        }
-        if (diff <= 1) return true;
-      }
-    }
-
-    return false;
-  };
+  // checkEssayAnswer: shared, stricter implementation from lib/essayAnswer.
 
   // Group into practice packets (10 per packet)
   const practicePackets = [];

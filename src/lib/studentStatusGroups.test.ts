@@ -5,6 +5,7 @@ import {
   studentMatchesStatusGroup,
   isActiveStudent,
   countActiveStudents,
+  isAlumniTabStudent,
 } from "./studentStatusGroups";
 
 describe("getStudentStatusGroup", () => {
@@ -83,5 +84,13 @@ describe("isActiveStudent (rumus Siswa Aktif)", () => {
 
   it("counts a list", () => {
     expect(countActiveStudents([{ status: "Belajar" }, { status: "Lulus" }, { status: "Di Jepang" }, { status: "Diklat SO" }])).toBe(2);
+  });
+});
+
+describe("isAlumniTabStudent", () => {
+  it("lists only students already in Japan", () => {
+    expect(isAlumniTabStudent({ status: "Di Jepang" })).toBe(true);
+    expect(isAlumniTabStudent({ status: "Lulus" })).toBe(false);
+    expect(isAlumniTabStudent({ status: "Diklat SO" })).toBe(false);
   });
 });

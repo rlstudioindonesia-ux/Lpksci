@@ -5,10 +5,16 @@ export type SubjectGroup = "Bahasa Jepang" | "Matematika";
 
 const MATH_SUBJECTS = ["SSW", "Matematika", "SSW Matematika"];
 
-/** A chapter assessment only counts toward an average once it's actually been graded. */
+/**
+ * A chapter assessment counts toward an average once it has a real score.
+ * 23-10-2026 (owner): CBT results below 75 are saved as "Selesai Belajar" and
+ * must ALSO be counted - excluding them made averages look higher than they
+ * are. A "Selesai Belajar" record without a numeric score (e.g. a reset or an
+ * uploaded task not yet graded) is still not counted.
+ */
 export function isGradedAssessment(a: Pick<ChapterAssessment, "status" | "score">): boolean {
   return (
-    (a.status === "Telah Dinilai" || a.status === "Sudah Dinilai") &&
+    (a.status === "Telah Dinilai" || a.status === "Sudah Dinilai" || a.status === "Selesai Belajar") &&
     typeof a.score === "number" &&
     !isNaN(a.score as number)
   );
