@@ -743,6 +743,30 @@ export function syncEntityToFirestore(collectionName: string, id: string, data: 
   }
 }
 
+/**
+ * Writes ONLY the given fields of a record (Firestore merge), for server-side
+ * side effects such as recomputing a student's attendanceScore or re-plotting
+ * a class. Those used to re-save the instance's whole in-memory student object,
+ * which pushed an outdated status/class from another instance back into
+ * Firestore - for a whole class at once when a sensei was re-plotted.
+ */
+export function mergeEntityFieldsToFirestore(collectionName: string, id: string, fields: Record<string, any>) {
+  if (!db || !id || !fields) return;
+  try {
+    const sanitized = sanitizeFirestoreData(fields);
+    // The full-document hash cached for this record no longer matches Firestore.
+    writeCache.delete(`${collectionName}/${id}`);
+    noteLocalWrite(collectionName, id);
+    setDoc(doc(db, collectionName, id), sanitized, { merge: true })
+      .then(() => publishEntityChange(collectionName, id))
+      .catch((e) => {
+        try { handleFirestoreError(e, OperationType.WRITE, `${collectionName}/${id}`); } catch (logged) {}
+      });
+  } catch (e) {
+    console.error(e);
+  }
+}
+
 export async function syncEntityToFirestoreAsync(collectionName: string, id: string, data: any): Promise<boolean> {
   if (!db || !id) return false;
   try {

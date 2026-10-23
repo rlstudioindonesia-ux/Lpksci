@@ -1,5 +1,5 @@
 import type { Request, Response } from "express";
-import { syncEntityToFirestore, deleteEntityFromFirestore, uploadBufferToFirebaseStorage } from "../../src/db/firebase-adapter.ts";
+import { syncEntityToFirestore, deleteEntityFromFirestore, uploadBufferToFirebaseStorage, mergeEntityFieldsToFirestore } from "../../src/db/firebase-adapter.ts";
 import { uniqueIdSuffix } from "../../src/lib/idGenerator.ts";
 
 // Attendance, salaries, and teacher leave/report/contract records
@@ -60,9 +60,7 @@ export function handleHrState(req: Request, res: Response, dataType: string, act
             student.attendanceScore = totalRecords > 0 ? Math.round((presentCount / totalRecords) * 100) : 0;
 
             // Also sync to firestore if using firebase
-            if (typeof syncEntityToFirestore !== "undefined") {
-              syncEntityToFirestore("activeStudents", student.id, student);
-            }
+            mergeEntityFieldsToFirestore("activeStudents", student.id, { attendanceScore: student.attendanceScore });
           }
         }
         return res.json({ success: true, item: newAtt });
@@ -89,7 +87,7 @@ export function handleHrState(req: Request, res: Response, dataType: string, act
           const presentCount = stRecords.filter(a => a.status === "Hadir").length;
           const totalRecords = stRecords.length;
           student.attendanceScore = totalRecords > 0 ? Math.round((presentCount / totalRecords) * 100) : 0;
-          syncEntityToFirestore("activeStudents", student.id, student);
+          mergeEntityFieldsToFirestore("activeStudents", student.id, { attendanceScore: student.attendanceScore });
         }
       }
       return res.json({ success: true, id });
@@ -128,7 +126,7 @@ export function handleHrState(req: Request, res: Response, dataType: string, act
           const presentCount = stRecords.filter((a: any) => a.status === "Hadir").length;
           const totalRecords = stRecords.length;
           student.attendanceScore = totalRecords > 0 ? Math.round((presentCount / totalRecords) * 100) : 0;
-          syncEntityToFirestore("activeStudents", student.id, student);
+          mergeEntityFieldsToFirestore("activeStudents", student.id, { attendanceScore: student.attendanceScore });
         }
       }
       return res.json({ success: true, item: payload });

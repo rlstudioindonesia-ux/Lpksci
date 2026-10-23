@@ -1,5 +1,5 @@
 import type { Request, Response } from "express";
-import { syncEntityToFirestore, deleteEntityFromFirestore, uploadBufferToFirebaseStorage, touchSyncMeta } from "../../src/db/firebase-adapter.ts";
+import { syncEntityToFirestore, deleteEntityFromFirestore, uploadBufferToFirebaseStorage, touchSyncMeta, mergeEntityFieldsToFirestore } from "../../src/db/firebase-adapter.ts";
 import { hashPassword, isHashedPassword } from "../auth-utils.ts";
 import { invalidateStateCache } from "../stateCache.ts";
 import { EXTRA_STUDENT_DOCUMENT_FIELDS } from "../../src/lib/studentDocuments.ts";
@@ -271,47 +271,60 @@ export async function handleRegistrationState(req: Request, res: Response, dataT
             student.paymentStatus = "Lunas";
           }
 
-          // Sync to activeStudents
-          const actIndex = state.activeStudents.findIndex(s => s.id === id || (s.name && student.name && s.name.trim().toLowerCase() === student.name.trim().toLowerCase()));
+          // Sync to activeStudents - only the fields this request actually sent.
+          // Copying from the whole merged registration used to overwrite the
+          // student's class with the registration's default program ("Tokutei
+          // Ginou (SSW)") and push other stale values whenever an admin merely
+          // verified a document.
+          const actIndex = findRecordIndex(state.activeStudents, { id, email: student.email, name: student.name });
           if (actIndex !== -1) {
-            if (student.name) state.activeStudents[actIndex].name = student.name;
-            if (student.phone) state.activeStudents[actIndex].phone = student.phone;
-            if (student.email) state.activeStudents[actIndex].email = student.email;
-            if (student.district) state.activeStudents[actIndex].district = student.district;
-            if (student.birthDate) state.activeStudents[actIndex].birthDate = student.birthDate;
-            if (student.gender) state.activeStudents[actIndex].gender = student.gender;
-            if (student.education) state.activeStudents[actIndex].education = student.education;
-            if (student.school) state.activeStudents[actIndex].school = student.school;
-            if (student.graduationYear) state.activeStudents[actIndex].graduationYear = student.graduationYear;
-            if (student.japaneseLevel) state.activeStudents[actIndex].japaneseLevel = student.japaneseLevel;
-            if (student.program) state.activeStudents[actIndex].class = student.program;
-            if (student.docFoto) {
-              const pic = student.docFoto.includes('|') ? student.docFoto.split('|')[1] : student.docFoto;
-              state.activeStudents[actIndex].profilePicture = pic;
-              state.activeStudents[actIndex].docFoto = student.docFoto;
+            const act = state.activeStudents[actIndex];
+            const sent: any = processedPayload;
+            const before = { ...act };
+            if (sent.name) act.name = sent.name;
+            if (sent.phone) act.phone = sent.phone;
+            if (sent.email) act.email = sent.email;
+            if (sent.district) act.district = sent.district;
+            if (sent.birthDate) act.birthDate = sent.birthDate;
+            if (sent.gender) act.gender = sent.gender;
+            if (sent.education) act.education = sent.education;
+            if (sent.school) act.school = sent.school;
+            if (sent.graduationYear) act.graduationYear = sent.graduationYear;
+            if (sent.japaneseLevel) act.japaneseLevel = sent.japaneseLevel;
+            if (sent.program) act.class = sent.program;
+            if (sent.docFoto) {
+              const pic = sent.docFoto.includes('|') ? sent.docFoto.split('|')[1] : sent.docFoto;
+              act.profilePicture = pic;
+              act.docFoto = sent.docFoto;
             }
-            if (student.docAkta) state.activeStudents[actIndex].docAkta = student.docAkta;
-            if (student.docIjazahSD) state.activeStudents[actIndex].docIjazahSD = student.docIjazahSD;
-            if (student.docIjazahSMP) state.activeStudents[actIndex].docIjazahSMP = student.docIjazahSMP;
-            if (student.docIjazahSMA) state.activeStudents[actIndex].docIjazahSMA = student.docIjazahSMA;
-            if (student.docKK) state.activeStudents[actIndex].docKK = student.docKK;
-            if (student.docKTP) state.activeStudents[actIndex].docKTP = student.docKTP;
-            if (student.docTranskip) state.activeStudents[actIndex].docTranskip = student.docTranskip;
-            if (student.docPraMCU) state.activeStudents[actIndex].docPraMCU = student.docPraMCU;
-            if (student.docVaksin) state.activeStudents[actIndex].docVaksin = student.docVaksin;
-            if (student.docCV1) state.activeStudents[actIndex].docCV1 = student.docCV1;
-            if (student.docCV2) state.activeStudents[actIndex].docCV2 = student.docCV2;
-            if (student.docCV3) state.activeStudents[actIndex].docCV3 = student.docCV3;
-            if (student.docCV4) state.activeStudents[actIndex].docCV4 = student.docCV4;
-            if (student.docCV5) state.activeStudents[actIndex].docCV5 = student.docCV5;
-            if (student.docMoU) state.activeStudents[actIndex].docMoU = student.docMoU;
-            if (student.docKontrak) state.activeStudents[actIndex].docKontrak = student.docKontrak;
+            if (sent.docAkta) act.docAkta = sent.docAkta;
+            if (sent.docIjazahSD) act.docIjazahSD = sent.docIjazahSD;
+            if (sent.docIjazahSMP) act.docIjazahSMP = sent.docIjazahSMP;
+            if (sent.docIjazahSMA) act.docIjazahSMA = sent.docIjazahSMA;
+            if (sent.docKK) act.docKK = sent.docKK;
+            if (sent.docKTP) act.docKTP = sent.docKTP;
+            if (sent.docTranskip) act.docTranskip = sent.docTranskip;
+            if (sent.docPraMCU) act.docPraMCU = sent.docPraMCU;
+            if (sent.docVaksin) act.docVaksin = sent.docVaksin;
+            if (sent.docCV1) act.docCV1 = sent.docCV1;
+            if (sent.docCV2) act.docCV2 = sent.docCV2;
+            if (sent.docCV3) act.docCV3 = sent.docCV3;
+            if (sent.docCV4) act.docCV4 = sent.docCV4;
+            if (sent.docCV5) act.docCV5 = sent.docCV5;
+            if (sent.docMoU) act.docMoU = sent.docMoU;
+            if (sent.docKontrak) act.docKontrak = sent.docKontrak;
             for (const field of EXTRA_STUDENT_DOCUMENT_FIELDS) {
-              if (student[field]) state.activeStudents[actIndex][field] = student[field];
+              if (sent[field]) act[field] = sent[field];
             }
-            if (student.verifiedDocs) state.activeStudents[actIndex].verifiedDocs = student.verifiedDocs;
+            if (sent.verifiedDocs) act.verifiedDocs = sent.verifiedDocs;
 
-            syncEntityToFirestore("activeStudents", state.activeStudents[actIndex].id, state.activeStudents[actIndex]);
+            const changedFields: Record<string, any> = {};
+            for (const key of Object.keys(act)) {
+              if (act[key] !== before[key]) changedFields[key] = act[key];
+            }
+            if (Object.keys(changedFields).length > 0) {
+              mergeEntityFieldsToFirestore("activeStudents", act.id, changedFields);
+            }
           }
 
           // Sync to users

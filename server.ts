@@ -6,7 +6,7 @@ import dotenv from "dotenv";
 import fs from "fs";
 import { getStudentStatusGroup } from "./src/lib/studentStatusGroups.ts";
 import { findRecordIndex } from "./src/lib/recordMatching.ts";
-import { testConnection, loadStateFromFirestore, syncEntityToFirestore, syncCustomizationToFirestore, syncGalleriesToFirestore, syncLmsClassToFirestore, syncAllLmsClassesToFirestore, deleteEntityFromFirestore, uploadBufferToFirebaseStorage, getUserFromFirestore, getEntityFromFirestore, db, touchSyncMeta, setSyncInstanceId, parseSyncChangeValue, SYNC_CHANGES_DOC_ID } from "./src/db/firebase-adapter.ts";
+import { testConnection, loadStateFromFirestore, syncEntityToFirestore, syncCustomizationToFirestore, syncGalleriesToFirestore, syncLmsClassToFirestore, syncAllLmsClassesToFirestore, deleteEntityFromFirestore, uploadBufferToFirebaseStorage, getUserFromFirestore, getEntityFromFirestore, db, touchSyncMeta, setSyncInstanceId, parseSyncChangeValue, SYNC_CHANGES_DOC_ID, mergeEntityFieldsToFirestore } from "./src/db/firebase-adapter.ts";
 import { doc, getDoc } from "firebase/firestore";
 import { DEFAULT_GALLERY_ITEMS } from "./src/data/defaultGallery.ts";
 import { isHashedPassword, hashPassword, verifyPassword, stripPassword } from "./server/auth-utils.ts";
@@ -1327,7 +1327,8 @@ app.post("/api/state/update", async (req, res) => {
                      deleteEntityFromFirestore("registeredStudents", id);
                      
                      // Sync the newly created active student
-                     const match = state.activeStudents.find(s => s.name === data.updated.name);
+                     const matchIdx = findRecordIndex(state.activeStudents, { email: data.updated.email, name: data.updated.name });
+                     const match = matchIdx !== -1 ? state.activeStudents[matchIdx] : undefined;
                      if (match) {
                          syncEntityToFirestore("activeStudents", match.id, match);
                      }
@@ -1775,7 +1776,7 @@ async function startServer() {
 
                 if (updatedStudent) {
                   alignmentCount++;
-                  syncEntityToFirestore("activeStudents", activeStudent.id, activeStudent);
+                  mergeEntityFieldsToFirestore("activeStudents", activeStudent.id, { profilePicture: state.activeStudents[actIndex].profilePicture });
                 }
               }
             }
