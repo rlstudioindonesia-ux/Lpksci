@@ -7,6 +7,7 @@ import { mergeQuizRetake } from "../../src/lib/quizRetake.ts";
 import { todayJakartaISO } from "../../src/lib/dateUtils.ts";
 import { uniqueIdSuffix } from "../../src/lib/idGenerator.ts";
 import { refreshListItem } from "../freshRead.ts";
+import { findRecordIndex } from "../../src/lib/recordMatching.ts";
 
 async function uploadBase64IfPresent(dataStr: string | undefined, prefix: string, folder: string): Promise<string> {
   if (!dataStr || typeof dataStr !== "string" || !dataStr.startsWith("data:")) {
@@ -506,16 +507,16 @@ export async function handleLmsState(req: Request, res: Response, dataType: stri
           const cleanChapterNum = chapterNumber !== undefined ? Number(chapterNumber) : 1;
 
           // Cross-reference activeStudents and users to always canonicalize cleanStudentId to official student ID (e.g. SIS-xxx)
-          const matchedActive = (state.activeStudents || []).find((s: any) => {
-            const sId = (s.id || "").trim().toLowerCase();
-            const sEmail = (s.email || "").trim().toLowerCase();
-            const sName = (s.name || "").trim().toLowerCase();
-            const target = cleanStudentId.toLowerCase();
-            return (sId && sId === target) ||
-                   (sEmail && sEmail === target) ||
-                   (target.includes("@") && sEmail === target) ||
-                   (finalStudentName && finalStudentName !== "Siswa" && sName === finalStudentName.toLowerCase());
+          // id -> email -> unique name (src/lib/recordMatching.ts). A single
+          // find(id || email || name) returned the FIRST student matching any of
+          // them, so with two students of the same name the grade was filed under
+          // the other student's id (23-10-2026).
+          const matchedActiveIdx = findRecordIndex(state.activeStudents, {
+            id: cleanStudentId,
+            email: cleanStudentId.includes("@") ? cleanStudentId : (studentEmail || ""),
+            name: finalStudentName && finalStudentName !== "Siswa" ? finalStudentName : "",
           });
+          const matchedActive = matchedActiveIdx !== -1 ? state.activeStudents[matchedActiveIdx] : undefined;
 
           if (matchedActive) {
             cleanStudentId = matchedActive.id || cleanStudentId;

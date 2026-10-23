@@ -55,6 +55,9 @@ describe("authorizeStateUpdate", () => {
     expect(authorizeStateUpdate(budi, "messages", "send", { senderId: "admin" }, ctx).allowed).toBe(false);
     expect(authorizeStateUpdate(budi, "messages", "delete", { id: "M1" }, ctx).allowed).toBe(true);
     expect(authorizeStateUpdate(sensei, "messages", "delete", { id: "M1" }, ctx).allowed).toBe(false);
+    expect(authorizeStateUpdate(budi, "messages", "clear_chat", { myChatId: "budi@x.id", otherChatId: "kelas_A", isGroup: true }, ctx).allowed).toBe(false);
+    expect(authorizeStateUpdate(sensei, "messages", "clear_chat", { myChatId: "sensei1", otherChatId: "kelas_A", isGroup: true }, ctx).allowed).toBe(true);
+    expect(authorizeStateUpdate(budi, "messages", "clear_chat", { myChatId: "budi@x.id", otherChatId: "sensei1" }, ctx).allowed).toBe(true);
   });
 
   it("teachers manage teaching data but not money, accounts or site settings", () => {

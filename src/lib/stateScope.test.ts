@@ -28,6 +28,8 @@ const payload = {
     { id: "M1", senderId: "budi@x.id", receiverId: "sensei1" },
     { id: "M2", senderId: "sari@x.id", receiverId: "sensei1" },
     { id: "M3", senderId: "sari@x.id", receiverId: "kelas_A" },
+    { id: "M4", senderId: "sari@x.id", receiverId: "admin_shared" },
+    { id: "M5", senderId: "admin_shared", receiverId: "budi@x.id" },
   ],
   lmsQuizzes: [
     { id: "Q1", question: "?", correctAnswerIndex: 2 },
@@ -54,7 +56,7 @@ describe("scopeStateForViewer", () => {
     expect(s.chapterAssessments[0].studentQuizAnswers).toEqual(["a"]);
     expect(s.users.find((u: any) => u.username === "sari@x.id").bankAccount).toBeUndefined();
     expect(s.users.find((u: any) => u.username === "budi@x.id").bankAccount).toBe("123");
-    expect(s.messages.map((m: any) => m.id)).toEqual(["M1", "M3"]);
+    expect(s.messages.map((m: any) => m.id)).toEqual(["M1", "M3", "M5"]);
     expect(s.cashLedger).toEqual([]);
     expect(s.salaries).toEqual([]);
     // Answer key only for the quiz Budi already submitted.
