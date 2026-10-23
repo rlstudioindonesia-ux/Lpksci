@@ -4,7 +4,7 @@ import { hashPassword, isHashedPassword } from "../auth-utils.ts";
 import { invalidateStateCache } from "../stateCache.ts";
 import { EXTRA_STUDENT_DOCUMENT_FIELDS } from "../../src/lib/studentDocuments.ts";
 import { findRecordIndex } from "../../src/lib/recordMatching.ts";
-import { findRegistrationUpdateTarget, isPhantomRegistration } from "../../src/lib/registrationUpdate.ts";
+import { findRegistrationUpdateTarget, isPhantomRegistration, findPhantomRegistrations } from "../../src/lib/registrationUpdate.ts";
 import { normalizeGender } from "../../src/lib/gender.ts";
 import { todayJakartaISO } from "../../src/lib/dateUtils.ts";
 import { nextSequentialId, collectUsedStudentIds } from "../../src/lib/idGenerator.ts";
@@ -72,6 +72,21 @@ function applySentFieldsToActiveStudent(act: any, sent: any, allowClear = false)
   if (Object.keys(changedFields).length > 0) {
     mergeEntityFieldsToFirestore("activeStudents", act.id, changedFields);
   }
+}
+
+// 23-10-2026 (owner): removes phantom registrants (copies of an active student
+// or empty records) after the state is loaded. Only the registration is
+// deleted; the active student and the login account stay untouched.
+export function cleanupPhantomRegistrations(state: any): number {
+  const phantoms = findPhantomRegistrations(state.registeredStudents, state.activeStudents);
+  if (phantoms.length === 0) return 0;
+  const drop = new Set(phantoms);
+  state.registeredStudents = state.registeredStudents.filter((r: any) => !drop.has(r));
+  for (const reg of phantoms) {
+    if (reg.id) deleteEntityFromFirestore("registeredStudents", reg.id);
+  }
+  console.log(`🧹 [Cleanup] Removed ${phantoms.length} phantom registrant(s): ${phantoms.map((r: any) => r.id || "(no id)").join(", ")}`);
+  return phantoms.length;
 }
 
 // Registered student approval/rejection workflow
@@ -379,7 +394,10 @@ export async function handleRegistrationState(req: Request, res: Response, dataT
           const act = state.activeStudents[target.index];
           applySentFieldsToActiveStudent(act, processedPayload, true);
           if (typeof invalidateStateCache === "function") invalidateStateCache();
-          return res.json({ success: true, updated: act });
+          // Not `updated`/`item`: server.ts auto-syncs those under this
+          // request's dataType, which would write the student back into
+          // registeredStudents and recreate the phantom registrant.
+          return res.json({ success: true, activeStudent: act });
         } else {
           return res.status(404).json({ success: false, error: "Data pendaftar tidak ditemukan (mungkin sudah disetujui atau dihapus). Muat ulang halaman." });
         }

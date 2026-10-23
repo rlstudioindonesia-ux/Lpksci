@@ -1165,7 +1165,7 @@ export default function App() {
           savedItems.forEach((it: any) => { if (it && it.id) recentLocalItemIdsRef.current.set(it.id, savedAt); });
         }
         if (dataType === "activeStudents" || dataType === "registeredStudents") {
-          const item = resData?.item || resData?.updated || payload;
+          const item = resData?.item || resData?.updated || resData?.activeStudent || payload;
           if (item) {
             setSystemState((prev: any) => {
               if (!prev) return prev;

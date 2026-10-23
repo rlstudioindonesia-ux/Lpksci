@@ -50,3 +50,20 @@ export function isPhantomRegistration(registration: any, active: any[] | null | 
   if (!id || !Array.isArray(active)) return false;
   return active.some((s) => s && norm(s.id) === id);
 }
+
+const isBlank = (v: any) => !String(v ?? "").trim();
+
+/**
+ * 23-10-2026 (owner): automatic cleanup of phantom registrants. Returns the
+ * registrations to delete: copies of an active student (same id) and empty
+ * records without name, email and phone (left by updates that only carried an
+ * id plus a document). Only the registration is deleted, never the student.
+ */
+export function findPhantomRegistrations(registered: any[] | null | undefined, active: any[] | null | undefined): any[] {
+  if (!Array.isArray(registered)) return [];
+  return registered.filter(
+    (r) =>
+      r &&
+      (isPhantomRegistration(r, active) || (isBlank(r.name) && isBlank(r.email) && isBlank(r.phone))),
+  );
+}
