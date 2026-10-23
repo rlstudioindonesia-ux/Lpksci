@@ -5,12 +5,14 @@ import { createServer as createViteServer } from "vite";
 import dotenv from "dotenv";
 import fs from "fs";
 import { getStudentStatusGroup } from "./src/lib/studentStatusGroups.ts";
+import { findRecordIndex } from "./src/lib/recordMatching.ts";
 import { testConnection, loadStateFromFirestore, syncEntityToFirestore, syncCustomizationToFirestore, syncGalleriesToFirestore, syncLmsClassToFirestore, syncAllLmsClassesToFirestore, deleteEntityFromFirestore, uploadBufferToFirebaseStorage, getUserFromFirestore, getEntityFromFirestore, db, touchSyncMeta, setSyncInstanceId, parseSyncChangeValue, SYNC_CHANGES_DOC_ID } from "./src/db/firebase-adapter.ts";
 import { doc, getDoc } from "firebase/firestore";
 import { DEFAULT_GALLERY_ITEMS } from "./src/data/defaultGallery.ts";
 import { isHashedPassword, hashPassword, verifyPassword, stripPassword } from "./server/auth-utils.ts";
 import { handleStateUpdate } from "./server/handlers/index.ts";
 import { invalidateStateCache, getStateVersion, getCachedStateResponse, setCachedStateResponse } from "./server/stateCache.ts";
+import { uniqueIdSuffix } from "./src/lib/idGenerator.ts";
 
 export { invalidateStateCache };
 
@@ -590,6 +592,9 @@ app.post("/api/request-reset", async (req, res) => {
 app.post("/api/reset-password", async (req, res) => {
   try {
     const { token, newPassword } = req.body;
+    if (!newPassword || String(newPassword).trim().length < 6) {
+      return res.status(400).json({ error: "Password baru minimal 6 karakter." });
+    }
 
     if (!state.passwordResets) state.passwordResets = [];
     const resetIndex = state.passwordResets.findIndex((r) => r.token === token);
@@ -672,6 +677,9 @@ function getOrBuildStateJson(): { json: string; etag: string; version: number } 
 
   const payload = {
     ...state,
+    // Password-reset tokens must never leave the server: /api/state is readable
+    // by every visitor, so anyone could take a token and reset that account.
+    passwordResets: undefined,
     _isReady: isStateReady,
     _stateVersion: currentVersion,
     logs: (state.logs || []).map((l: any) => stripHeavyBase64Shallow(l, "[FOTO_TERSIMPAN]", new Set(["avatar"]))),
@@ -1141,7 +1149,7 @@ app.post("/api/register", async (req, res) => {
   const rawPassword = password || "123456";
 
   const newReg = {
-    id: `REG-${Date.now().toString().slice(-6)}`,
+    id: `REG-${uniqueIdSuffix()}`,
     name,
     email,
     password: hashPassword(rawPassword),
@@ -1180,7 +1188,8 @@ app.post("/api/register", async (req, res) => {
   if (isAlumni) {
     // Auto-approve as Active Student with status "Di Jepang"
     assignedStudentId = "SIS-001";
-    const existingActive = state.activeStudents.find(s => s.name === name);
+    const existingActiveIdx = findRecordIndex(state.activeStudents, { email, name });
+    const existingActive = existingActiveIdx !== -1 ? state.activeStudents[existingActiveIdx] : undefined;
     if (existingActive) {
       assignedStudentId = existingActive.id;
     } else {
@@ -1238,7 +1247,7 @@ app.post("/api/register", async (req, res) => {
 
   // Insert a companion payment statement inside the ledger
   const newPay = {
-    id: isAutomatic ? `PAY-MID-${Date.now().toString().slice(-4)}` : `PAY-MAN-${Date.now().toString().slice(-4)}`,
+    id: isAutomatic ? `PAY-MID-${uniqueIdSuffix()}` : `PAY-MAN-${uniqueIdSuffix()}`,
     studentName: name,
     category: isAlumni ? `Registrasi Alumni (Sistem)` : `Pendaftaran Hub (${paymentMethod || "Virtual Account"})`,
     amount: isAlumni ? 0 : (paymentAmount !== undefined ? Number(paymentAmount) : 500000),

@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import { syncEntityToFirestore, syncEntityToFirestoreAsync, deleteEntityFromFirestore, uploadBufferToFirebaseStorage, touchSyncMeta, getEntityFromFirestore, getLastLocalWriteAt } from "../../src/db/firebase-adapter.ts";
 import { hashPassword, isHashedPassword } from "../auth-utils.ts";
 import { invalidateStateCache } from "../stateCache.ts";
+import { findRecordIndex } from "../../src/lib/recordMatching.ts";
 import { EXTRA_STUDENT_DOCUMENT_FIELDS } from "../../src/lib/studentDocuments.ts";
 
 const STRIPPED_PLACEHOLDERS = new Set(["[BERKAS_TERSIMPAN]", "[FOTO_TERSIMPAN]", "[BUKTI_TERSIMPAN]"]);
@@ -96,20 +97,22 @@ export async function handleStudentsState(req: Request, res: Response, dataType:
             deleteEntityFromFirestore("activeStudents", studentToDelete.id);
           }
           // Cascade delete from users
-          const userAccount = state.users.find(
-            (u: any) => (u.studentId && u.studentId === id) || 
-                        (u.name && studentToDelete.name && u.name.trim().toLowerCase() === studentToDelete.name.trim().toLowerCase())
-          );
+          // studentId link first: a name-only match could delete the account of a
+          // different student who happens to share the name.
+          const studentRoles = ["Siswa", "Alumni"];
+          const userAccount =
+            state.users.find((u: any) => u.studentId && u.studentId === id) ||
+            (state.users.filter((u: any) => studentRoles.includes(u.role) && !u.studentId && u.name && studentToDelete.name && u.name.trim().toLowerCase() === studentToDelete.name.trim().toLowerCase()).length === 1
+              ? state.users.find((u: any) => studentRoles.includes(u.role) && !u.studentId && u.name && u.name.trim().toLowerCase() === studentToDelete.name.trim().toLowerCase())
+              : undefined);
           if (userAccount) {
             state.users = state.users.filter((u: any) => u.username !== userAccount.username);
             deleteEntityFromFirestore("users", userAccount.username);
           }
 
           // Cascade delete from registeredStudents
-          const regStudent = state.registeredStudents.find(
-            (s: any) => s.id === id || 
-                        (s.name && studentToDelete.name && s.name.trim().toLowerCase() === studentToDelete.name.trim().toLowerCase())
-          );
+          const regMatchIdx = findRecordIndex(state.registeredStudents, { id, email: studentToDelete.email, name: studentToDelete.name });
+          const regStudent = regMatchIdx !== -1 ? state.registeredStudents[regMatchIdx] : undefined;
           if (regStudent) {
             state.registeredStudents = state.registeredStudents.filter((s: any) => s.id !== regStudent.id);
             deleteEntityFromFirestore("registeredStudents", regStudent.id);
@@ -227,16 +230,8 @@ export async function handleStudentsState(req: Request, res: Response, dataType:
           verifiedDocs,
         } = payload;
 
-        let index = state.activeStudents.findIndex((s: any) => 
-          (s.id && id && String(s.id).trim().toLowerCase() === String(id).trim().toLowerCase()) ||
-          (s.name && payload.name && s.name.trim().toLowerCase() === payload.name.trim().toLowerCase()) ||
-          (s.email && payload.email && s.email.trim().toLowerCase() === payload.email.trim().toLowerCase())
-        );
-        if (index === -1 && payload.name) {
-          index = state.activeStudents.findIndex(
-            (s: any) => s.name && s.name.trim().toLowerCase() === payload.name.trim().toLowerCase()
-          );
-        }
+        // id first, then email, then a unique name (see src/lib/recordMatching.ts)
+        const index = findRecordIndex(state.activeStudents, { id, name: payload.name, email: payload.email });
 
         const effectiveClass = className !== undefined ? className : program;
         let effectivePhoto = profilePicture || docFoto;
@@ -471,10 +466,7 @@ export async function handleStudentsState(req: Request, res: Response, dataType:
           const actStudent = state.activeStudents[index];
 
           // Synchronize changes to registeredStudents if record exists
-          const regIndex = state.registeredStudents.findIndex(
-            (rs: any) =>
-              rs.id === id || (rs.name && rs.name.trim().toLowerCase() === actStudent.name.trim().toLowerCase())
-          );
+          const regIndex = findRecordIndex(state.registeredStudents, { id, email: actStudent.email, name: actStudent.name });
           if (regIndex !== -1) {
             state.registeredStudents[regIndex] = {
               ...state.registeredStudents[regIndex],
@@ -510,7 +502,14 @@ export async function handleStudentsState(req: Request, res: Response, dataType:
           }
 
           // Sync up to UserAccount!
-          const userIndex = state.users.findIndex(
+          // Prefer the account linked by studentId; the name/email fallbacks below
+          // could otherwise pick another student's account when names collide.
+          const linkedUserIndex = state.users.findIndex(
+            (u: any) =>
+              !["Pengajar", "VVIP", "Admin", "Admin Super", "Admin Biasa"].includes(u.role) &&
+              u.studentId && u.studentId === actStudent.id
+          );
+          const userIndex = linkedUserIndex !== -1 ? linkedUserIndex : state.users.findIndex(
             (u: any) =>
               !["Pengajar", "VVIP", "Admin", "Admin Super", "Admin Biasa"].includes(u.role) &&
               ((u.studentId && u.studentId === id) ||
@@ -552,12 +551,7 @@ export async function handleStudentsState(req: Request, res: Response, dataType:
           return res.json({ success: true, item: state.activeStudents[index] });
         } else {
           // If student was not found in activeStudents, check registeredStudents
-          const regIndex = state.registeredStudents.findIndex(
-            (rs: any) =>
-              (rs.id && id && String(rs.id).trim().toLowerCase() === String(id).trim().toLowerCase()) ||
-              (payload.name && rs.name && rs.name.trim().toLowerCase() === payload.name.trim().toLowerCase()) ||
-              (payload.email && rs.email && rs.email.trim().toLowerCase() === payload.email.trim().toLowerCase())
-          );
+          const regIndex = findRecordIndex(state.registeredStudents, { id, name: payload.name, email: payload.email });
           if (regIndex !== -1) {
             state.registeredStudents[regIndex] = {
               ...state.registeredStudents[regIndex],

@@ -63,6 +63,7 @@ import {
   BroadcastNotificationItem
 } from "./lib/notifications";
 import { hasStaffOversight } from "./lib/permissions";
+import { findRecordIndex } from "./lib/recordMatching";
 import {
   Bell,
   Volume2,
@@ -1159,20 +1160,14 @@ export default function App() {
               const actList = Array.isArray(prev.activeStudents) ? [...prev.activeStudents] : [];
               const regList = Array.isArray(prev.registeredStudents) ? [...prev.registeredStudents] : [];
 
-              const actIdx = actList.findIndex((s: any) => 
-                (item.id && s.id && String(s.id).trim().toLowerCase() === String(item.id).trim().toLowerCase()) ||
-                (item.name && s.name && s.name.trim().toLowerCase() === item.name.trim().toLowerCase())
-              );
+              const actIdx = findRecordIndex(actList, { id: item.id, name: item.name });
               if (actIdx !== -1) {
                 actList[actIdx] = { ...actList[actIdx], ...item };
               } else if (dataType === "activeStudents" && action === "add") {
                 actList.push(item);
               }
 
-              const regIdx = regList.findIndex((r: any) => 
-                (item.id && r.id && String(r.id).trim().toLowerCase() === String(item.id).trim().toLowerCase()) ||
-                (item.name && r.name && r.name.trim().toLowerCase() === item.name.trim().toLowerCase())
-              );
+              const regIdx = findRecordIndex(regList, { id: item.id, name: item.name });
               if (regIdx !== -1) {
                 regList[regIdx] = { ...regList[regIdx], ...item };
               } else if (dataType === "registeredStudents" && action === "add") {

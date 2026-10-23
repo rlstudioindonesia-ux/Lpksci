@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import { syncEntityToFirestore, deleteEntityFromFirestore } from "../../src/db/firebase-adapter.ts";
+import { uniqueIdSuffix } from "../../src/lib/idGenerator.ts";
 
 // Job Order applicant pipeline
 // Extracted verbatim from the monolithic /api/state/update handler in server.ts.
@@ -24,7 +25,7 @@ export function handleJobOrdersState(req: Request, res: Response, dataType: stri
         
         const newJob = {
           id: `JOB-${(state.jobOrders.length + 1).toString().padStart(3, "0")}`,
-          noReg: noReg || `REG-JOB-${Date.now().toString().slice(-4)}`,
+          noReg: noReg || `REG-JOB-${uniqueIdSuffix()}`,
           jobType: jobType || "Tokutei ginou",
           partnerName,
           occupation,
@@ -64,7 +65,7 @@ export function handleJobOrdersState(req: Request, res: Response, dataType: stri
         }
         const todayStr = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
         const jobEvent = {
-          id: `EV-JOB-${Date.now().toString().slice(-4)}`,
+          id: `EV-JOB-${uniqueIdSuffix()}`,
           title: `Lowongan Kerja Baru: ${occupation} di ${location}`,
           date: todayStr,
           desc: `Telah dibuka lowongan baru oleh ${partnerName} untuk posisi ${occupation}. Gaji Pokok: ${salary}, Kontrak: ${contractDuration}. Silakan cek tab Karir / Lowongan Kerja di LMS Anda untuk mendaftar seleksi ini! 🚀`,
@@ -120,7 +121,7 @@ export function handleJobOrdersState(req: Request, res: Response, dataType: stri
             }
             const todayStr = new Date().toISOString().split("T")[0];
             const recEvent = {
-              id: `EV-REC-${Date.now().toString().slice(-5)}`,
+              id: `EV-REC-${uniqueIdSuffix()}`,
               title: `Rekomendasi Job Order: ${job.occupation}`,
               date: todayStr,
               desc: `Anda direkomendasikan untuk posisi ${job.occupation} di ${job.partnerName}. Segera cek tab Karir / Lowongan Kerja.`,

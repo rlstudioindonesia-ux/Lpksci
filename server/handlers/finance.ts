@@ -1,5 +1,33 @@
 import type { Request, Response } from "express";
 import { syncEntityToFirestore, syncEntityToFirestoreAsync, deleteEntityFromFirestore, touchSyncMeta } from "../../src/db/firebase-adapter.ts";
+import { uniqueIdSuffix } from "../../src/lib/idGenerator.ts";
+import { findRecordIndex } from "../../src/lib/recordMatching.ts";
+import { planLedgerSyncForPayment } from "../../src/lib/paymentLedger.ts";
+
+// Keeps the auto-created Buku Kas income entry (code === payment.id) in step with
+// its payment (see src/lib/paymentLedger.ts).
+function syncLedgerForPayment(state: any, payment: any) {
+  if (!state.cashLedger) state.cashLedger = [];
+  const plan = planLedgerSyncForPayment(state.cashLedger, payment);
+  if (plan.kind === "add") {
+    const newLedger = {
+      id: `CAS-${uniqueIdSuffix()}`,
+      code: payment.id,
+      date: new Date().toISOString().split("T")[0],
+      description: `Pembayaran ${payment.category} - ${payment.studentName}`,
+      inAmount: plan.inAmount,
+      outAmount: 0
+    };
+    state.cashLedger.push(newLedger);
+    syncEntityToFirestore("cashLedger", newLedger.id, newLedger);
+  } else if (plan.kind === "update") {
+    state.cashLedger[plan.index] = { ...state.cashLedger[plan.index], inAmount: plan.inAmount };
+    syncEntityToFirestore("cashLedger", state.cashLedger[plan.index].id, state.cashLedger[plan.index]);
+  } else if (plan.kind === "remove") {
+    const [removed] = state.cashLedger.splice(plan.index, 1);
+    if (removed?.id) deleteEntityFromFirestore("cashLedger", removed.id);
+  }
+}
 
 // Cash ledger, payments, taxes, and program cost config
 // Extracted verbatim from the monolithic /api/state/update handler in server.ts.
@@ -12,7 +40,7 @@ export async function handleFinanceState(req: Request, res: Response, dataType: 
     if (dataType === "cashLedger" && action === "add") {
       if (!state.cashLedger) state.cashLedger = [];
       const newLedger = {
-        id: `CAS-${Date.now().toString().slice(-4)}`,
+        id: `CAS-${uniqueIdSuffix()}`,
         code: payload.code || "",
         date: payload.date || new Date().toISOString().split("T")[0],
         description: payload.description || "",
@@ -52,7 +80,7 @@ export async function handleFinanceState(req: Request, res: Response, dataType: 
 
 
     if (dataType === "payments" && action === "add") {
-      const payId = payload.id || `PAY-${Date.now().toString().slice(-6)}-${Math.floor(Math.random()*1000)}`;
+      const payId = payload.id || `PAY-${uniqueIdSuffix()}`;
       const newPay = {
         id: payId,
         studentName: payload.studentName || "",
@@ -81,34 +109,16 @@ export async function handleFinanceState(req: Request, res: Response, dataType: 
         
         // Synchronize corresponding manual payment state inside registeredStudents if name matches
         const pName = state.payments[index].studentName;
-        const regMatch = state.registeredStudents.find(
-          (s) => (s.name || "").trim().toLowerCase() === (pName || "").trim().toLowerCase()
-        );
+        // Only when the name identifies exactly one registration (shared names
+        // used to mark the wrong applicant as paid).
+        const regMatchIdx = findRecordIndex(state.registeredStudents, { name: pName });
+        const regMatch = regMatchIdx !== -1 ? state.registeredStudents[regMatchIdx] : undefined;
         if (regMatch) {
           regMatch.paymentStatus = payload.status;
           syncEntityToFirestore("registeredStudents", regMatch.id, regMatch);
         }
         
-        // Auto-record to cash ledger if marked as Lunas
-        if (payload.status === "Lunas") {
-           if (!state.cashLedger) state.cashLedger = [];
-           const payment = state.payments[index];
-           
-           // Avoid duplicating if already exists in cash ledger
-           const exists = state.cashLedger.some(c => c.code === payment.id);
-           if (!exists) {
-             const newLedger = {
-               id: `CAS-${Date.now().toString().slice(-4)}`,
-               code: payment.id,
-               date: new Date().toISOString().split("T")[0],
-               description: `Pembayaran ${payment.category} - ${payment.studentName}`,
-               inAmount: Number(payment.amount) || 0,
-               outAmount: 0
-             };
-             state.cashLedger.push(newLedger);
-             syncEntityToFirestore('cashLedger', newLedger.id, newLedger);
-           }
-        }
+        syncLedgerForPayment(state, state.payments[index]);
 
         syncEntityToFirestore("payments", state.payments[index].id, state.payments[index]);
         return res.json({ success: true, item: state.payments[index] });
@@ -121,7 +131,7 @@ export async function handleFinanceState(req: Request, res: Response, dataType: 
       let index = state.payments.findIndex(p => p.id === id);
       if (index === -1) {
         const newPay = {
-          id: id || `PAY-${Date.now().toString().slice(-4)}`,
+          id: id || `PAY-${uniqueIdSuffix()}`,
           studentName: studentName || "Siswa LPK",
           category: category || "Pelatihan & Asrama",
           amount: amount ? Number(amount) : 5000000,
@@ -140,6 +150,7 @@ export async function handleFinanceState(req: Request, res: Response, dataType: 
         if (status !== undefined) state.payments[index].status = status;
         if (isSigned !== undefined) state.payments[index].isSigned = isSigned;
         if (signatureDate !== undefined) state.payments[index].signatureDate = signatureDate;
+        syncLedgerForPayment(state, state.payments[index]);
         syncEntityToFirestore("payments", state.payments[index].id, state.payments[index]);
         return res.json({ success: true, item: state.payments[index] });
       }
@@ -258,6 +269,7 @@ export async function handleFinanceState(req: Request, res: Response, dataType: 
       if (id) {
         state.payments = state.payments.filter(p => p.id !== id);
         deleteEntityFromFirestore("payments", id);
+        syncLedgerForPayment(state, { id, status: "Dihapus" });
       }
       if (studentName && category) {
         const matching = state.payments.filter(p => 
@@ -294,29 +306,13 @@ export async function handleFinanceState(req: Request, res: Response, dataType: 
           status: status || state.payments[idx].status,
         };
         
-        if (state.payments[idx].status === "Lunas") {
-           if (!state.cashLedger) state.cashLedger = [];
-           const payment = state.payments[idx];
-           const exists = state.cashLedger.some(c => c.code === payment.id);
-           if (!exists) {
-             const newLedger = {
-               id: `CAS-${Date.now().toString().slice(-4)}`,
-               code: payment.id,
-               date: new Date().toISOString().split("T")[0],
-               description: `Pembayaran ${payment.category} - ${payment.studentName}`,
-               inAmount: Number(payment.amount) || 0,
-               outAmount: 0
-             };
-             state.cashLedger.push(newLedger);
-             syncEntityToFirestore('cashLedger', newLedger.id, newLedger);
-           }
-        }
+        syncLedgerForPayment(state, state.payments[idx]);
 
         syncEntityToFirestore("payments", state.payments[idx].id, state.payments[idx]);
         return res.json({ success: true, updated: state.payments[idx], item: state.payments[idx] });
       } else {
         const newPay = {
-          id: targetId || `PAY-MAN-${Date.now().toString().slice(-4)}`,
+          id: targetId || `PAY-MAN-${uniqueIdSuffix()}`,
           studentName: studentName || "Siswa LPK",
           category: category || "Pembayaran Pendidikan",
           amount: amount !== undefined ? Number(amount) : 500000,
@@ -327,22 +323,7 @@ export async function handleFinanceState(req: Request, res: Response, dataType: 
         };
         state.payments.unshift(newPay);
 
-        if (newPay.status === "Lunas") {
-           if (!state.cashLedger) state.cashLedger = [];
-           const exists = state.cashLedger.some(c => c.code === newPay.id);
-           if (!exists) {
-             const newLedger = {
-               id: `CAS-${Date.now().toString().slice(-4)}`,
-               code: newPay.id,
-               date: new Date().toISOString().split("T")[0],
-               description: `Pembayaran ${newPay.category} - ${newPay.studentName}`,
-               inAmount: Number(newPay.amount) || 0,
-               outAmount: 0
-             };
-             state.cashLedger.push(newLedger);
-             syncEntityToFirestore('cashLedger', newLedger.id, newLedger);
-           }
-        }
+        syncLedgerForPayment(state, newPay);
 
         syncEntityToFirestore("payments", newPay.id, newPay);
         return res.json({ success: true, updated: newPay, item: newPay });

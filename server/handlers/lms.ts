@@ -2,6 +2,7 @@ import type { Request, Response } from "express";
 import { syncEntityToFirestore, deleteEntityFromFirestore, syncEntityToFirestoreAsync, deleteEntityFromFirestoreAsync, uploadBufferToFirebaseStorage, touchSyncMeta } from "../../src/db/firebase-adapter.ts";
 import { invalidateStateCache } from "../stateCache.ts";
 import { isSameSubject, getCanonicalSubjectSlug } from "../../src/lib/subjectHelper.ts";
+import { uniqueIdSuffix } from "../../src/lib/idGenerator.ts";
 
 async function uploadBase64IfPresent(dataStr: string | undefined, prefix: string, folder: string): Promise<string> {
   if (!dataStr || typeof dataStr !== "string" || !dataStr.startsWith("data:")) {
@@ -34,7 +35,7 @@ export async function handleLmsState(req: Request, res: Response, dataType: stri
     if (dataType === "lmsLessons") {
       if (action === "add") {
         const processAddLesson = async () => {
-          const lessonId = payload.id || `L-${payload.subject === "Bahasa Jepang" ? "JP" : payload.subject === "Matematika" ? "MT" : "ME"}-${Date.now().toString().slice(-4)}`;
+          const lessonId = payload.id || `L-${payload.subject === "Bahasa Jepang" ? "JP" : payload.subject === "Matematika" ? "MT" : "ME"}-${uniqueIdSuffix()}`;
           
           let finalSlidesUrl = payload.slidesUrl || "";
           if (finalSlidesUrl && finalSlidesUrl.startsWith("data:")) {
@@ -363,7 +364,7 @@ export async function handleLmsState(req: Request, res: Response, dataType: stri
       if (normQuizAction === "add" || normQuizAction === "create") {
         const processAddQuiz = async () => {
           if (!state.lmsQuizzes) state.lmsQuizzes = [];
-          const quizId = payload.id || `Q-${payload.subject === "Bahasa Jepang" ? "JP" : payload.subject === "SSW" ? "SW" : "ME"}-${Date.now().toString().slice(-4)}`;
+          const quizId = payload.id || `Q-${payload.subject === "Bahasa Jepang" ? "JP" : payload.subject === "SSW" ? "SW" : "ME"}-${uniqueIdSuffix()}`;
           
           let finalImg = payload.imageUrl || "";
           if (finalImg && finalImg.startsWith("data:")) {
@@ -428,7 +429,7 @@ export async function handleLmsState(req: Request, res: Response, dataType: stri
       if (normQuizAction === "edit" || normQuizAction === "update" || normQuizAction === "upsert") {
         const processEditQuiz = async () => {
           if (!state.lmsQuizzes) state.lmsQuizzes = [];
-          const quizId = payload.id || `Q-${payload.subject === "Bahasa Jepang" ? "JP" : payload.subject === "SSW" ? "SW" : "ME"}-${Date.now().toString().slice(-4)}`;
+          const quizId = payload.id || `Q-${payload.subject === "Bahasa Jepang" ? "JP" : payload.subject === "SSW" ? "SW" : "ME"}-${uniqueIdSuffix()}`;
           const index = state.lmsQuizzes.findIndex(q => q.id === quizId);
 
           let finalImg = payload.imageUrl !== undefined ? payload.imageUrl : (index !== -1 ? state.lmsQuizzes[index].imageUrl : "");

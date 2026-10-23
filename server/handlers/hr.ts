@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import { syncEntityToFirestore, deleteEntityFromFirestore, uploadBufferToFirebaseStorage } from "../../src/db/firebase-adapter.ts";
+import { uniqueIdSuffix } from "../../src/lib/idGenerator.ts";
 
 // Attendance, salaries, and teacher leave/report/contract records
 // Extracted verbatim from the monolithic /api/state/update handler in server.ts.
@@ -28,7 +29,7 @@ export function handleHrState(req: Request, res: Response, dataType: string, act
         }
 
         const newAtt = {
-          id: `ATT-${Date.now().toString().slice(-4)}`,
+          id: `ATT-${uniqueIdSuffix()}`,
           studentId: payload.studentId,
           studentName: payload.studentName,
           date: payload.date || new Date().toISOString().split("T")[0],
@@ -137,7 +138,7 @@ export function handleHrState(req: Request, res: Response, dataType: string, act
     if (dataType === "salaries" && action === "add") {
       if (!state.salaries) state.salaries = [];
       const newSalary = {
-        id: `SAL-${Date.now().toString().slice(-4)}`,
+        id: `SAL-${uniqueIdSuffix()}`,
         staffName: payload.staffName,
         role: payload.role || "Staff",
         amount: Number(payload.amount),

@@ -3,6 +3,8 @@ import { syncEntityToFirestore, deleteEntityFromFirestore, uploadBufferToFirebas
 import { hashPassword, isHashedPassword } from "../auth-utils.ts";
 import { invalidateStateCache } from "../stateCache.ts";
 import { EXTRA_STUDENT_DOCUMENT_FIELDS } from "../../src/lib/studentDocuments.ts";
+import { findRecordIndex } from "../../src/lib/recordMatching.ts";
+import { uniqueIdSuffix } from "../../src/lib/idGenerator.ts";
 
 async function uploadBase64IfPresent(dataStr: string | undefined, prefix: string, folder: string): Promise<string> {
   if (!dataStr || typeof dataStr !== "string" || !dataStr.startsWith("data:")) {
@@ -46,7 +48,10 @@ export async function handleRegistrationState(req: Request, res: Response, dataT
         
         // Also automatically recruit them to the activeStudent pool for learning!
         let assignedStudentId = "SIS-001";
-        const existingActive = state.activeStudents.find(s => s.name === match.name);
+        // Email first, then a unique name: matching on name alone merged two
+        // different applicants who share a name into one student record.
+        const existingActiveIdx = findRecordIndex(state.activeStudents, { email: match.email, name: match.name });
+        const existingActive = existingActiveIdx !== -1 ? state.activeStudents[existingActiveIdx] : undefined;
         if (existingActive) {
           assignedStudentId = existingActive.id;
           existingActive.birthDate = existingActive.birthDate || match.birthDate;
@@ -343,7 +348,7 @@ export async function handleRegistrationState(req: Request, res: Response, dataT
                const exists = state.cashLedger.some(c => c.code === payment.id);
                if (!exists) {
                  const newLedger = {
-                   id: `CAS-${Date.now().toString().slice(-4)}`,
+                   id: `CAS-${uniqueIdSuffix()}`,
                    code: payment.id,
                    date: new Date().toISOString().split("T")[0],
                    description: `Pembayaran Pendaftaran - ${payment.studentName}`,
