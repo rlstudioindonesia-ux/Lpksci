@@ -5,7 +5,7 @@ import { createServer as createViteServer } from "vite";
 import dotenv from "dotenv";
 import fs from "fs";
 import { getStudentStatusGroup } from "./src/lib/studentStatusGroups.ts";
-import { findRecordIndex } from "./src/lib/recordMatching.ts";
+import { findRecordIndex, findStudentUserIndex } from "./src/lib/recordMatching.ts";
 import { testConnection, loadStateFromFirestore, syncEntityToFirestore, syncCustomizationToFirestore, syncGalleriesToFirestore, syncLmsClassToFirestore, syncAllLmsClassesToFirestore, deleteEntityFromFirestore, uploadBufferToFirebaseStorage, getUserFromFirestore, getEntityFromFirestore, db, touchSyncMeta, setSyncInstanceId, parseSyncChangeValue, SYNC_CHANGES_DOC_ID, mergeEntityFieldsToFirestore } from "./src/db/firebase-adapter.ts";
 import { doc, getDoc } from "firebase/firestore";
 import { DEFAULT_GALLERY_ITEMS } from "./src/data/defaultGallery.ts";
@@ -1811,7 +1811,7 @@ async function startServer() {
           state.activeStudents.forEach(student => {
             const isAlumni = ["Lulus", "Di Jepang"].includes(student.status || "");
             if (isAlumni) {
-              const userIndex = state.users.findIndex(u => !["Pengajar", "VVIP", "Admin", "Admin Super", "Admin Biasa"].includes(u.role) && (u.studentId === student.id || u.name === student.name));
+              const userIndex = findStudentUserIndex(state.users, student);
               if (userIndex !== -1) {
                 const currentRole = state.users[userIndex].role;
                 const protectedRoles = ["Pengajar", "VVIP", "Admin", "Admin Super", "Admin Biasa"];
@@ -1846,7 +1846,7 @@ async function startServer() {
               }
 
               // Also ensure state.registeredStudents has this student registered as statusPendaftaran = "Alumni"
-              const regIndex = state.registeredStudents.findIndex(rs => rs.id === student.id || rs.name.trim().toLowerCase() === student.name.trim().toLowerCase());
+              const regIndex = findRecordIndex(state.registeredStudents, { id: student.id, email: student.email, name: student.name });
               if (regIndex !== -1) {
                 if (state.registeredStudents[regIndex].statusPendaftaran !== "Alumni") {
                   state.registeredStudents[regIndex].statusPendaftaran = "Alumni";

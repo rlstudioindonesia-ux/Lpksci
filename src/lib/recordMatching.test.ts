@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { findRecordIndex } from "./recordMatching";
+import { findRecordIndex, findStudentUserIndex } from "./recordMatching";
 
 const students = [
   { id: "SIS-001", name: "Muhammad Rizki", email: "rizki.a@contoh.id" },
@@ -27,5 +27,28 @@ describe("findRecordIndex", () => {
   it("returns -1 for nothing to match", () => {
     expect(findRecordIndex(students, {})).toBe(-1);
     expect(findRecordIndex(undefined, { id: "SIS-001" })).toBe(-1);
+  });
+});
+
+describe("findStudentUserIndex", () => {
+  const users = [
+    { username: "admin", name: "Muhammad Rizki", role: "Admin" },
+    { username: "rizki.a", name: "Muhammad Rizki", studentId: "SIS-001", role: "Siswa" },
+    { username: "siti@x.id", name: "Siti", email: "siti@x.id", role: "Siswa" },
+    { username: "budi", name: "Budi", role: "Siswa" },
+  ];
+
+  it("prefers the linked studentId, then email", () => {
+    expect(findStudentUserIndex(users, { id: "SIS-001", name: "X" })).toBe(1);
+    expect(findStudentUserIndex(users, { id: "SIS-9", email: "SITI@x.id" })).toBe(2);
+  });
+
+  it("never takes the account of another student with the same name", () => {
+    expect(findStudentUserIndex(users, { id: "SIS-002", name: "Muhammad Rizki" })).toBe(-1);
+  });
+
+  it("uses a unique unlinked name as last resort and ignores staff", () => {
+    expect(findStudentUserIndex(users, { id: "SIS-003", name: " budi " })).toBe(3);
+    expect(findStudentUserIndex(users, { id: "SIS-004", name: "Tidak Ada" })).toBe(-1);
   });
 });

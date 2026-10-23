@@ -1,4 +1,5 @@
 import React from "react";
+import { computeTaxImportMonths } from "../../lib/taxImport";
 import { TaxRecord } from "../../types";
 import { AlertCircle, Edit, Eye, Plus, Receipt, Trash2, Upload } from "lucide-react";
 import { ConfirmButton } from "../ConfirmButton";
@@ -27,62 +28,12 @@ export default function AdminPajakSegment({ handleTaxDelete, handleTaxReportActi
     (() => {
               const taxes = systemState.taxes || [];
     
-              // Compute months with transactions from cashLedger and payments that are not yet saved
-              const recommendedMonths = (() => {
-                const monthlyData: { [key: string]: { in: number; out: number } } = {};
-                const months = [
-                  "Januari", "Februari", "Maret", "April", "Mei", "Juni",
-                  "Juli", "Agustus", "September", "Oktober", "November", "Desember"
-                ];
-    
-                const ledger = systemState.cashLedger || [];
-                ledger.forEach((entry) => {
-                  if (!entry.date) return;
-                  const dateParts = entry.date.split("-");
-                  if (dateParts.length < 2) return;
-                  const year = dateParts[0];
-                  const monthIndex = parseInt(dateParts[1], 10) - 1;
-                  const monthName = months[monthIndex] || "Januari";
-                  const key = `${monthName} ${year}`;
-    
-                  if (!monthlyData[key]) {
-                    monthlyData[key] = { in: 0, out: 0 };
-                  }
-                  monthlyData[key].in += entry.inAmount || 0;
-                  monthlyData[key].out += entry.outAmount || 0;
-                });
-    
-                const payments = systemState.payments || [];
-                payments.forEach((p) => {
-                  if (!p.date || (p.status !== "Lunas" && p.status !== "Cicilan")) return;
-                  const dateParts = p.date.split("-");
-                  if (dateParts.length < 2) return;
-                  const year = dateParts[0];
-                  const monthIndex = parseInt(dateParts[1], 10) - 1;
-                  const monthName = months[monthIndex] || "Januari";
-                  const key = `${monthName} ${year}`;
-    
-                  if (!monthlyData[key]) {
-                    monthlyData[key] = { in: 0, out: 0 };
-                  }
-                  const inLedgerExists = ledger.some(
-                    (l) => l.inAmount === p.amount && l.date === p.date
-                  );
-                  if (!inLedgerExists) {
-                    monthlyData[key].in += p.amount || 0;
-                  }
-                });
-    
-                const savedTaxMonths = taxes.map((t: any) => t.monthString);
-                
-                return Object.keys(monthlyData)
-                  .filter(m => !savedTaxMonths.includes(m))
-                  .map(key => ({
-                    monthString: key,
-                    totalRevenue: monthlyData[key].in,
-                    totalExpenses: monthlyData[key].out
-                  }));
-              })();
+              // Months with cash book / payment totals not yet saved (src/lib/taxImport.ts)
+              const recommendedMonths = computeTaxImportMonths(
+                systemState.cashLedger,
+                systemState.payments,
+                taxes.map((t: any) => t.monthString),
+              );
     
               const handleQuickImport = (rec: { monthString: string; totalRevenue: number; totalExpenses: number }) => {
                 setTaxMonth(rec.monthString);
