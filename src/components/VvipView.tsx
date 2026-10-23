@@ -1,4 +1,6 @@
 import { normalizeGender } from "../lib/gender";
+import { uniqueIdSuffix } from "../lib/idGenerator";
+import { planLedgerStudentSync, finalLedgerCode, LEDGER_CATEGORY_CODES } from "../lib/ledgerEdit";
 import { paymentMatchesStudent } from "../lib/paymentOwner";
 import { EXTRA_STUDENT_DOCUMENTS } from "../lib/studentDocuments";
 /**
@@ -3100,6 +3102,9 @@ export default function VvipView({
               <div>
                 <label className="text-xs font-bold text-slate-500 mb-1 block">Kategori</label>
                 <select id="edit-ledger-code" defaultValue={editingLedger.code || "DLL"} className="w-full border border-slate-200 rounded-xl p-2.5 text-sm font-bold text-slate-700 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 bg-white">
+                  {editingLedger.code && !LEDGER_CATEGORY_CODES.includes(editingLedger.code) && (
+                    <option value={editingLedger.code}>Terhubung ke tagihan siswa ({editingLedger.code})</option>
+                  )}
                   <option value="P1">P1 - GAJI KARYAWAN</option>
                   <option value="P2">P2 - BIAYA OPERASIONAL</option>
                   <option value="P3">P3 - BIAYA PERJALANAN DINAS</option>
@@ -3173,31 +3178,35 @@ export default function VvipView({
 
             <div className="flex gap-2 justify-end mt-4 pt-4 border-t border-slate-100 shrink-0">
               <button onClick={() => setEditingLedger(null)} className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold uppercase tracking-wider transition cursor-pointer">Batal</button>
-              <button onClick={() => {
+              <button onClick={async () => {
                  const inAmt = Number((document.getElementById('edit-ledger-in') as HTMLInputElement).value);
                  const outAmt = Number((document.getElementById('edit-ledger-out') as HTMLInputElement).value);
                  const desc = (document.getElementById('edit-ledger-desc') as HTMLInputElement).value;
                  const code = (document.getElementById('edit-ledger-code') as HTMLSelectElement).value;
                  const newDate = (document.getElementById('edit-ledger-date') as HTMLInputElement)?.value || editingLedger.date;
                  
-                 onUpdateState('cashLedger', 'edit', { ...editingLedger, inAmount: inAmt, outAmount: outAmt, description: desc, code: code, date: newDate });
-                 
-                 if (editingLedgerIsStudent && editingLedgerStudentName && editingLedgerCategory) {
-                    const existingPayment = (systemState.payments || []).find((p: any) => p.studentName === editingLedgerStudentName && p.category === editingLedgerCategory);
-                    if (existingPayment) {
-                      onUpdateState('payments', 'edit', { ...existingPayment, amount: existingPayment.amount + inAmt, status: "Lunas", date: newDate || existingPayment.date });
-                    } else {
-                      onUpdateState('payments', 'add', { 
-                        id: 'PAY-' + Date.now(), 
-                        studentName: editingLedgerStudentName, 
-                        category: editingLedgerCategory, 
-                        amount: inAmt, 
-                        date: newDate || editingLedger.date || new Date().toLocaleDateString('id-ID'), 
-                        status: "Lunas",
-                        paymentMethod: "Cash / Tunai"
-                      });
-                    }
+                 // 23-10-2026 (src/lib/ledgerEdit.ts): bill-linked entries keep their code,
+                 // and syncing to a student bill never adds to its amount again.
+                 const entryDate = newDate || editingLedger.date || todayLocalISO();
+                 const plan = editingLedgerIsStudent && editingLedgerStudentName && editingLedgerCategory
+                   ? planLedgerStudentSync({
+                       payments: systemState.payments,
+                       activeStudents: systemState.activeStudents,
+                       registeredStudents: systemState.registeredStudents,
+                       studentName: editingLedgerStudentName,
+                       category: editingLedgerCategory,
+                       inAmount: inAmt,
+                       date: entryDate,
+                       newPaymentId: `PAY-CASH-${uniqueIdSuffix()}`,
+                     })
+                   : null;
+                 const finalCode = plan?.ledgerCode || finalLedgerCode(editingLedger.code, code, systemState.payments);
+                 await onUpdateState('cashLedger', 'edit', { ...editingLedger, inAmount: inAmt, outAmount: outAmt, description: desc, code: finalCode, date: entryDate });
+                 if (plan?.payment) {
+                    await onUpdateState('payments', plan.payment.action, plan.payment.payload);
                     alert(`Disinkronkan dengan admin keuangan siswa untuk siswa ${editingLedgerStudentName}.`);
+                 } else if (plan?.note) {
+                    alert(plan.note);
                  }
                  setEditingLedger(null);
               }} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold uppercase tracking-wider transition cursor-pointer">

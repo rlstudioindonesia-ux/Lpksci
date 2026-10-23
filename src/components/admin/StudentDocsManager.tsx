@@ -152,11 +152,11 @@ export function StudentDocsManager({
                         setUploadingFields((prev) => ({ ...prev, [doc.field]: true }));
                         try {
                           const downloadUrl = await uploadFileToFirebase(file, "registrations");
-                          const updated = {
-                            ...student,
+                          // Only the changed field: a full copy of the record could undo other admins' recent changes.
+                          await onUpdateState("registeredStudents", "update", {
+                            id: student.id,
                             [doc.field]: `${file.name}|${downloadUrl}`,
-                          };
-                          await onUpdateState("registeredStudents", "update", updated);
+                          });
                         } catch (err: any) {
                           console.error(err);
                           alert(`Gagal mengunggah berkas: ${err.message || err}`);
@@ -177,7 +177,7 @@ export function StudentDocsManager({
                             ? currentVerified.filter(v => v !== doc.field)
                             : [...currentVerified, doc.field];
                           await onUpdateState("registeredStudents", "update", {
-                            ...student,
+                            id: student.id,
                             verifiedDocs: newVerified,
                           });
                         }}
@@ -192,11 +192,10 @@ export function StudentDocsManager({
                       <button
                         type="button"
                         onClick={async () => {
-                          const updated = {
-                            ...student,
+                          await onUpdateState("registeredStudents", "update", {
+                            id: student.id,
                             [doc.field]: "",
-                          };
-                          await onUpdateState("registeredStudents", "update", updated);
+                          });
                         }}
                         className="p-1 px-2.5 text-rose-600 hover:text-rose-700 hover:bg-rose-50 rounded-lg border border-slate-200 hover:border-rose-200 transition font-extrabold text-[10px] flex items-center gap-1.5"
                         title="Hapus Berkas"
@@ -229,7 +228,7 @@ export function StudentDocsManager({
                             ? currentVerified.filter(v => v !== doc.field)
                             : [...currentVerified, doc.field];
                           await onUpdateState("registeredStudents", "update", {
-                            ...student,
+                            id: student.id,
                             verifiedDocs: newVerified,
                           });
                         }}

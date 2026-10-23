@@ -1,5 +1,5 @@
 import type { Request, Response } from "express";
-import { syncEntityToFirestore, deleteEntityFromFirestore } from "../../src/db/firebase-adapter.ts";
+import { syncEntityToFirestore, deleteEntityFromFirestore, getEntityFromFirestore } from "../../src/db/firebase-adapter.ts";
 import { todayJakartaISO } from "../../src/lib/dateUtils.ts";
 import { uniqueIdSuffix, nextSequentialId } from "../../src/lib/idGenerator.ts";
 
@@ -8,12 +8,32 @@ import { uniqueIdSuffix, nextSequentialId } from "../../src/lib/idGenerator.ts";
 // Returns a truthy value (the Express Response) if this domain handled the
 // (dataType, action) combination and already sent a response; otherwise false,
 // so the caller (server/handlers/index.ts) can try the next domain in order.
-export function handleJobOrdersState(req: Request, res: Response, dataType: string, action: string, payload: any, state: any) {
+export async function handleJobOrdersState(req: Request, res: Response, dataType: string, action: string, payload: any, state: any) {
 
 
     if (dataType === "jobOrders") {
       if (!state.jobOrders) {
         state.jobOrders = [];
+      }
+
+      // 23-10-2026: every change below rewrites the whole job order. With several
+      // server instances, two students pressing "Tertarik" (or an admin
+      // recommending) at nearly the same time on different instances made one
+      // change overwrite the other. Re-read the job from Firestore first so the
+      // change is applied to the latest version.
+      const targetJobId = action !== "add" ? (payload?.jobOrderId || payload?.id) : null;
+      if (targetJobId) {
+        try {
+          const fresh = await getEntityFromFirestore("jobOrders", String(targetJobId));
+          if (fresh) {
+            const idx = state.jobOrders.findIndex((j: any) => j.id === targetJobId);
+            const record = { ...fresh, id: fresh.id || targetJobId };
+            if (idx !== -1) state.jobOrders[idx] = record;
+            else state.jobOrders.unshift(record);
+          }
+        } catch (e) {
+          // Firestore unreachable: continue with the in-memory copy.
+        }
       }
 
       if (action === "add") {
