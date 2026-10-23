@@ -4,6 +4,7 @@ import { hashPassword, isHashedPassword } from "../auth-utils.ts";
 import { invalidateStateCache } from "../stateCache.ts";
 import { EXTRA_STUDENT_DOCUMENT_FIELDS } from "../../src/lib/studentDocuments.ts";
 import { findRecordIndex } from "../../src/lib/recordMatching.ts";
+import { findRegistrationUpdateTarget, isPhantomRegistration } from "../../src/lib/registrationUpdate.ts";
 import { normalizeGender } from "../../src/lib/gender.ts";
 import { todayJakartaISO } from "../../src/lib/dateUtils.ts";
 import { nextSequentialId, collectUsedStudentIds } from "../../src/lib/idGenerator.ts";
@@ -25,6 +26,51 @@ async function uploadBase64IfPresent(dataStr: string | undefined, prefix: string
   } catch (err) {
     console.warn(`[Firebase Storage] Note during ${folder} upload:`, err);
     return dataStr;
+  }
+}
+
+// Copies only the fields a registration update actually sent onto the matching
+// active student. Copying from the whole merged registration used to overwrite
+// the student's class with the registration's default program ("Tokutei
+// Ginou (SSW)") and push other stale values whenever an admin merely verified
+// a document.
+// `allowClear` lets an empty string remove a document; only used when the
+// request targets the active student directly, never for a merged registration.
+function applySentFieldsToActiveStudent(act: any, sent: any, allowClear = false) {
+  const before = { ...act };
+  if (sent.name) act.name = sent.name;
+  if (sent.phone) act.phone = sent.phone;
+  if (sent.email) act.email = sent.email;
+  if (sent.district) act.district = sent.district;
+  if (sent.birthDate) act.birthDate = sent.birthDate;
+  if (sent.gender) act.gender = normalizeGender(sent.gender) || sent.gender;
+  if (sent.education) act.education = sent.education;
+  if (sent.school) act.school = sent.school;
+  if (sent.graduationYear) act.graduationYear = sent.graduationYear;
+  if (sent.japaneseLevel) act.japaneseLevel = sent.japaneseLevel;
+  if (sent.program) act.class = sent.program;
+  if (sent.docFoto) {
+    const pic = sent.docFoto.includes('|') ? sent.docFoto.split('|')[1] : sent.docFoto;
+    act.profilePicture = pic;
+    act.docFoto = sent.docFoto;
+  }
+  const docFields = [
+    "docAkta", "docIjazahSD", "docIjazahSMP", "docIjazahSMA", "docKK", "docKTP", "docTranskip",
+    "docPraMCU", "docVaksin", "docCV1", "docCV2", "docCV3", "docCV4", "docCV5", "docMoU", "docKontrak",
+    ...EXTRA_STUDENT_DOCUMENT_FIELDS,
+  ];
+  for (const field of docFields) {
+    if (sent[field]) act[field] = sent[field];
+    else if (allowClear && sent[field] === "" && act[field]) act[field] = "";
+  }
+  if (sent.verifiedDocs) act.verifiedDocs = sent.verifiedDocs;
+
+  const changedFields: Record<string, any> = {};
+  for (const key of Object.keys(act)) {
+    if (act[key] !== before[key]) changedFields[key] = act[key];
+  }
+  if (Object.keys(changedFields).length > 0) {
+    mergeEntityFieldsToFirestore("activeStudents", act.id, changedFields);
   }
 }
 
@@ -199,21 +245,16 @@ export async function handleRegistrationState(req: Request, res: Response, dataT
         deleteEntityFromFirestore("registeredStudents", registeredToDelete.id);
       }
       
-      if (registeredToDelete) {
-        // Cascade delete from activeStudents
-        const actStudent = state.activeStudents.find(
-          (s: any) => s.id === id || (s.name && registeredToDelete.name && s.name.trim().toLowerCase() === registeredToDelete.name.trim().toLowerCase())
-        );
-        if (actStudent) {
-          state.activeStudents = state.activeStudents.filter((s: any) => s.id !== actStudent.id);
-          deleteEntityFromFirestore("activeStudents", actStudent.id);
-        }
-
-        // Cascade delete from users
+      // 23-10-2026: deleting a registration never deletes an active student any
+      // more. The old cascade matched active students by name (deleting another
+      // student with the same name) and wiped the real student when an admin
+      // removed a phantom registrant that shares the student's id.
+      if (registeredToDelete && !isPhantomRegistration(registeredToDelete, state.activeStudents)) {
+        // Cascade delete the registrant's own login account (id or email, not name)
         const userAccount = state.users.find(
-          (u: any) => (u.studentId && u.studentId === id) || 
-                      (u.email && registeredToDelete.email && u.email.trim().toLowerCase() === registeredToDelete.email.trim().toLowerCase()) ||
-                      (u.name && registeredToDelete.name && u.name.trim().toLowerCase() === registeredToDelete.name.trim().toLowerCase())
+          (u: any) => !["Pengajar", "VVIP", "Admin", "Admin Super", "Admin Biasa"].includes(u.role) && (
+                      (u.studentId && u.studentId === id) ||
+                      (u.email && registeredToDelete.email && u.email.trim().toLowerCase() === registeredToDelete.email.trim().toLowerCase()))
         );
         if (userAccount) {
           state.users = state.users.filter((u: any) => u.username !== userAccount.username);
@@ -239,10 +280,8 @@ export async function handleRegistrationState(req: Request, res: Response, dataT
 
     if (dataType === "registeredStudents" && (action === "update" || action === "edit" || action === "update_status")) {
       const { id } = payload;
-      let index = state.registeredStudents.findIndex(s => s.id === id);
-      if (index === -1 && payload.name) {
-        index = state.registeredStudents.findIndex(s => s.name && s.name.trim().toLowerCase() === payload.name.trim().toLowerCase());
-      }
+      const target = findRegistrationUpdateTarget(state.registeredStudents, state.activeStudents, payload);
+      const index = target.kind === "registration" ? target.index : -1;
 
       const processUpdateReg = async () => {
         let processedPayload = { ...payload };
@@ -276,59 +315,9 @@ export async function handleRegistrationState(req: Request, res: Response, dataT
           }
 
           // Sync to activeStudents - only the fields this request actually sent.
-          // Copying from the whole merged registration used to overwrite the
-          // student's class with the registration's default program ("Tokutei
-          // Ginou (SSW)") and push other stale values whenever an admin merely
-          // verified a document.
           const actIndex = findRecordIndex(state.activeStudents, { id, email: student.email, name: student.name });
           if (actIndex !== -1) {
-            const act = state.activeStudents[actIndex];
-            const sent: any = processedPayload;
-            const before = { ...act };
-            if (sent.name) act.name = sent.name;
-            if (sent.phone) act.phone = sent.phone;
-            if (sent.email) act.email = sent.email;
-            if (sent.district) act.district = sent.district;
-            if (sent.birthDate) act.birthDate = sent.birthDate;
-            if (sent.gender) act.gender = normalizeGender(sent.gender) || sent.gender;
-            if (sent.education) act.education = sent.education;
-            if (sent.school) act.school = sent.school;
-            if (sent.graduationYear) act.graduationYear = sent.graduationYear;
-            if (sent.japaneseLevel) act.japaneseLevel = sent.japaneseLevel;
-            if (sent.program) act.class = sent.program;
-            if (sent.docFoto) {
-              const pic = sent.docFoto.includes('|') ? sent.docFoto.split('|')[1] : sent.docFoto;
-              act.profilePicture = pic;
-              act.docFoto = sent.docFoto;
-            }
-            if (sent.docAkta) act.docAkta = sent.docAkta;
-            if (sent.docIjazahSD) act.docIjazahSD = sent.docIjazahSD;
-            if (sent.docIjazahSMP) act.docIjazahSMP = sent.docIjazahSMP;
-            if (sent.docIjazahSMA) act.docIjazahSMA = sent.docIjazahSMA;
-            if (sent.docKK) act.docKK = sent.docKK;
-            if (sent.docKTP) act.docKTP = sent.docKTP;
-            if (sent.docTranskip) act.docTranskip = sent.docTranskip;
-            if (sent.docPraMCU) act.docPraMCU = sent.docPraMCU;
-            if (sent.docVaksin) act.docVaksin = sent.docVaksin;
-            if (sent.docCV1) act.docCV1 = sent.docCV1;
-            if (sent.docCV2) act.docCV2 = sent.docCV2;
-            if (sent.docCV3) act.docCV3 = sent.docCV3;
-            if (sent.docCV4) act.docCV4 = sent.docCV4;
-            if (sent.docCV5) act.docCV5 = sent.docCV5;
-            if (sent.docMoU) act.docMoU = sent.docMoU;
-            if (sent.docKontrak) act.docKontrak = sent.docKontrak;
-            for (const field of EXTRA_STUDENT_DOCUMENT_FIELDS) {
-              if (sent[field]) act[field] = sent[field];
-            }
-            if (sent.verifiedDocs) act.verifiedDocs = sent.verifiedDocs;
-
-            const changedFields: Record<string, any> = {};
-            for (const key of Object.keys(act)) {
-              if (act[key] !== before[key]) changedFields[key] = act[key];
-            }
-            if (Object.keys(changedFields).length > 0) {
-              mergeEntityFieldsToFirestore("activeStudents", act.id, changedFields);
-            }
+            applySentFieldsToActiveStudent(state.activeStudents[actIndex], processedPayload);
           }
 
           // Sync to users
@@ -384,17 +373,15 @@ export async function handleRegistrationState(req: Request, res: Response, dataT
           const regId = state.registeredStudents[index]?.id || '';
           touchSyncMeta({ source: 'registeredStudents', ...(regId ? { id: regId } : {}), action: 'update' }).catch(() => {});
           return res.json({ success: true, updated: state.registeredStudents[index] });
-        } else {
-          const newReg = {
-            id: id || `REG-${Date.now()}`,
-            ...processedPayload
-          };
-          state.registeredStudents.unshift(newReg);
-          syncEntityToFirestore('registeredStudents', newReg.id, newReg);
+        } else if (target.kind === "activeStudent") {
+          // Already approved: the registration no longer exists, so the
+          // documents belong to the active student. Never create a registrant here.
+          const act = state.activeStudents[target.index];
+          applySentFieldsToActiveStudent(act, processedPayload, true);
           if (typeof invalidateStateCache === "function") invalidateStateCache();
-          const newId = newReg?.id || '';
-          touchSyncMeta({ source: 'registeredStudents', ...(newId ? { id: newId } : {}), action: 'add' }).catch(() => {});
-          return res.json({ success: true, item: newReg });
+          return res.json({ success: true, updated: act });
+        } else {
+          return res.status(404).json({ success: false, error: "Data pendaftar tidak ditemukan (mungkin sudah disetujui atau dihapus). Muat ulang halaman." });
         }
       };
 
