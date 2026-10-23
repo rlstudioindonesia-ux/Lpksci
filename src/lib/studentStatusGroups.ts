@@ -98,3 +98,9 @@ export function countActiveStudents(students: Array<{ status?: string | null }> 
 export function isStudentStillActive(student: { status?: string | null } | null | undefined): boolean {
   return isActiveStudent(student);
 }
+
+/** "Alumni" tab (owner, 23-10-2026): only students already working in Japan. */
+export function isAlumniTabStudent(student: { status?: string | null } | null | undefined): boolean {
+  if (!student) return false;
+  return getStudentStatusGroup(student.status) === "Di Jepang";
+}

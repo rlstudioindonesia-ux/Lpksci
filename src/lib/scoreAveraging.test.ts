@@ -24,8 +24,12 @@ describe("isGradedAssessment", () => {
 
   it("rejects not-yet-graded statuses", () => {
     expect(isGradedAssessment({ status: "Belum Belajar", score: 80 })).toBe(false);
-    expect(isGradedAssessment({ status: "Selesai Belajar", score: 80 })).toBe(false);
     expect(isGradedAssessment({ status: "Menunggu Penilaian", score: 80 })).toBe(false);
+  });
+
+  it("counts CBT results below 75 (status Selesai Belajar) when they have a score", () => {
+    expect(isGradedAssessment({ status: "Selesai Belajar", score: 40 })).toBe(true);
+    expect(isGradedAssessment({ status: "Selesai Belajar", score: "" as unknown as number })).toBe(false);
   });
 
   it("rejects a missing, non-numeric, or NaN score even when the status says graded", () => {

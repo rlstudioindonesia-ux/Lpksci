@@ -8,7 +8,7 @@ import { hasStaffOversight } from "../../lib/permissions";
 import { countWorkingDaysInPayrollPeriod, formatPayrollPeriodLabel, generateRecentPayrollPeriods, isTimestampInPayrollPeriod } from "../../lib/staffAttendancePeriod";
 import { downloadHrAttendanceSummaryPdf, downloadDailyLoginLogsPdf } from "../../lib/attendanceReportPdf";
 import { Bar, BarChart, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { countStudentsByStatusGroup, getStudentStatusGroup, studentMatchesStatusGroup, isStudentStillActive, countActiveStudents, isActiveStudent } from "../../lib/studentStatusGroups";
+import { countStudentsByStatusGroup, getStudentStatusGroup, studentMatchesStatusGroup, isStudentStillActive, countActiveStudents, isActiveStudent, isAlumniTabStudent } from "../../lib/studentStatusGroups";
 
 interface VvipFullEvalSegmentProps {
   activeStudents: any;
@@ -412,7 +412,7 @@ export default function VvipFullEvalSegment({ activeStudents, classFilter, class
                       <Award className="h-4 w-4" />
                       <span>Alumni</span>
                       <div className={`px-2 py-0.5 rounded-lg text-[10px] font-extrabold ${siswaTab === "alumni" ? "bg-white/20 text-white" : "bg-slate-200 text-slate-700"}`}>
-                        {activeStudents.filter(s => ["Lulus", "Di Jepang", "Alumni", "Diklat SO", "On Proges Job", "On Progres JFT/JLPT/SSW", "Berhenti"].includes(s.status || "")).length}
+                        {activeStudents.filter(s => isAlumniTabStudent(s)).length}
                       </div>
                     </button>
     
@@ -873,7 +873,6 @@ export default function VvipFullEvalSegment({ activeStudents, classFilter, class
     
                 {/* Standard display layout mapped to grid/cards or standard clean table list with 20 items pagination */}
                 {(() => {
-                  const alumniStatuses = ["Lulus", "Di Jepang", "Alumni", "Diklat SO", "On Proges Job", "On Progres JFT/JLPT/SSW", "Berhenti"];
                   const getStudentClass = (s: any) => (s.class || s.assignedClass || s.kelas || "").trim();
     
                   let baseList: any[] = [];
@@ -907,7 +906,7 @@ export default function VvipFullEvalSegment({ activeStudents, classFilter, class
                         if (siswaTab === "aktif") {
                           matchesStatus = isActiveStudent(student);
                         } else if (siswaTab === "alumni") {
-                          matchesStatus = alumniStatuses.includes(student.status || "");
+                          matchesStatus = isAlumniTabStudent(student);
                         }
                       }
                     } else {
