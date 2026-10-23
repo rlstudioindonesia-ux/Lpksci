@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import { syncEntityToFirestore, syncCustomizationToFirestore, syncLmsClassToFirestore, syncAllLmsClassesToFirestore, deleteEntityFromFirestore, mergeEntityFieldsToFirestore } from "../../src/db/firebase-adapter.ts";
+import { applyClassListDiff } from "../../src/lib/classListDiff.ts";
 import { invalidateStateCache } from "../stateCache.ts";
 
 // Site customization/branding + landing config
@@ -11,6 +12,12 @@ export async function handleCustomizationState(req: Request, res: Response, data
 
 
     if (dataType === "customization" && action === "update") {
+      // Partial update from current clients: apply only the classes they changed
+      // onto the server's list (src/lib/classListDiff.ts).
+      if (payload.lmsClassesDiff) {
+        payload = { ...payload, lmsClasses: applyClassListDiff(state.customization?.lmsClasses || state.lmsClasses, payload.lmsClassesDiff) };
+        delete payload.lmsClassesDiff;
+      }
       // Check if lmsClasses is being updated to log
       if (payload.lmsClasses && state.customization.lmsClasses) {
         const oldLen = state.customization.lmsClasses.length;
@@ -110,7 +117,9 @@ export async function handleCustomizationState(req: Request, res: Response, data
     }
 
     if (dataType === "lmsClasses") {
-      const classesList = Array.isArray(payload) ? payload : (payload?.lmsClasses || payload?.classes || [payload]);
+      const classesList = payload?.lmsClassesDiff
+        ? applyClassListDiff(state.customization?.lmsClasses || state.lmsClasses, payload.lmsClassesDiff)
+        : (Array.isArray(payload) ? payload : (payload?.lmsClasses || payload?.classes || [payload]));
       state.lmsClasses = classesList;
       if (!state.customization) state.customization = {};
       state.customization.lmsClasses = classesList;
