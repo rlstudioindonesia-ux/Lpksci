@@ -780,8 +780,9 @@ export default function LmsProgressSegment({ assessmentSubject, attendanceRecord
                                 const jpnVal = (sScores.jpn !== undefined && sScores.jpn !== "") ? Number(sScores.jpn) : (hasJpnAssessments ? computedJpnAvg : (Number(student.japaneseScore) || 0));
                                 const attVal = (sScores.att !== undefined && sScores.att !== "") ? Number(sScores.att) : (hasAttRecords ? computedAttendanceRate : (Number(student.attendanceScore) || 0));
 
+                                // Hanya id + nilai: objek siswa lengkap ikut menimpa status dengan salinan lama
                                 const payload = {
-                                  ...student,
+                                  id: student.id,
                                   fiveSScore: fiveSVal,
                                   ethicsScore: ethicsVal,
                                   mathScore: mathVal,
@@ -1028,8 +1029,9 @@ export default function LmsProgressSegment({ assessmentSubject, attendanceRecord
                                 onClick={async () => {
                                   setSavingSikapMap(prev => ({ ...prev, [student.id]: true }));
                                   try {
+                                    // Hanya id + nilai: objek siswa lengkap ikut menimpa status dengan salinan lama
                                     const payload = {
-                                      ...student,
+                                      id: student.id,
                                       fiveSScore: Number(valFiveS) || 0,
                                       ethicsScore: Number(valEthics) || 0,
                                       mathScore: (studentScores.math !== undefined && studentScores.math !== "") ? Number(studentScores.math) : (hasMathAssessments ? computedMathAvg : (Number(valMath) || 0)),

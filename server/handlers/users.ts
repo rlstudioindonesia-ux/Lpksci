@@ -1,6 +1,7 @@
 import type { Request, Response } from "express";
-import { syncEntityToFirestore, deleteEntityFromFirestore, uploadBufferToFirebaseStorage } from "../../src/db/firebase-adapter.ts";
+import { syncEntityToFirestore, deleteEntityFromFirestore, uploadBufferToFirebaseStorage, mergeEntityFieldsToFirestore } from "../../src/db/firebase-adapter.ts";
 import { hashPassword, isHashedPassword, stripPassword } from "../auth-utils.ts";
+import { findRecordIndex } from "../../src/lib/recordMatching.ts";
 
 async function uploadBase64IfPresent(dataStr: string | undefined, prefix: string, folder: string): Promise<string> {
   if (!dataStr || typeof dataStr !== "string" || !dataStr.startsWith("data:")) {
@@ -66,7 +67,7 @@ export function handleUsersState(req: Request, res: Response, dataType: string, 
             const actIndex = state.activeStudents.findIndex(s => s.id === studentId );
             if (actIndex !== -1) {
               state.activeStudents[actIndex].class = assignedClass;
-              syncEntityToFirestore("activeStudents", state.activeStudents[actIndex].id, state.activeStudents[actIndex]);
+              mergeEntityFieldsToFirestore("activeStudents", state.activeStudents[actIndex].id, { class: assignedClass });
             }
           }
           return res.json({ success: true, item: stripPassword(newUser) });
@@ -149,7 +150,7 @@ export function handleUsersState(req: Request, res: Response, dataType: string, 
                 state.activeStudents.forEach(s => {
                   if (s.class && s.class.toLowerCase() === assignedClass.toLowerCase()) {
                     s.sensei = state.users[index].name;
-                    syncEntityToFirestore("activeStudents", s.id, s);
+                    mergeEntityFieldsToFirestore("activeStudents", s.id, { sensei: s.sensei });
                   }
                 });
               }
@@ -218,7 +219,13 @@ export function handleUsersState(req: Request, res: Response, dataType: string, 
                   updatedAct = true;
                 }
                 if (updatedAct) {
-                  syncEntityToFirestore("activeStudents", state.activeStudents[actIndex].id, state.activeStudents[actIndex]);
+                  const act = state.activeStudents[actIndex];
+                  mergeEntityFieldsToFirestore("activeStudents", act.id, {
+                    profilePicture: act.profilePicture,
+                    name: act.name,
+                    class: act.class,
+                    birthDate: act.birthDate,
+                  });
                 }
               }
             }
@@ -260,11 +267,15 @@ export function handleUsersState(req: Request, res: Response, dataType: string, 
         const userToDelete = state.users.find((u: any) => u.username === username);
         
         if (userToDelete) {
-          // 1. Find and delete corresponding active student
-          const actIndex = state.activeStudents.findIndex(
-            (s: any) => s.id === userToDelete.studentId || 
-                        (s.name && userToDelete.name && s.name.trim().toLowerCase() === userToDelete.name.trim().toLowerCase())
-          );
+          // Only student accounts cascade to student records. Deleting a Sensei/
+          // Admin account used to delete the active student who shared its name.
+          const isStudentAccount = ["Siswa", "Alumni"].includes(userToDelete.role);
+
+          // 1. Find and delete corresponding active student (linked id first,
+          //    then email / a unique name - see src/lib/recordMatching.ts)
+          const actIndex = isStudentAccount
+            ? findRecordIndex(state.activeStudents, { id: userToDelete.studentId, email: userToDelete.email, name: userToDelete.name })
+            : -1;
           if (actIndex !== -1) {
              const actId = state.activeStudents[actIndex].id;
              state.activeStudents.splice(actIndex, 1);
@@ -272,11 +283,9 @@ export function handleUsersState(req: Request, res: Response, dataType: string, 
           }
 
           // 2. Find and delete corresponding registeredStudent
-          const regIndex = state.registeredStudents.findIndex(
-            (s: any) => (s.id && userToDelete.studentId && s.id === userToDelete.studentId) || 
-                        (s.email && userToDelete.email && s.email.trim().toLowerCase() === userToDelete.email.trim().toLowerCase()) ||
-                        (s.name && userToDelete.name && s.name.trim().toLowerCase() === userToDelete.name.trim().toLowerCase())
-          );
+          const regIndex = isStudentAccount
+            ? findRecordIndex(state.registeredStudents, { id: userToDelete.studentId, email: userToDelete.email, name: userToDelete.name })
+            : -1;
           if (regIndex !== -1) {
             const regId = state.registeredStudents[regIndex].id;
             state.registeredStudents.splice(regIndex, 1);

@@ -1,3 +1,4 @@
+import { todayLocalISO } from "../lib/dateUtils";
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -121,6 +122,7 @@ import { CHAPTERS_LIST } from "../chapters";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import PembayaranSiswaView, { getStudentPayments } from "./PembayaranSiswaView";
+import { countStudentsByStatusGroup, studentMatchesStatusGroup } from "../lib/studentStatusGroups";
 
 export function parsePrice(val: any): number {
   if (val === undefined || val === null) return 0;
@@ -655,12 +657,13 @@ export default function AdminView({
   const activeStudents = useMemo(() => systemState.activeStudents || [], [systemState.activeStudents]);
 
   const classTabs = useMemo(() => {
+    const grouped = countStudentsByStatusGroup(activeStudents);
     const counts = {
-      belajar: activeStudents.filter((s: any) => !["Lulus", "Di Jepang", "Diklat SO", "On Proges Job", "On Progres JFT/JLPT/SSW"].includes(s.status || "")).length,
-      job: activeStudents.filter((s: any) => s.status === "On Proges Job").length,
-      diklat: activeStudents.filter((s: any) => s.status === "Diklat SO").length,
-      jepang: activeStudents.filter((s: any) => s.status === "Di Jepang").length,
-      jft: activeStudents.filter((s: any) => s.status === "On Progres JFT/JLPT/SSW" || s.status === "Lulus").length,
+      belajar: grouped["Belajar"],
+      job: grouped["On Proges Job"],
+      diklat: grouped["Diklat SO"],
+      jepang: grouped["Di Jepang"],
+      jft: grouped["On Progres JFT/JLPT/SSW"],
     };
 
     return [
@@ -1291,7 +1294,7 @@ export default function AdminView({
       setSalarySubTab("hr");
     }
   }, [currentUser]);
-  const [hrFilterMonth, setHrFilterMonth] = useState(new Date().toISOString().substring(0, 7));
+  const [hrFilterMonth, setHrFilterMonth] = useState(todayLocalISO().substring(0, 7));
   const [selectedStaffForQuickPay, setSelectedStaffForQuickPay] = useState<string | null>(null);
   const [quickPayAmount, setQuickPayAmount] = useState<string>("4500000");
   const [quickPayNotes, setQuickPayNotes] = useState<string>("");
@@ -1754,7 +1757,7 @@ export default function AdminView({
           const isAlumni = ["Lulus", "Di Jepang"].includes(s.status);
 
           if (filterStatus !== "All") {
-            if (s.status !== filterStatus) return false;
+            if (!studentMatchesStatusGroup(s, filterStatus)) return false;
           } else {
             if (siswaTab === "alumni" && !isAlumni) return false;
             if (siswaTab === "aktif" && isAlumni) return false;
@@ -4701,7 +4704,7 @@ export default function AdminView({
                 <input 
                   type="date" 
                   id="edit-ledger-date" 
-                  defaultValue={editingLedger.date ? (editingLedger.date.includes("T") ? editingLedger.date.split("T")[0] : editingLedger.date) : new Date().toISOString().split("T")[0]} 
+                  defaultValue={editingLedger.date ? (editingLedger.date.includes("T") ? editingLedger.date.split("T")[0] : editingLedger.date) : todayLocalISO()} 
                   className="w-full border border-slate-200 rounded-xl p-2.5 text-sm font-bold text-slate-700 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 bg-white" 
                 />
               </div>

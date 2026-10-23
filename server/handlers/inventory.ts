@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import { syncEntityToFirestore, deleteEntityFromFirestore } from "../../src/db/firebase-adapter.ts";
+import { uniqueIdSuffix } from "../../src/lib/idGenerator.ts";
 
 // Inventory items
 // Extracted verbatim from the monolithic /api/state/update handler in server.ts.
@@ -11,7 +12,7 @@ export function handleInventoryState(req: Request, res: Response, dataType: stri
 
     if (dataType === "inventory" && action === "add") {
       const newItem = {
-        id: `INV-${Date.now().toString().slice(-4)}`,
+        id: `INV-${uniqueIdSuffix()}`,
         itemName: payload.itemName,
         code: payload.code || `INV-${payload.itemName.slice(0,3).toUpperCase()}-${Math.floor(Math.random()*90)+10}`,
         amount: Number(payload.amount),
@@ -38,7 +39,10 @@ export function handleInventoryState(req: Request, res: Response, dataType: stri
         state.inventory[idx] = {
           ...state.inventory[idx],
           itemName: payload.itemName || state.inventory[idx].itemName,
-          amount: Number(payload.amount) || state.inventory[idx].amount,
+          // 0 (stok habis) is a valid amount; only keep the old value when none was sent.
+          amount: payload.amount !== undefined && payload.amount !== "" && !isNaN(Number(payload.amount))
+            ? Number(payload.amount)
+            : state.inventory[idx].amount,
           condition: payload.condition || state.inventory[idx].condition,
           location: payload.location || state.inventory[idx].location,
         };

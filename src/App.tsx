@@ -63,6 +63,8 @@ import {
   BroadcastNotificationItem
 } from "./lib/notifications";
 import { hasStaffOversight } from "./lib/permissions";
+import { findRecordIndex } from "./lib/recordMatching";
+import { mergeRecentLocalItems } from "./lib/recentLocalItems";
 import {
   Bell,
   Volume2,
@@ -618,6 +620,8 @@ export default function App() {
   const isFetchingStateRef = useRef<boolean>(false);
   const lastFetchTimeRef = useRef<number>(Date.now());
   const lastEtagRef = useRef<string | null>(null);
+  // id -> time this device saved a lesson/quiz (protects it from the refetch merge)
+  const recentLocalItemIdsRef = useRef<Map<string, number>>(new Map());
   const retryTimeoutRef = useRef<any>(null);
 
   const fetchState = async (retryCount = 0, force = false) => {
@@ -698,25 +702,14 @@ export default function App() {
             });
           }
 
-          // Safety merge: Never lose recently added lessons or quizzes on background refetches
-          if (Array.isArray(prevState?.lmsLessons) && prevState.lmsLessons.length > 0) {
-            if (Array.isArray(safeData.lmsLessons)) {
-              const serverLessonIds = new Set(safeData.lmsLessons.map((l: any) => l.id));
-              const missingLocalLessons = prevState.lmsLessons.filter((l: any) => l && l.id && !serverLessonIds.has(l.id));
-              if (missingLocalLessons.length > 0) {
-                safeData.lmsLessons = [...safeData.lmsLessons, ...missingLocalLessons];
-              }
-            }
+          // Safety merge: keep lessons/quizzes this device saved moments ago that the
+          // server response may not contain yet - but never resurrect ones deleted
+          // or replaced elsewhere (see lib/recentLocalItems.ts).
+          if (Array.isArray(safeData.lmsLessons)) {
+            safeData.lmsLessons = mergeRecentLocalItems(safeData.lmsLessons, prevState?.lmsLessons, recentLocalItemIdsRef.current);
           }
-
-          if (Array.isArray(prevState?.lmsQuizzes) && prevState.lmsQuizzes.length > 0) {
-            if (Array.isArray(safeData.lmsQuizzes)) {
-              const serverQuizIds = new Set(safeData.lmsQuizzes.map((q: any) => q.id));
-              const missingLocalQuizzes = prevState.lmsQuizzes.filter((q: any) => q && q.id && !serverQuizIds.has(q.id));
-              if (missingLocalQuizzes.length > 0) {
-                safeData.lmsQuizzes = [...safeData.lmsQuizzes, ...missingLocalQuizzes];
-              }
-            }
+          if (Array.isArray(safeData.lmsQuizzes)) {
+            safeData.lmsQuizzes = mergeRecentLocalItems(safeData.lmsQuizzes, prevState?.lmsQuizzes, recentLocalItemIdsRef.current);
           }
 
           // Safety merge & cross-class Mandiri sync: Never lose recently added mandiri chapters and ensure they propagate across all lmsClasses
@@ -1151,6 +1144,11 @@ export default function App() {
       });
       if (response.ok) {
         const resData = await response.json().catch(() => null);
+        if ((dataType === "lmsLessons" || dataType === "lmsQuizzes") && (action || "").toLowerCase() !== "delete") {
+          const savedItems = [resData?.item, ...(Array.isArray(resData?.items) ? resData.items : []), ...(Array.isArray(payload?.quizzes) ? payload.quizzes : []), payload];
+          const savedAt = Date.now();
+          savedItems.forEach((it: any) => { if (it && it.id) recentLocalItemIdsRef.current.set(it.id, savedAt); });
+        }
         if (dataType === "activeStudents" || dataType === "registeredStudents") {
           const item = resData?.item || resData?.updated || payload;
           if (item) {
@@ -1159,20 +1157,14 @@ export default function App() {
               const actList = Array.isArray(prev.activeStudents) ? [...prev.activeStudents] : [];
               const regList = Array.isArray(prev.registeredStudents) ? [...prev.registeredStudents] : [];
 
-              const actIdx = actList.findIndex((s: any) => 
-                (item.id && s.id && String(s.id).trim().toLowerCase() === String(item.id).trim().toLowerCase()) ||
-                (item.name && s.name && s.name.trim().toLowerCase() === item.name.trim().toLowerCase())
-              );
+              const actIdx = findRecordIndex(actList, { id: item.id, name: item.name });
               if (actIdx !== -1) {
                 actList[actIdx] = { ...actList[actIdx], ...item };
               } else if (dataType === "activeStudents" && action === "add") {
                 actList.push(item);
               }
 
-              const regIdx = regList.findIndex((r: any) => 
-                (item.id && r.id && String(r.id).trim().toLowerCase() === String(item.id).trim().toLowerCase()) ||
-                (item.name && r.name && r.name.trim().toLowerCase() === item.name.trim().toLowerCase())
-              );
+              const regIdx = findRecordIndex(regList, { id: item.id, name: item.name });
               if (regIdx !== -1) {
                 regList[regIdx] = { ...regList[regIdx], ...item };
               } else if (dataType === "registeredStudents" && action === "add") {

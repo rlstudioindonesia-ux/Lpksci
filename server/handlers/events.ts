@@ -1,5 +1,6 @@
 import type { Request, Response } from "express";
 import { syncEntityToFirestore, deleteEntityFromFirestore } from "../../src/db/firebase-adapter.ts";
+import { uniqueIdSuffix } from "../../src/lib/idGenerator.ts";
 
 // Calendar events
 // Extracted verbatim from the monolithic /api/state/update handler in server.ts.
@@ -16,7 +17,7 @@ export function handleEventsState(req: Request, res: Response, dataType: string,
       if (action === "add") {
         const { title, date, desc, targets, type, studyTime, reminderTime, targetClass, time, url, location } = payload;
         const newEvent = {
-          id: `EV-${Date.now().toString().slice(-4)}`,
+          id: `EV-${uniqueIdSuffix()}`,
           title,
           date,
           desc,

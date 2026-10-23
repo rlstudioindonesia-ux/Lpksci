@@ -2,6 +2,7 @@ import { Upload } from 'lucide-react';
 import { SystemState, UserAccount } from '../../types';
 import React from 'react';
 import { uploadFileToFirebase } from '../../lib/storageHelper';
+import { EXTRA_STUDENT_DOCUMENTS } from '../../lib/studentDocuments';
 import { RegisteredStudent } from '../../types';
 import { CheckCircle2, AlertCircle, Trash2, Loader2, X, Eye } from 'lucide-react';
 
@@ -23,6 +24,7 @@ const ADMIN_DOCUMENT_FIELDS = [
   { field: "docCV5", label: "CV Bagian 5", color: "amber", type: "CV" },
   { field: "docMoU", label: "MoU Persetujuan", color: "slate", type: "MoU" },
   { field: "docKontrak", label: "Kontrak Kerja (JOB)", color: "indigo", type: "JOB" },
+  ...EXTRA_STUDENT_DOCUMENTS,
 ];
 
 export function StudentDocsManager({

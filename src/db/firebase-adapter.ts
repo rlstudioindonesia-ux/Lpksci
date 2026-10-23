@@ -679,6 +679,51 @@ async function setDocWithRetry(docRef: any, sanitized: any, cacheKey: string, op
   }
 }
 
+// Cross-instance change feed for student records.
+// Cloud Run can run several server instances, each holding its own in-memory
+// copy of the state. The single `system/sync_meta` doc only remembers the LAST
+// change, so when an admin changed several students within one 15s poll window,
+// other instances only picked up the last one and kept the old status (usually
+// "Belajar") for the rest - and the next write to that student from such an
+// instance pushed the stale status back into Firestore ("status reset sendiri").
+// Every write/delete of a tracked collection now stamps `system/sync_changes`
+// with `<collection>:<id>` -> "<timestamp>|<instanceId>", so pollers can fetch
+// exactly the records that changed, without missing any.
+export const SYNC_CHANGES_DOC_ID = "sync_changes";
+const TRACKED_CHANGE_COLLECTIONS = new Set(["activeStudents", "registeredStudents"]);
+let syncInstanceId = "";
+const localWriteAt = new Map<string, number>();
+
+export function setSyncInstanceId(id: string) {
+  syncInstanceId = id;
+}
+
+/** Last time THIS instance wrote/deleted the given record (0 if never). */
+export function getLastLocalWriteAt(collectionName: string, id: string): number {
+  return localWriteAt.get(`${collectionName}:${id}`) || 0;
+}
+
+function noteLocalWrite(collectionName: string, id: string) {
+  if (!TRACKED_CHANGE_COLLECTIONS.has(collectionName)) return;
+  if (localWriteAt.size > 2000) localWriteAt.clear();
+  localWriteAt.set(`${collectionName}:${id}`, Date.now());
+}
+
+function publishEntityChange(collectionName: string, id: string) {
+  if (!db || !TRACKED_CHANGE_COLLECTIONS.has(collectionName)) return;
+  setDoc(
+    doc(db, "system", SYNC_CHANGES_DOC_ID),
+    { [`${collectionName}:${id}`]: `${Date.now()}|${syncInstanceId}` },
+    { merge: true }
+  ).catch((e) => console.warn("Failed to publish sync change:", e));
+}
+
+/** Parses a `system/sync_changes` entry value ("<timestamp>|<instanceId>"). */
+export function parseSyncChangeValue(value: any): { ts: number; instanceId: string } {
+  const [tsStr, instanceId = ""] = String(value ?? "").split("|");
+  return { ts: Number(tsStr) || 0, instanceId };
+}
+
 export function syncEntityToFirestore(collectionName: string, id: string, data: any) {
   if (!db || !id) return;
   try {
@@ -689,9 +734,35 @@ export function syncEntityToFirestore(collectionName: string, id: string, data: 
       return;
     }
     setWriteCache(cacheKey, hashVal);
+    noteLocalWrite(collectionName, id);
     // Fire-and-forget from the caller's perspective, but retried internally.
-    setDocWithRetry(doc(db, collectionName, id), sanitized, cacheKey, OperationType.WRITE);
+    setDocWithRetry(doc(db, collectionName, id), sanitized, cacheKey, OperationType.WRITE)
+      .then(() => publishEntityChange(collectionName, id));
   } catch(e) {
+    console.error(e);
+  }
+}
+
+/**
+ * Writes ONLY the given fields of a record (Firestore merge), for server-side
+ * side effects such as recomputing a student's attendanceScore or re-plotting
+ * a class. Those used to re-save the instance's whole in-memory student object,
+ * which pushed an outdated status/class from another instance back into
+ * Firestore - for a whole class at once when a sensei was re-plotted.
+ */
+export function mergeEntityFieldsToFirestore(collectionName: string, id: string, fields: Record<string, any>) {
+  if (!db || !id || !fields) return;
+  try {
+    const sanitized = sanitizeFirestoreData(fields);
+    // The full-document hash cached for this record no longer matches Firestore.
+    writeCache.delete(`${collectionName}/${id}`);
+    noteLocalWrite(collectionName, id);
+    setDoc(doc(db, collectionName, id), sanitized, { merge: true })
+      .then(() => publishEntityChange(collectionName, id))
+      .catch((e) => {
+        try { handleFirestoreError(e, OperationType.WRITE, `${collectionName}/${id}`); } catch (logged) {}
+      });
+  } catch (e) {
     console.error(e);
   }
 }
@@ -706,7 +777,9 @@ export async function syncEntityToFirestoreAsync(collectionName: string, id: str
       return true;
     }
     setWriteCache(cacheKey, hashVal);
+    noteLocalWrite(collectionName, id);
     await setDocWithRetry(doc(db, collectionName, id), sanitized, cacheKey, OperationType.WRITE);
+    publishEntityChange(collectionName, id);
     return true;
   } catch (e) {
     console.error(`Error in syncEntityToFirestoreAsync [${collectionName}/${id}]:`, e);
@@ -796,10 +869,12 @@ export function deleteEntityFromFirestore(collectionName: string, id: string) {
   try {
     const cacheKey = `${collectionName}/${id}`;
     writeCache.delete(cacheKey);
+    noteLocalWrite(collectionName, id);
     (async () => {
       for (let attempt = 0; attempt <= 2; attempt++) {
         try {
           await deleteDoc(doc(db, collectionName, id));
+          publishEntityChange(collectionName, id);
           return;
         } catch (e) {
           if (attempt < 2) {
@@ -820,9 +895,11 @@ export async function deleteEntityFromFirestoreAsync(collectionName: string, id:
   try {
     const cacheKey = `${collectionName}/${id}`;
     writeCache.delete(cacheKey);
+    noteLocalWrite(collectionName, id);
     for (let attempt = 0; attempt <= 2; attempt++) {
       try {
         await deleteDoc(doc(db, collectionName, id));
+        publishEntityChange(collectionName, id);
         return true;
       } catch (e) {
         if (attempt < 2) {

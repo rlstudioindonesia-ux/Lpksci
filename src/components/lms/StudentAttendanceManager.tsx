@@ -1,3 +1,5 @@
+import { getStudentStatusGroup } from "../../lib/studentStatusGroups";
+import { todayLocalISO } from "../../lib/dateUtils";
 import React from "react";
 import { createPortal } from "react-dom";
 import { BookOpen, Calendar, ChevronDown, ChevronUp, Clock, Edit3, Save, Search, Trash2, Users, X } from "lucide-react";
@@ -27,7 +29,7 @@ export function StudentAttendanceManager({
 }) {
   const [isOpen, setIsOpen] = React.useState(true);
   const [kegiatan, setKegiatan] = React.useState("");
-  const [date, setDate] = React.useState(new Date().toISOString().split("T")[0]);
+  const [date, setDate] = React.useState(todayLocalISO());
   const [startTime, setStartTime] = React.useState("08:30");
   const [endTime, setEndTime] = React.useState("11:00");
   const [selectedClass, setSelectedClass] = React.useState(defaultClass || "");
@@ -115,8 +117,11 @@ export function StudentAttendanceManager({
 
   const studentsInClass = React.useMemo(() => {
     if (!selectedClass) return [];
+    // Siswa yang sudah Dikeluarkan tidak ikut diabsen: sebelumnya mereka tetap
+    // terdaftar dan otomatis bernilai "Hadir". (Alumni Di Jepang tetap ikut:
+    // kelas alumni online memang mengabsen mereka.)
     return activeStudents.filter(
-      (s: any) => (s.class || "").toLowerCase().trim() === selectedClass.toLowerCase().trim()
+      (s: any) => (s.class || "").toLowerCase().trim() === selectedClass.toLowerCase().trim() && getStudentStatusGroup(s.status) !== "Dikeluarkan"
     );
   }, [activeStudents, selectedClass]);
 

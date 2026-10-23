@@ -1,13 +1,14 @@
 import React from "react";
 import { Activity, AlertCircle, Award, BookOpen, Calculator, Calendar, CheckCheck, CheckCircle, ChevronDown, ChevronRight, Clock, DollarSign, Download, Edit, Eye, FileText, Filter, Globe, GraduationCap, History, Laptop, LogIn, RefreshCw, RotateCcw, Search, Shield, ShieldCheck, Smartphone, TrendingUp, UserCheck, Users, UserX } from "lucide-react";
 import { createSvgAvatar, getSafePhotoUrl } from "../../lib/storageHelper";
-import { calculateAge } from "../../lib/dateUtils";
+import { calculateAge, todayLocalISO, toLocalISODate } from "../../lib/dateUtils";
 import { computeAttendanceRate } from "../../lib/attendanceMetrics";
 import { isGradedAssessment } from "../../lib/scoreAveraging";
 import { hasStaffOversight } from "../../lib/permissions";
 import { countWorkingDaysInPayrollPeriod, formatPayrollPeriodLabel, generateRecentPayrollPeriods, isTimestampInPayrollPeriod } from "../../lib/staffAttendancePeriod";
 import { downloadHrAttendanceSummaryPdf, downloadDailyLoginLogsPdf } from "../../lib/attendanceReportPdf";
 import { Bar, BarChart, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { countStudentsByStatusGroup, getStudentStatusGroup, studentMatchesStatusGroup, isStudentStillActive } from "../../lib/studentStatusGroups";
 
 interface VvipFullEvalSegmentProps {
   activeStudents: any;
@@ -101,7 +102,7 @@ export default function VvipFullEvalSegment({ activeStudents, classFilter, class
 
   // Staff & Sensei Daily Login Log States
   const [staffLoginDateMode, setStaffLoginDateMode] = React.useState<"today" | "yesterday" | "7days" | "custom">("today");
-  const [staffLoginCustomDate, setStaffLoginCustomDate] = React.useState<string>(() => new Date().toISOString().split("T")[0]);
+  const [staffLoginCustomDate, setStaffLoginCustomDate] = React.useState<string>(() => todayLocalISO());
   const [staffLoginRoleFilter, setStaffLoginRoleFilter] = React.useState<string>("all");
   const [staffLoginSearchQuery, setStaffLoginSearchQuery] = React.useState<string>("");
   const [staffLoginStatusFilter, setStaffLoginStatusFilter] = React.useState<string>("all");
@@ -115,12 +116,12 @@ export default function VvipFullEvalSegment({ activeStudents, classFilter, class
   // Determine target date range
   const targetDateInfo = React.useMemo(() => {
     const now = new Date();
-    let targetDateStr = now.toISOString().split("T")[0];
+    let targetDateStr = toLocalISODate(now);
     let label = `Hari Ini (${now.toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })})`;
 
     if (staffLoginDateMode === "yesterday") {
       const y = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-      targetDateStr = y.toISOString().split("T")[0];
+      targetDateStr = toLocalISODate(y);
       label = `Kemarin (${y.toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })})`;
     } else if (staffLoginDateMode === "custom" && staffLoginCustomDate) {
       targetDateStr = staffLoginCustomDate;
@@ -155,7 +156,9 @@ export default function VvipFullEvalSegment({ activeStudents, classFilter, class
           const logD = new Date(ts);
           return logD >= sevenDaysAgo && logD <= now;
         } else {
-          return ts.startsWith(targetDateInfo.targetDateStr);
+          // Local (WIB) calendar day: comparing the UTC ISO prefix put early-
+          // morning logins under the previous day.
+          return toLocalISODate(ts) === targetDateInfo.targetDateStr;
         }
       });
 
@@ -164,7 +167,7 @@ export default function VvipFullEvalSegment({ activeStudents, classFilter, class
         const lastActiveTs = u.lastActive;
         const matchesActive = staffLoginDateMode === "7days"
           ? (new Date(lastActiveTs) >= sevenDaysAgo && new Date(lastActiveTs) <= now)
-          : lastActiveTs.startsWith(targetDateInfo.targetDateStr);
+          : toLocalISODate(lastActiveTs) === targetDateInfo.targetDateStr;
 
         const alreadyExists = dateLogs.some((l: any) => {
           const ts = l.timestamp || l.time;
@@ -608,6 +611,7 @@ export default function VvipFullEvalSegment({ activeStudents, classFilter, class
                               <th className="px-3 py-3">📋 Sertifikasi JFT/jlpt/SSW</th>
                               <th className="px-3 py-3">📘 Diklat SO</th>
                               <th className="px-3 py-3">🇯🇵 Jepang</th>
+                              <th className="px-3 py-3">❌ Keluar</th>
                               <th className="px-3 py-3 text-right">Aksi</th>
                             </tr>
                           </thead>
@@ -626,11 +630,14 @@ export default function VvipFullEvalSegment({ activeStudents, classFilter, class
     
                                 const isSelected = classFilter.toLowerCase() === className.toLowerCase();
     
-                                const belajarCount = classStudents.filter((s: any) => !["Lulus", "Di Jepang", "Diklat SO", "On Proges Job", "On Progres JFT/JLPT/SSW", "Berhenti", "Alumni"].includes(s.status || "")).length;
-                                const jobCount = classStudents.filter((s: any) => s.status === "On Proges Job").length;
-                                const jftCount = classStudents.filter((s: any) => s.status === "On Progres JFT/JLPT/SSW").length;
-                                const diklatCount = classStudents.filter((s: any) => s.status === "Diklat SO").length;
-                                const jepangCount = classStudents.filter((s: any) => s.status === "Di Jepang" || s.status === "Lulus").length;
+                                // Rumus sama dengan tabel status (lib/studentStatusGroups) supaya angka konsisten
+                                const grouped = countStudentsByStatusGroup(classStudents);
+                                const belajarCount = grouped["Belajar"];
+                                const jobCount = grouped["On Proges Job"];
+                                const jftCount = grouped["On Progres JFT/JLPT/SSW"];
+                                const diklatCount = grouped["Diklat SO"];
+                                const jepangCount = grouped["Di Jepang"];
+                                const keluarCount = grouped["Dikeluarkan"];
     
                                 const colors = [
                                   "text-blue-400", "text-sky-400", "text-indigo-400",
@@ -681,6 +688,7 @@ export default function VvipFullEvalSegment({ activeStudents, classFilter, class
                                     <td className="px-3 py-3"><Badge count={jftCount} label="Sertifikasi JFT/jlpt/SSW" cls="bg-sky-500/20 text-sky-300" /></td>
                                     <td className="px-3 py-3"><Badge count={diklatCount} label="Diklat" cls="bg-indigo-500/20 text-indigo-300" /></td>
                                     <td className="px-3 py-3"><Badge count={jepangCount} label="Jepang" cls="bg-emerald-500/20 text-emerald-300" /></td>
+                                <td className="px-3 py-3"><Badge count={keluarCount} label="Keluar" cls="bg-rose-500/20 text-rose-300" /></td>
                                     <td className="px-3 py-3 text-right">
                                       <span className="inline-flex items-center gap-1 text-[9px] font-bold text-slate-400 group-hover:text-indigo-300 transition-colors whitespace-nowrap">
                                         {isSelected ? "Reset" : "Lihat"}
@@ -718,7 +726,7 @@ export default function VvipFullEvalSegment({ activeStudents, classFilter, class
                               const isSelected = filterStatus === st.id;
                               const count = activeStudents.filter((s: any) => {
                                 if (classFilter !== "all" && s.class !== classFilter) return false;
-                                return s.status === st.id || (st.id === "On Progres JFT/JLPT/SSW" && s.status === "Lulus");
+                                return studentMatchesStatusGroup(s, st.id);
                               }).length;
     
                               return (
@@ -893,10 +901,8 @@ export default function VvipFullEvalSegment({ activeStudents, classFilter, class
     
                     let matchesStatus = true;
                     if (classFilter === "all") {
-                      if (selectedClassTab === "Belajar") {
-                        matchesStatus = !alumniStatuses.includes(student.status || "");
-                      } else if (selectedClassTab && selectedClassTab !== "Semua") {
-                        matchesStatus = student.status === selectedClassTab;
+                      if (selectedClassTab && selectedClassTab !== "Semua") {
+                        matchesStatus = studentMatchesStatusGroup(student, selectedClassTab);
                       } else {
                         if (siswaTab === "aktif") {
                           matchesStatus = !alumniStatuses.includes(student.status || "");
@@ -910,11 +916,11 @@ export default function VvipFullEvalSegment({ activeStudents, classFilter, class
                         const sc = getStudentClass(s).toLowerCase();
                         const matchCls = classFilter === "Belum Diplot" ? (!sc || sc === "belum diplot" || sc === "-") : sc === classFilter.trim().toLowerCase();
                         if (!matchCls) return false;
-                        return selectedClassTab === "Belajar" ? !alumniStatuses.includes(s.status || "") : s.status === selectedClassTab;
+                        return studentMatchesStatusGroup(s, selectedClassTab);
                       });
     
                       if (classHasStatusMatch) {
-                        matchesStatus = selectedClassTab === "Belajar" ? !alumniStatuses.includes(student.status || "") : student.status === selectedClassTab;
+                        matchesStatus = studentMatchesStatusGroup(student, selectedClassTab);
                       } else {
                         // Do not block status if no students in this class match that specific status tab
                         matchesStatus = true;

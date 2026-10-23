@@ -1,5 +1,7 @@
 import type { Request, Response } from "express";
-import { syncEntityToFirestore, deleteEntityFromFirestore, uploadBufferToFirebaseStorage } from "../../src/db/firebase-adapter.ts";
+import { syncEntityToFirestore, deleteEntityFromFirestore, uploadBufferToFirebaseStorage, mergeEntityFieldsToFirestore } from "../../src/db/firebase-adapter.ts";
+import { todayJakartaISO } from "../../src/lib/dateUtils.ts";
+import { uniqueIdSuffix } from "../../src/lib/idGenerator.ts";
 
 // Attendance, salaries, and teacher leave/report/contract records
 // Extracted verbatim from the monolithic /api/state/update handler in server.ts.
@@ -28,10 +30,10 @@ export function handleHrState(req: Request, res: Response, dataType: string, act
         }
 
         const newAtt = {
-          id: `ATT-${Date.now().toString().slice(-4)}`,
+          id: `ATT-${uniqueIdSuffix()}`,
           studentId: payload.studentId,
           studentName: payload.studentName,
-          date: payload.date || new Date().toISOString().split("T")[0],
+          date: payload.date || todayJakartaISO(),
           status: payload.status,
           subject: payload.subject,
           notes: payload.notes || "",
@@ -59,9 +61,7 @@ export function handleHrState(req: Request, res: Response, dataType: string, act
             student.attendanceScore = totalRecords > 0 ? Math.round((presentCount / totalRecords) * 100) : 0;
 
             // Also sync to firestore if using firebase
-            if (typeof syncEntityToFirestore !== "undefined") {
-              syncEntityToFirestore("activeStudents", student.id, student);
-            }
+            mergeEntityFieldsToFirestore("activeStudents", student.id, { attendanceScore: student.attendanceScore });
           }
         }
         return res.json({ success: true, item: newAtt });
@@ -88,7 +88,7 @@ export function handleHrState(req: Request, res: Response, dataType: string, act
           const presentCount = stRecords.filter(a => a.status === "Hadir").length;
           const totalRecords = stRecords.length;
           student.attendanceScore = totalRecords > 0 ? Math.round((presentCount / totalRecords) * 100) : 0;
-          syncEntityToFirestore("activeStudents", student.id, student);
+          mergeEntityFieldsToFirestore("activeStudents", student.id, { attendanceScore: student.attendanceScore });
         }
       }
       return res.json({ success: true, id });
@@ -127,7 +127,7 @@ export function handleHrState(req: Request, res: Response, dataType: string, act
           const presentCount = stRecords.filter((a: any) => a.status === "Hadir").length;
           const totalRecords = stRecords.length;
           student.attendanceScore = totalRecords > 0 ? Math.round((presentCount / totalRecords) * 100) : 0;
-          syncEntityToFirestore("activeStudents", student.id, student);
+          mergeEntityFieldsToFirestore("activeStudents", student.id, { attendanceScore: student.attendanceScore });
         }
       }
       return res.json({ success: true, item: payload });
@@ -137,12 +137,12 @@ export function handleHrState(req: Request, res: Response, dataType: string, act
     if (dataType === "salaries" && action === "add") {
       if (!state.salaries) state.salaries = [];
       const newSalary = {
-        id: `SAL-${Date.now().toString().slice(-4)}`,
+        id: `SAL-${uniqueIdSuffix()}`,
         staffName: payload.staffName,
         role: payload.role || "Staff",
         amount: Number(payload.amount),
         monthString: payload.monthString || "Bulan Ini",
-        paymentDate: payload.paymentDate || new Date().toISOString().split("T")[0],
+        paymentDate: payload.paymentDate || todayJakartaISO(),
         status: payload.status || "Lunas",
         notes: payload.notes || ""
       };
@@ -239,7 +239,7 @@ export function handleHrState(req: Request, res: Response, dataType: string, act
           content: payload.content || "",
           link: payload.link || "",
           fileUrl: payload.fileUrl || "",
-          submittedDate: payload.submittedDate || payload.date || new Date().toISOString().split("T")[0]
+          submittedDate: payload.submittedDate || payload.date || todayJakartaISO()
         };
         state.teacherReports.unshift(newReport);
         syncEntityToFirestore("teacherReports", newReport.id, newReport);

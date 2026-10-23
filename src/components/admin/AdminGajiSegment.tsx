@@ -1,3 +1,4 @@
+import { todayLocalISO, toLocalISODate } from "../../lib/dateUtils";
 import React from "react";
 import { Activity, BarChart3, CheckSquare, ChevronLeft, ChevronRight, PieChart as LucidePieChart, Receipt, Search, TrendingUp, Users, Wallet } from "lucide-react";
 import { ConfirmButton } from "../ConfirmButton";
@@ -174,7 +175,7 @@ export default function AdminGajiSegment({ currentUser, editingSalId, hrFilterMo
                               type="date"
                               required
                               className="w-full text-xs p-2 bg-white border border-slate-300 rounded-lg outline-none"
-                              defaultValue={new Date().toISOString().split("T")[0]}
+                              defaultValue={todayLocalISO()}
                             />
                           </div>
                           <div className="space-y-1">
@@ -623,7 +624,7 @@ export default function AdminGajiSegment({ currentUser, editingSalId, hrFilterMo
                       const totalStaff = (systemState.users || []).filter(u => u.role === "Pengajar" || u.role === "Admin").length;
                       const totalMonthLogs = (systemState.logs || []).filter(l => 
                         l.type === "PRESENSI_PENGAJAR" && 
-                        ((l.timestamp && l.timestamp.startsWith(hrFilterMonth)) || (l.time && l.time.startsWith(hrFilterMonth)))
+                        ((l.timestamp && toLocalISODate(l.timestamp).startsWith(hrFilterMonth)) || (l.time && l.time.startsWith(hrFilterMonth)))
                       ).length;
     
                       const totalPaidSalary = (systemState.salaries || [])
@@ -636,7 +637,7 @@ export default function AdminGajiSegment({ currentUser, editingSalId, hrFilterMo
     
                       let allOnTime = 0;
                       let allTotal = 0;
-                      (systemState.logs || []).filter(l => l.type === "PRESENSI_PENGAJAR" && ((l.timestamp && l.timestamp.startsWith(hrFilterMonth)) || (l.time && l.time.startsWith(hrFilterMonth)))).forEach(log => {
+                      (systemState.logs || []).filter(l => l.type === "PRESENSI_PENGAJAR" && ((l.timestamp && toLocalISODate(l.timestamp).startsWith(hrFilterMonth)) || (l.time && l.time.startsWith(hrFilterMonth)))).forEach(log => {
                         if (log.description.includes("MASUK")) {
                           allTotal++;
                           const match = log.description.match(/MASUK\s*-\s*(\d{2}):(\d{2}):(\d{2})/i);
@@ -767,7 +768,7 @@ export default function AdminGajiSegment({ currentUser, editingSalId, hrFilterMo
                                       const staffLogs = (systemState.logs || []).filter(l => 
                                         l.type === "PRESENSI_PENGAJAR" && 
                                         (l.user === u.name || l.user === u.username) && 
-                                        ((l.timestamp && l.timestamp.startsWith(hrFilterMonth)) || (l.time && l.time.startsWith(hrFilterMonth)))
+                                        ((l.timestamp && toLocalISODate(l.timestamp).startsWith(hrFilterMonth)) || (l.time && l.time.startsWith(hrFilterMonth)))
                                       );
                                       
                                       let checkIns = 0;
@@ -963,7 +964,7 @@ export default function AdminGajiSegment({ currentUser, editingSalId, hrFilterMo
                                                           amount: amt,
                                                           monthString: hrFilterMonth,
                                                           status: "Lunas" as const,
-                                                          paymentDate: new Date().toISOString().split("T")[0],
+                                                          paymentDate: todayLocalISO(),
                                                           notes: notesVal
                                                         };
     
@@ -973,7 +974,7 @@ export default function AdminGajiSegment({ currentUser, editingSalId, hrFilterMo
                                                           // Buku Kas Ledger (cashLedger)
                                                           await onUpdateState("cashLedger", "add", {
                                                             code: "P1", // Gaji Karyawan
-                                                            date: new Date().toISOString().split("T")[0],
+                                                            date: todayLocalISO(),
                                                             description: `Gaji Staff: ${u.name} (${formattedMonthStr})`,
                                                             inAmount: 0,
                                                             outAmount: amt

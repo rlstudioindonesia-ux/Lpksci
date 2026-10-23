@@ -1,3 +1,6 @@
+import { defaultStudentPaymentId, studentPaymentKey } from "../lib/paymentIds";
+import { uniqueIdSuffix } from "../lib/idGenerator";
+import { todayLocalISO } from "../lib/dateUtils";
 import React, { useState } from "react";
 import { createPortal } from "react-dom";
 import { SystemState, UserAccount, PaymentRecord } from "../types";
@@ -109,11 +112,11 @@ export function getStudentPayments(
         }
       } else {
         result.push({
-          id: `PAY-${studentName.replace(/\s+/g, "").toUpperCase().slice(0, 6)}-AL`,
+          id: defaultStudentPaymentId(studentName, "AL"),
           studentName,
           category: defaultAlumniCategory.category,
           amount: defaultAlumniCategory.amount,
-          date: new Date().toISOString().split("T")[0],
+          date: todayLocalISO(),
           status: defaultAlumniCategory.defaultStatus,
           paymentMethod: defaultAlumniCategory.defaultMethod
         });
@@ -145,11 +148,10 @@ export function getStudentPayments(
   const result: PaymentRecord[] = [];
 
   if (!isClearedAll) {
-    const studentClean = (studentName || "").replace(/\s+/g, "").toUpperCase();
 
     // For each default category, find ALL matching actual payments for this student
     defaultCategories.forEach((cat) => {
-      const defaultId = `PAY-${studentClean.slice(0, 6)}-${cat.idSuffix}`;
+      const defaultId = defaultStudentPaymentId(studentName, cat.idSuffix);
 
       // All actual payments in DB that match this default category
       const matching = studentActualPayments.filter(p =>
@@ -180,7 +182,7 @@ export function getStudentPayments(
           studentName,
           category: cat.category,
           amount: cat.amount,
-          date: new Date().toISOString().split("T")[0],
+          date: todayLocalISO(),
           status: cat.defaultStatus,
           paymentMethod: cat.defaultMethod || ""
         });
@@ -367,7 +369,7 @@ export default function PembayaranSiswaView({
         studentName: targetStudent,
         category: targetCategory || targetPay?.category || "Tagihan",
         amount: targetPay?.amount || 0,
-        date: targetPay?.date || new Date().toISOString().split("T")[0],
+        date: targetPay?.date || todayLocalISO(),
         status: "Dihapus",
         isDeleted: true
       });
@@ -381,11 +383,11 @@ export default function PembayaranSiswaView({
       return;
     }
     const payload = {
-      id: `PAY-${formStudentName.replace(/\s+/g, "").toUpperCase().slice(0, 6)}-${Date.now().toString().slice(-3)}`,
+      id: `PAY-${studentPaymentKey(formStudentName)}-${uniqueIdSuffix()}`,
       studentName: formStudentName,
       category: formCategory,
       amount: Number(formAmount),
-      date: new Date().toISOString().split("T")[0],
+      date: todayLocalISO(),
       status: formStatus,
       paymentMethod: formMethod
     };
@@ -537,7 +539,7 @@ export default function PembayaranSiswaView({
         status: "Aktif",
         statusPendaftaran: "Siswa Aktif",
         class: "Kelas Reguler",
-        registrationDate: new Date().toISOString().split("T")[0]
+        registrationDate: todayLocalISO()
       };
 
       const newUser = {
@@ -1064,7 +1066,7 @@ export default function PembayaranSiswaView({
                               studentName: selectedStudent,
                               category: "ALL_CLEARED",
                               amount: 0,
-                              date: new Date().toISOString().split("T")[0],
+                              date: todayLocalISO(),
                               status: "Dihapus",
                               isDeleted: true,
                               isClearedAll: true
@@ -1195,7 +1197,7 @@ export default function PembayaranSiswaView({
                                     const isAct = (systemState.activeStudents || []).some(s => s.id === studentObj.id);
                                     try {
                                       if (isAct) {
-                                        await onUpdateState("activeStudents", "update", { ...studentObj, class: newClass });
+                                        await onUpdateState("activeStudents", "update", { id: studentObj.id, class: newClass });
                                       } else {
                                         await onUpdateState("registeredStudents", "update", { ...studentObj, class: newClass });
                                       }

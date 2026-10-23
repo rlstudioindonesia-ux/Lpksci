@@ -4,12 +4,17 @@ import path from "path";
 import { createServer as createViteServer } from "vite";
 import dotenv from "dotenv";
 import fs from "fs";
-import { testConnection, loadStateFromFirestore, syncEntityToFirestore, syncCustomizationToFirestore, syncGalleriesToFirestore, syncLmsClassToFirestore, syncAllLmsClassesToFirestore, deleteEntityFromFirestore, uploadBufferToFirebaseStorage, getUserFromFirestore, getEntityFromFirestore, db, touchSyncMeta } from "./src/db/firebase-adapter.ts";
+import { getStudentStatusGroup } from "./src/lib/studentStatusGroups.ts";
+import { findRecordIndex } from "./src/lib/recordMatching.ts";
+import { testConnection, loadStateFromFirestore, syncEntityToFirestore, syncCustomizationToFirestore, syncGalleriesToFirestore, syncLmsClassToFirestore, syncAllLmsClassesToFirestore, deleteEntityFromFirestore, uploadBufferToFirebaseStorage, getUserFromFirestore, getEntityFromFirestore, db, touchSyncMeta, setSyncInstanceId, parseSyncChangeValue, SYNC_CHANGES_DOC_ID, mergeEntityFieldsToFirestore } from "./src/db/firebase-adapter.ts";
 import { doc, getDoc } from "firebase/firestore";
 import { DEFAULT_GALLERY_ITEMS } from "./src/data/defaultGallery.ts";
 import { isHashedPassword, hashPassword, verifyPassword, stripPassword } from "./server/auth-utils.ts";
 import { handleStateUpdate } from "./server/handlers/index.ts";
 import { invalidateStateCache, getStateVersion, getCachedStateResponse, setCachedStateResponse } from "./server/stateCache.ts";
+import { todayJakartaISO } from "./src/lib/dateUtils.ts";
+import { nextSequentialId, collectUsedStudentIds } from "./src/lib/idGenerator.ts";
+import { uniqueIdSuffix } from "./src/lib/idGenerator.ts";
 
 export { invalidateStateCache };
 
@@ -91,7 +96,7 @@ app.get("/robots.txt", (req, res) => {
 
 app.get("/sitemap.xml", (req, res) => {
   res.type("application/xml");
-  const today = new Date().toISOString().split("T")[0];
+  const today = todayJakartaISO();
   const sitemap = `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
@@ -147,6 +152,7 @@ export async function ensureStateReady(maxWaitMs = 35000): Promise<void> {
 }
 
 export const SERVER_INSTANCE_ID = `srv-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+setSyncInstanceId(SERVER_INSTANCE_ID);
 
 let lastProcessedSyncMetaTime = 0;
 let lastProcessedCostConfigHash = "";
@@ -164,7 +170,16 @@ export function initRealtimeSync(): void {
 
   console.log(`🔌 [Real-time Sync] Resilient polling synchronizer started (instanceId: ${SERVER_INSTANCE_ID})...`);
 
+  // Changes stamped before this point are already contained in the state that
+  // was just loaded from Firestore (minus a margin for the load itself).
+  const changeFeedBaseline = Date.now() - 60000;
+
   const pollSync = async () => {
+    try {
+      await applyStudentChangeFeed(changeFeedBaseline);
+    } catch (err: any) {
+      // Next tick retries
+    }
     try {
       // 1. Check sync_meta using unary getDoc (eliminates idle gRPC stream RST_STREAM disconnects)
       const metaDoc = await getDoc(doc(db, "system", "sync_meta"));
@@ -246,13 +261,68 @@ export function initRealtimeSync(): void {
   syncIntervalTimer = setInterval(pollSync, 15000);
 }
 
+// Last change-feed timestamp applied per "<collection>:<id>" (see firebase-adapter.ts).
+const seenStudentChanges = new Map<string, number>();
+
+/**
+ * Pulls every student record another instance changed since the last poll,
+ * so this instance never keeps (or re-saves) an outdated status.
+ */
+async function applyStudentChangeFeed(baseline: number): Promise<void> {
+  if (!db) return;
+  const snap = await getDoc(doc(db, "system", SYNC_CHANGES_DOC_ID));
+  if (!snap || !snap.exists()) return;
+  const entries = snap.data() || {};
+  let changed = false;
+  for (const [key, raw] of Object.entries(entries)) {
+    const { ts, instanceId } = parseSyncChangeValue(raw);
+    const lastSeen = seenStudentChanges.get(key) ?? baseline;
+    if (ts <= lastSeen) continue;
+    seenStudentChanges.set(key, ts);
+    if (instanceId === SERVER_INSTANCE_ID) continue;
+
+    const sep = key.indexOf(":");
+    if (sep <= 0) continue;
+    const collectionName = key.slice(0, sep);
+    const id = key.slice(sep + 1);
+    if (!Array.isArray(state[collectionName])) continue;
+
+    const fresh = await getEntityFromFirestore(collectionName, id);
+    const arr = state[collectionName];
+    const idx = arr.findIndex((item: any) => item && item.id === id);
+    if (fresh) {
+      const record = { ...fresh, id: fresh.id || id };
+      if (idx >= 0) arr[idx] = record;
+      else arr.unshift(record);
+    } else if (idx >= 0) {
+      arr.splice(idx, 1);
+    }
+    changed = true;
+  }
+  if (changed) {
+    invalidateStateCache();
+  }
+}
+
 let isResyncing = false;
 let lastResyncTime = 0;
+let trailingResyncTimer: NodeJS.Timeout | null = null;
 
 export async function triggerBackgroundResync(force = false): Promise<void> {
   const now = Date.now();
-  if (isResyncing) return;
-  if (!force && now - lastResyncTime < 10000) return; // Debounce 10s
+  if (isResyncing || (!force && now - lastResyncTime < 10000)) {
+    // Previously a request arriving inside the 10s debounce window was simply
+    // dropped, so a remote change that landed right after another one was never
+    // loaded. Schedule one trailing resync instead.
+    if (!trailingResyncTimer) {
+      const wait = Math.max(1000, 10000 - (now - lastResyncTime));
+      trailingResyncTimer = setTimeout(() => {
+        trailingResyncTimer = null;
+        triggerBackgroundResync(true).catch(() => {});
+      }, wait);
+    }
+    return;
+  }
   isResyncing = true;
   lastResyncTime = now;
   try {
@@ -441,7 +511,9 @@ app.post("/api/upload", async (req, res) => {
     }
 
     const buffer = Buffer.from(base64Content, "base64");
-    const targetFolder = folder || "uploads";
+    // Same sanitising as Firebase Storage uploads: an unsanitised "../.." folder
+    // let the local-disk fallback below write files outside the uploads dir.
+    const targetFolder = String(folder || "uploads").replace(/[^a-zA-Z0-9_.-]/g, "_").replace(/^\.+/, "_") || "uploads";
     
     // 1. Attempt Firebase Storage upload first
     try {
@@ -524,6 +596,9 @@ app.post("/api/request-reset", async (req, res) => {
 app.post("/api/reset-password", async (req, res) => {
   try {
     const { token, newPassword } = req.body;
+    if (!newPassword || String(newPassword).trim().length < 6) {
+      return res.status(400).json({ error: "Password baru minimal 6 karakter." });
+    }
 
     if (!state.passwordResets) state.passwordResets = [];
     const resetIndex = state.passwordResets.findIndex((r) => r.token === token);
@@ -606,6 +681,9 @@ function getOrBuildStateJson(): { json: string; etag: string; version: number } 
 
   const payload = {
     ...state,
+    // Password-reset tokens must never leave the server: /api/state is readable
+    // by every visitor, so anyone could take a token and reset that account.
+    passwordResets: undefined,
     _isReady: isStateReady,
     _stateVersion: currentVersion,
     logs: (state.logs || []).map((l: any) => stripHeavyBase64Shallow(l, "[FOTO_TERSIMPAN]", new Set(["avatar"]))),
@@ -1075,7 +1153,7 @@ app.post("/api/register", async (req, res) => {
   const rawPassword = password || "123456";
 
   const newReg = {
-    id: `REG-${Date.now().toString().slice(-6)}`,
+    id: `REG-${uniqueIdSuffix()}`,
     name,
     email,
     password: hashPassword(rawPassword),
@@ -1085,7 +1163,7 @@ app.post("/api/register", async (req, res) => {
     education: education || "SMA",
     program: program || "Tokutei Ginou (SSW)",
     japaneseLevel: japaneseLevel || "Belum Belajar",
-    date: new Date().toISOString().split("T")[0],
+    date: todayJakartaISO(),
     timestamp: new Date().toISOString(),
     status: newRegStatus as any,
     docAkta: docAkta || "",
@@ -1114,16 +1192,12 @@ app.post("/api/register", async (req, res) => {
   if (isAlumni) {
     // Auto-approve as Active Student with status "Di Jepang"
     assignedStudentId = "SIS-001";
-    const existingActive = state.activeStudents.find(s => s.name === name);
+    const existingActiveIdx = findRecordIndex(state.activeStudents, { email, name });
+    const existingActive = existingActiveIdx !== -1 ? state.activeStudents[existingActiveIdx] : undefined;
     if (existingActive) {
       assignedStudentId = existingActive.id;
     } else {
-      let idNum = state.activeStudents.length + 1;
-      let newId = `SIS-${idNum.toString().padStart(3, "0")}`;
-      while (state.activeStudents.some(s => s.id === newId)) {
-        idNum++;
-        newId = `SIS-${idNum.toString().padStart(3, "0")}`;
-      }
+      const newId = nextSequentialId("SIS", collectUsedStudentIds(state));
       assignedStudentId = newId;
       const newActiveStudent = {
         id: assignedStudentId,
@@ -1145,7 +1219,10 @@ app.post("/api/register", async (req, res) => {
 
     // Auto-provision or update user account
     const protectedRoles = ["Pengajar", "VVIP", "Admin", "Admin Super", "Admin Biasa"];
-    const existingUser = state.users.find(u => u.username === email || u.email === email);
+    const regEmail = String(email || "").trim().toLowerCase();
+    const existingUser = regEmail
+      ? state.users.find(u => (u.username || "").trim().toLowerCase() === regEmail || (u.email || "").trim().toLowerCase() === regEmail)
+      : undefined;
     if (existingUser) {
       if (!protectedRoles.includes(existingUser.role)) {
         existingUser.assignedClass = "";
@@ -1172,11 +1249,11 @@ app.post("/api/register", async (req, res) => {
 
   // Insert a companion payment statement inside the ledger
   const newPay = {
-    id: isAutomatic ? `PAY-MID-${Date.now().toString().slice(-4)}` : `PAY-MAN-${Date.now().toString().slice(-4)}`,
+    id: isAutomatic ? `PAY-MID-${uniqueIdSuffix()}` : `PAY-MAN-${uniqueIdSuffix()}`,
     studentName: name,
     category: isAlumni ? `Registrasi Alumni (Sistem)` : `Pendaftaran Hub (${paymentMethod || "Virtual Account"})`,
     amount: isAlumni ? 0 : (paymentAmount !== undefined ? Number(paymentAmount) : 500000),
-    date: new Date().toISOString().split("T")[0],
+    date: todayJakartaISO(),
     status: payStatus as any,
     paymentMethod: paymentMethod || "Virtual Account",
     proofOfPayment: proofOfPayment || ""
@@ -1252,7 +1329,8 @@ app.post("/api/state/update", async (req, res) => {
                      deleteEntityFromFirestore("registeredStudents", id);
                      
                      // Sync the newly created active student
-                     const match = state.activeStudents.find(s => s.name === data.updated.name);
+                     const matchIdx = findRecordIndex(state.activeStudents, { email: data.updated.email, name: data.updated.name });
+                     const match = matchIdx !== -1 ? state.activeStudents[matchIdx] : undefined;
                      if (match) {
                          syncEntityToFirestore("activeStudents", match.id, match);
                      }
@@ -1323,7 +1401,7 @@ app.post("/api/vvip/analyze", (req, res) => {
   try {
     const activeCount = state.activeStudents.length;
     const workingInJapan = state.activeStudents.filter(s => s.status === "Di Jepang").length;
-    const studyingCount = state.activeStudents.filter(s => s.status === "Belajar").length;
+    const studyingCount = state.activeStudents.filter(s => getStudentStatusGroup(s.status) === "Belajar").length;
     const totalPayments = state.payments.filter(p => p.status === "Lunas").reduce((acc, curr) => acc + curr.amount, 0);
 
     const ratio = activeCount > 0 ? Math.round((workingInJapan / activeCount) * 100) : 0;
@@ -1700,7 +1778,7 @@ async function startServer() {
 
                 if (updatedStudent) {
                   alignmentCount++;
-                  syncEntityToFirestore("activeStudents", activeStudent.id, activeStudent);
+                  mergeEntityFieldsToFirestore("activeStudents", activeStudent.id, { profilePicture: state.activeStudents[actIndex].profilePicture });
                 }
               }
             }

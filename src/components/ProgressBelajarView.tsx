@@ -1,3 +1,4 @@
+import { todayLocalISO } from "../lib/dateUtils";
 import React, { useState } from "react";
 import { 
   TrendingUp, BookOpen, Clock, Calendar, Search, Award, CheckCircle2, 
@@ -149,7 +150,7 @@ export default function ProgressBelajarView({
       score: gradingStatus === "Telah Dinilai" ? gradingScore : undefined,
       notes: gradingNotes,
       assessedBy: currentUser?.name || "Instruktur",
-      assessedDate: new Date().toISOString().split("T")[0]
+      assessedDate: todayLocalISO()
     };
 
     // Save assessment to firestore
@@ -165,8 +166,10 @@ export default function ProgressBelajarView({
   const handleSaveMetrics = async () => {
     if (!selectedStudentId || !activeStudent) return;
 
+    // Kirim hanya kolom yang diubah: mengirim seluruh objek siswa ikut menimpa
+    // status dengan salinan lama di peramban (status "reset" ke Belajar).
     const updatedStudentPayload = {
-      ...activeStudent,
+      id: activeStudent.id,
       mathScore: editMath,
       fiveSScore: editFiveS,
       ethicsScore: editEthics,
@@ -189,8 +192,9 @@ export default function ProgressBelajarView({
     setIsSubmittingJobForm(true);
     setJobFormSuccess("");
 
+    // Hanya kolom pemantauan pasca-Job (lihat catatan di handleSaveMetrics).
     const updatedStudentPayload: Partial<ActiveStudent> = {
-      ...activeStudent,
+      id: activeStudent.id,
       jobTestimonial,
       jobSoMitra,
       jobCompanyJapan,

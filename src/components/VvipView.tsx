@@ -11,7 +11,7 @@ import { ConfirmButton } from "./ConfirmButton";
 import { MediaViewerModal } from "./MediaViewerModal";
 import { getSafePhotoUrl, createSvgAvatar, resolveAttendancePhotoUrl, uploadFileToFirebase } from "../lib/storageHelper";
 import { downloadStaffAttendanceDetailPdf } from "../lib/attendanceReportPdf";
-import { calculateAge } from "../lib/dateUtils";
+import { calculateAge, todayLocalISO } from "../lib/dateUtils";
 import { computeFinancialMetrics, computeMonthlyExpenseBreakdown } from "../lib/financeCalculations";
 import { isGradedAssessment } from "../lib/scoreAveraging";
 import { formatPayrollPeriodLabel, getCurrentPayrollPeriodKey, isTimestampInPayrollPeriod } from "../lib/staffAttendancePeriod";
@@ -98,6 +98,7 @@ import VvipGajiSegment from "./vvip/VvipGajiSegment";
 import VvipGajiSummarySegment from "./vvip/VvipGajiSummarySegment";
 import VvipExecSegment from "./vvip/VvipExecSegment";
 import VvipKalenderSegment from "./vvip/VvipKalenderSegment";
+import { countStudentsByStatusGroup, getStudentStatusGroup, studentMatchesStatusGroup, isStudentStillActive } from "../lib/studentStatusGroups";
 
 interface VvipViewProps {
   currentUser?: UserAccount | null;
@@ -323,7 +324,7 @@ export default function VvipView({
   ).length, [activeStudents]);
   
   const studyingCount = useMemo(() => activeStudents.filter(
-    (s) => !["Lulus", "Di Jepang", "Diklat SO", "On Proges Job", "On Progres JFT/JLPT/SSW"].includes(s.status || ""),
+    (s) => studentMatchesStatusGroup(s, "Belajar"),
   ).length, [activeStudents]);
   
   const totalLunasRevenue = useMemo(() => systemState.payments
@@ -3057,7 +3058,7 @@ export default function VvipView({
                 <input 
                   type="date" 
                   id="edit-ledger-date" 
-                  defaultValue={editingLedger.date ? (editingLedger.date.includes("T") ? editingLedger.date.split("T")[0] : editingLedger.date) : new Date().toISOString().split("T")[0]} 
+                  defaultValue={editingLedger.date ? (editingLedger.date.includes("T") ? editingLedger.date.split("T")[0] : editingLedger.date) : todayLocalISO()} 
                   className="w-full border border-slate-200 rounded-xl p-2.5 text-sm font-bold text-slate-700 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 bg-white" 
                 />
               </div>

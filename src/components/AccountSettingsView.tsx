@@ -47,6 +47,7 @@ import { UserAccount, SystemState } from "../types";
 import { ConfirmForm } from "./ConfirmForm";
 import { ConfirmButton } from "./ConfirmButton";
 import StudentCvView from "./StudentCvView";
+import { EXTRA_STUDENT_DOCUMENTS } from "../lib/studentDocuments";
 
 interface AccountSettingsViewProps {
   currentUser: UserAccount | null;
@@ -313,6 +314,9 @@ export default function AccountSettingsView({
         phone: safePhone,
         district: safeDistrict,
       };
+      // Siswa tidak mengubah status progresnya sendiri; salinan status di form bisa
+      // sudah usang dan menimpa status yang baru diubah admin.
+      if (isFromActiveStudents) delete (payload as any).status;
 
       const success = await onUpdateState(
         isFromActiveStudents ? "activeStudents" : "registeredStudents",
@@ -364,9 +368,11 @@ export default function AccountSettingsView({
       email: newEmail,
       role: newRole,
       password: newPassword.trim() || "adminadmin",
+      // Tanpa pilihan siswa, biarkan kosong: ID acak SIS-020..SIS-099 dulu
+      // menautkan akun baru ke data siswa lain yang sudah ada.
       studentId:
         newRole === "Siswa" || newRole === "Alumni"
-          ? newStudentId || `SIS-0${Math.floor(Math.random() * 80) + 20}`
+          ? newStudentId || undefined
           : undefined,
       profilePicture: newProfilePicture,
       japaneseLevel: newRole === "Pengajar" ? newJapaneseLevel : undefined,
@@ -1234,7 +1240,7 @@ export default function AccountSettingsView({
                 <div className="mt-8 pt-8 border-t border-slate-150 text-left">
                   <div className="mb-5">
                     <h4 className="font-sans font-black text-slate-900 text-sm flex items-center gap-2 uppercase tracking-wide">
-                      📂 Berkas & Dokumen Akademik/Pendaftaran (17 Dokumen)
+                      📂 Berkas & Dokumen Akademik/Pendaftaran ({17 + EXTRA_STUDENT_DOCUMENTS.length} Dokumen)
                     </h4>
                     <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
                       Unggah, lihat, dan perbarui seluruh dokumen persyaratan akademik dan pendaftaran magang Jepang Anda secara mandiri di bawah ini.
@@ -1260,6 +1266,7 @@ export default function AccountSettingsView({
                       { field: "docCV5", label: "Curriculum Vitae (CV) - Bagian 5", type: "CV" },
                       { field: "docMoU", label: "MoU Dokumen Persetujuan", type: "MoU" },
                       { field: "docKontrak", label: "Kontrak Kerja (JOB)", type: "JOB" },
+                      ...EXTRA_STUDENT_DOCUMENTS,
                     ].map((doc, idx) => {
                       const rawVal = (registeredStudentInfo as any)[doc.field];
                       const currentVal = rawVal && !rawVal.includes("_default.") ? rawVal : "";

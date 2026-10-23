@@ -1,6 +1,7 @@
 import React from "react";
 import { AlertCircle, Eye, FileText, Trash2, Upload } from "lucide-react";
 import { uploadFileToFirebase } from "../../lib/storageHelper";
+import { EXTRA_STUDENT_DOCUMENTS } from "../../lib/studentDocuments";
 
 interface LmsDokumenSegmentProps {
   currentUser: any;
@@ -47,7 +48,7 @@ export default function LmsDokumenSegment({ currentUser, onUpdateState, setViewi
                     );
                   }
     
-                  // Calculate how many of the 17 documents have been uploaded
+                  // Calculate how many of the student documents have been uploaded
                   const documentList = [
                     { field: "docKTP", label: "KTP (Kartu Tanda Penduduk)", isRequired: true, type: "PDF" },
                     { field: "docAkta", label: "Akta Kelahiran", isRequired: true, type: "PDF" },
@@ -66,6 +67,7 @@ export default function LmsDokumenSegment({ currentUser, onUpdateState, setViewi
                     { field: "docCV5", label: "Curriculum Vitae (CV) - Bagian 5", isRequired: false, type: "CV" },
                     { field: "docMoU", label: "MoU Dokumen Persetujuan", isRequired: false, type: "MoU" },
                     { field: "docKontrak", label: "Kontrak Kerja (JOB)", isRequired: false, type: "JOB" },
+                    ...EXTRA_STUDENT_DOCUMENTS.map((d) => ({ field: d.field, label: d.label, isRequired: false, type: d.type })),
                   ];
     
                   const getRealDocValue = (val: string) => val && !val.includes("_default.") ? val : "";
@@ -83,7 +85,7 @@ export default function LmsDokumenSegment({ currentUser, onUpdateState, setViewi
                         </div>
                         <div className="space-y-3 relative z-10 max-w-2xl">
                           <span className="text-[10px] font-mono font-extrabold uppercase bg-yellow-400 text-blue-950 px-2.5 py-1 rounded-md tracking-wider">
-                            📂 Dokumen Persyaratan Akademik (17 Berkas)
+                            📂 Dokumen Persyaratan Akademik ({documentList.length} Berkas)
                           </span>
                           <h3 className="font-display font-black text-xl sm:text-2xl leading-tight">
                             Lengkapi & Pantau Berkas Administrasi Anda
@@ -95,7 +97,7 @@ export default function LmsDokumenSegment({ currentUser, onUpdateState, setViewi
                           <div className="flex flex-wrap items-center gap-4 pt-2 text-xs">
                             <div className="bg-white/10 px-3.5 py-1.5 rounded-xl border border-white/10 flex items-center gap-2">
                               <span className="text-yellow-400 font-bold">📋 Total Terunggah:</span>
-                              <span className="font-extrabold text-white font-mono">{totalUploaded} / 17 Berkas</span>
+                              <span className="font-extrabold text-white font-mono">{totalUploaded} / {documentList.length} Berkas</span>
                             </div>
                             <div className="bg-white/10 px-3.5 py-1.5 rounded-xl border border-white/10 flex items-center gap-2">
                               <span className="text-yellow-400 font-bold">⚠️ Syarat Wajib:</span>

@@ -1,5 +1,5 @@
 import type { Request, Response } from "express";
-import { syncEntityToFirestore, syncCustomizationToFirestore, syncLmsClassToFirestore, syncAllLmsClassesToFirestore, deleteEntityFromFirestore } from "../../src/db/firebase-adapter.ts";
+import { syncEntityToFirestore, syncCustomizationToFirestore, syncLmsClassToFirestore, syncAllLmsClassesToFirestore, deleteEntityFromFirestore, mergeEntityFieldsToFirestore } from "../../src/db/firebase-adapter.ts";
 import { invalidateStateCache } from "../stateCache.ts";
 
 // Site customization/branding + landing config
@@ -58,7 +58,7 @@ export async function handleCustomizationState(req: Request, res: Response, data
           state.activeStudents.forEach(s => {
             if (s.class === oldName) {
               s.class = newName;
-              syncEntityToFirestore("activeStudents", s.id, s);
+              mergeEntityFieldsToFirestore("activeStudents", s.id, { class: newName });
             }
           });
         }
