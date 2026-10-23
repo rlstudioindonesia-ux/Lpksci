@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { findRecordIndex, findStudentUserIndex } from "./recordMatching";
+import { findRecordIndex, findStudentUserIndex, findStudentForUser } from "./recordMatching";
 
 const students = [
   { id: "SIS-001", name: "Muhammad Rizki", email: "rizki.a@contoh.id" },
@@ -50,5 +50,27 @@ describe("findStudentUserIndex", () => {
   it("uses a unique unlinked name as last resort and ignores staff", () => {
     expect(findStudentUserIndex(users, { id: "SIS-003", name: " budi " })).toBe(3);
     expect(findStudentUserIndex(users, { id: "SIS-004", name: "Tidak Ada" })).toBe(-1);
+  });
+});
+
+describe("findStudentForUser", () => {
+  const list = [
+    { id: "SIS-001", name: "Muhammad Rizki", email: "rizki.a@x.id" },
+    { id: "SIS-002", name: "Muhammad Rizki", email: "rizki.b@x.id" },
+    { id: "SIS-003", name: "Siti", email: "" },
+  ];
+
+  it("returns the account's own record even when another student listed first has the same name", () => {
+    expect(findStudentForUser(list, { studentId: "SIS-002", name: "Muhammad Rizki" })?.id).toBe("SIS-002");
+  });
+
+  it("falls back to email (also from an email username), then a unique name", () => {
+    expect(findStudentForUser(list, { username: "RIZKI.B@x.id", name: "Muhammad Rizki" })?.id).toBe("SIS-002");
+    expect(findStudentForUser(list, { name: "siti" })?.id).toBe("SIS-003");
+  });
+
+  it("does not guess between students sharing a name", () => {
+    expect(findStudentForUser(list, { name: "Muhammad Rizki" })).toBeUndefined();
+    expect(findStudentForUser(list, null)).toBeUndefined();
   });
 });

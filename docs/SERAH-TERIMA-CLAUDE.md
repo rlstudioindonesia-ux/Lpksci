@@ -48,7 +48,7 @@ Skill Claude Code ada di `.claude/skills/` (`alur-perubahan`, `aturan-data-siswa
 - **Status/data siswa tertimpa antar-instance**: catatan perubahan `system/sync_changes` (`publishEntityChange`, `applyStudentChangeFeed`), baca-sebelum-tulis di update siswa, `mergeEntityFieldsToFirestore` untuk efek samping (hanya kolom yang berubah).
 - **Resync**: `loadStateFromFirestore` menjadikan Firestore acuan (item terhapus tidak hidup lagi), kecuali tulisan lokal < 2 menit.
 - **Kelas/pengaturan**: App mengirim diff (`lmsClassesDiff`, kunci customization yang berubah), server menerapkan (`src/lib/classListDiff.ts`).
-- **Pencocokan siswa**: id → email → nama unik (`src/lib/recordMatching.ts`); jangan mencocokkan lewat nama saja.
+- **Pencocokan siswa**: id → email → nama unik (`src/lib/recordMatching.ts`); jangan mencocokkan lewat nama saja. Data siswa milik akun yang login: `findStudentForUser`; akun milik siswa: `findStudentUserIndex`.
 - **ID baru**: `uniqueIdSuffix()` / `nextSequentialId()` (`src/lib/idGenerator.ts`); jangan `Date.now().slice(-4)` atau `length + 1`.
 - **ID tagihan bawaan**: `defaultStudentPaymentId` (nama lengkap), `src/lib/paymentIds.ts`.
 - **Buku Kas**: entri pemasukan otomatis mengikuti pembayaran (`src/lib/paymentLedger.ts`).
@@ -71,7 +71,8 @@ Skill Claude Code ada di `.claude/skills/` (`alur-perubahan`, `aturan-data-siswa
 - #71 satu rumus rujukan alumni (Admin/VVIP/dasbor alumni), pengurutan aman untuk data tanpa tanggal/nama
 - #72 pendaftar hantu disembunyikan di server (tidak lagi dihapus otomatis berulang)
 - #73 akun siswa tidak lagi jadi Alumni karena nama sama (saat server mulai), impor pajak tidak menghitung pemasukan dua kali
-- berikutnya: status "Lulus" tetap siswa (kelas/sensei/akun tidak diubah)
+- #74 status "Lulus" tetap siswa (kelas/sensei/akun tidak diubah)
+- berikutnya: siswa bernama sama tidak lagi melihat/mengubah data siswa lain (`findStudentForUser` di ~20 layar + notifikasi)
 
 ## Tindak lanjut terbuka
 

@@ -7,6 +7,7 @@
 import { doc, setDoc, collection, onSnapshot, query, orderBy, limit } from "firebase/firestore";
 import { db } from "../firebaseClient";
 import { isStudentAlumni } from "./alumniStatus";
+import { findStudentForUser } from "./recordMatching";
 
 export interface BroadcastNotificationItem {
   id: string;
@@ -358,12 +359,7 @@ export function isNotificationRelevantForUser(
   // Targeted specifically to student IDs (e.g. Job recommendations)
   if (item.targetStudentIds && item.targetStudentIds.length > 0) {
     const studentId = user.studentId;
-    const matchedStudent = activeStudents?.find(
-      (s) =>
-        (studentId && s.id === studentId) ||
-        (s.email && user.email && s.email.toLowerCase() === user.email.toLowerCase()) ||
-        s.name === user.name
-    );
+    const matchedStudent = findStudentForUser(activeStudents, user);
     const resolvedId = studentId || matchedStudent?.id;
     if (resolvedId && item.targetStudentIds.includes(resolvedId)) {
       return true;
@@ -377,12 +373,7 @@ export function isNotificationRelevantForUser(
   }
 
   // Check whether user is Alumni vs Siswa
-  const studentObj = activeStudents?.find(
-    (s) =>
-      (user.studentId && s.id === user.studentId) ||
-      (s.email && user.email && s.email.toLowerCase() === user.email.toLowerCase()) ||
-      s.name === user.name
-  );
+  const studentObj = findStudentForUser(activeStudents, user);
   const isAlumni = role === "Alumni" || isStudentAlumni(studentObj);
   const isSiswa = (role === "Siswa" || !role) && !isAlumni;
 
@@ -415,12 +406,7 @@ export function checkAndNotifyJobOrdersOnLogin(
   }
 
   const activeStudents = systemState?.activeStudents || [];
-  const studentObj = activeStudents.find(
-    (s: any) =>
-      (user.studentId && s.id === user.studentId) ||
-      (s.email && user.email && s.email.toLowerCase() === user.email.toLowerCase()) ||
-      s.name === user.name
-  );
+  const studentObj = findStudentForUser(activeStudents, user);
   const isAlumni = role === "Alumni" || isStudentAlumni(studentObj);
   const isSiswa = (role === "Siswa" || !role) && !isAlumni;
 

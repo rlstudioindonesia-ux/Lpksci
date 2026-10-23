@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { findStudentForUser } from "../../lib/recordMatching";
 import { InlineLoginPanel } from "../InlineLoginPanel";
 import { CheckCircle, FileText, MessageSquare, Award } from "lucide-react";
 import { SystemState, JobOrder, UserAccount } from "../../types";
@@ -38,9 +39,9 @@ export default function MobileJobsSegment({
     );
   };
   // Helpers from main view
-  const myActiveStudent = systemState?.activeStudents?.find(s => s.id === currentUser?.studentId || s.name === currentUser?.name);
+  const myActiveStudent = findStudentForUser(systemState?.activeStudents, currentUser);
   const isUserAlumni = currentUser?.role === "Alumni" || isStudentAlumni(myActiveStudent);
-  const stId = currentUser?.studentId || systemState.activeStudents?.find(s => s.name === currentUser?.name)?.id || "";
+  const stId = currentUser?.studentId || findStudentForUser(systemState.activeStudents, currentUser)?.id || "";
   
   return (
             <div className="p-4 space-y-4">
@@ -89,11 +90,7 @@ export default function MobileJobsSegment({
                   systemState={systemState}
                 />
               ) : currentUser.role === "Siswa" &&
-                systemState.activeStudents?.find(
-                  (s) =>
-                    s.id === currentUser.studentId ||
-                    s.name === currentUser.name,
-                )?.status === "Di Jepang" ? (
+                findStudentForUser(systemState.activeStudents, currentUser)?.status === "Di Jepang" ? (
                 <div className="bg-white p-6 border border-emerald-200 rounded-3xl shadow-xs text-center space-y-3 animate-fade-in">
                   <div className="h-14 w-14 bg-emerald-50 text-emerald-500 flex items-center justify-center rounded-full mx-auto border-4 border-white shadow-sm ring-1 ring-emerald-100">
                     <CheckCircle className="h-6 w-6" />
@@ -116,9 +113,7 @@ export default function MobileJobsSegment({
                   systemState.jobOrders.filter((job) => {
                     const stId =
                       currentUser?.studentId ||
-                      systemState.activeStudents?.find(
-                        (s) => s.name === currentUser?.name,
-                      )?.id ||
+                      findStudentForUser(systemState.activeStudents, currentUser)?.id ||
                       "";
                     const isInterested = Array.from(new Set([...(job.interestedStudents || []), ...(job.approvedApplicants || [])]))?.includes(stId);
                     const isApproved = Array.from(new Set([...(job.interestedStudents || []), ...(job.approvedApplicants || [])]))?.includes(stId);
@@ -135,9 +130,7 @@ export default function MobileJobsSegment({
                       .filter((job) => {
                         const stId =
                           currentUser?.studentId ||
-                          systemState.activeStudents?.find(
-                            (s) => s.name === currentUser?.name,
-                          )?.id ||
+                          findStudentForUser(systemState.activeStudents, currentUser)?.id ||
                           "";
                         const isInterested =
                           Array.from(new Set([...(job.interestedStudents || []), ...(job.approvedApplicants || [])]))?.includes(stId);
@@ -408,9 +401,7 @@ export default function MobileJobsSegment({
                                 {(() => {
                                   const stId =
                                     currentUser?.studentId ||
-                                    systemState.activeStudents?.find(
-                                      (s) => s.name === currentUser?.name,
-                                    )?.id ||
+                                    findStudentForUser(systemState.activeStudents, currentUser)?.id ||
                                     "";
                                   const isInterested =
                                     Array.from(new Set([...(job.interestedStudents || []), ...(job.approvedApplicants || [])]))?.includes(stId);

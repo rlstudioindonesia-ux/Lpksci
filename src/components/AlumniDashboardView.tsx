@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { findStudentForUser } from "../lib/recordMatching";
 import { collectReferrals, isSuccessfulReferral, normalizeReferralCode } from "../lib/referrals";
 import { 
   GraduationCap, 
@@ -36,9 +37,7 @@ export default function AlumniDashboardView({
   const [questionSent, setQuestionSent] = useState(false);
 
   // Find active student record for details
-  const myActiveStudent = systemState?.activeStudents?.find(
-    (s: any) => s.id === currentUser?.studentId || s.name === currentUser?.name
-  );
+  const myActiveStudent = findStudentForUser(systemState?.activeStudents, currentUser);
 
   const referralCode = currentUser?.username || "alumni123";
 

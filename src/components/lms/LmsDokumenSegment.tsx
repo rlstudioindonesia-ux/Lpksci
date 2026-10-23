@@ -1,4 +1,5 @@
 import React from "react";
+import { findStudentForUser } from "../../lib/recordMatching";
 import { AlertCircle, Eye, FileText, Trash2, Upload } from "lucide-react";
 import { uploadFileToFirebase } from "../../lib/storageHelper";
 import { EXTRA_STUDENT_DOCUMENTS } from "../../lib/studentDocuments";
@@ -14,20 +15,11 @@ export default function LmsDokumenSegment({ currentUser, onUpdateState, setViewi
   return (
     <div className="space-y-6 animate-fade-in text-left">
                 {(() => {
-                  let regStudent = systemState?.registeredStudents?.find(
-                    (rs: any) =>
-                      (currentUser?.studentId && rs.id === currentUser.studentId) ||
-                      (currentUser?.email && rs.email === currentUser.email) || (currentUser?.name && rs.name === currentUser.name)
-                  );
+                  let regStudent = findStudentForUser<any>(systemState?.registeredStudents, currentUser);
     
                   let isActiveStudentFallback = false;
                   if (!regStudent) {
-                    const matchedActive = systemState?.activeStudents?.find(
-                      (as: any) =>
-                        as.id === currentUser?.studentId ||
-                        (currentUser?.name && as.name === currentUser.name) ||
-                        (currentUser?.email && as.email === currentUser.email)
-                    );
+                    const matchedActive = findStudentForUser<any>(systemState?.activeStudents, currentUser);
                     if (matchedActive) {
                       regStudent = matchedActive;
                       isActiveStudentFallback = true;

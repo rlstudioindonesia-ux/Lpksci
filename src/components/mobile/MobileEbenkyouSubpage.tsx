@@ -1,4 +1,5 @@
 import React from "react";
+import { findStudentForUser } from "../../lib/recordMatching";
 import { InlineLoginPanel } from "../InlineLoginPanel";
 import { BookOpen } from "lucide-react";
 import { CHAPTERS_LIST } from "../../chapters";
@@ -61,13 +62,7 @@ export default function MobileEbenkyouSubpage({ activeSubpage, currentUser, hand
                           let plottedClass = currentUser?.assignedClass;
                           if (!plottedClass && currentUser) {
                             if (currentUser.role === "Siswa") {
-                              const student = (
-                                systemState?.activeStudents || []
-                              ).find(
-                                (s) =>
-                                  s.id === currentUser.studentId ||
-                                  s.name === currentUser.name,
-                              );
+                              const student = findStudentForUser(systemState?.activeStudents, currentUser);
                               plottedClass = student?.class;
                             } else if (currentUser.role === "Pengajar") {
                               plottedClass = currentUser.assignedClass || "";
