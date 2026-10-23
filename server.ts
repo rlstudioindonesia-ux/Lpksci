@@ -673,7 +673,11 @@ function stripHeavyBase64Shallow(obj: any, placeholder = "[BERKAS_TERSIMPAN]", p
 
 function getOrBuildStateJson(): { json: string; etag: string; version: number } {
   const currentVersion = getStateVersion();
-  const etag = `W/"s-${currentVersion}"`;
+  // Per-instance counter: without the instance id, a client holding instance
+  // A's "s-57" got 304 Not Modified from instance B (or from a restarted
+  // instance) at the same number although the data differed, and kept showing
+  // stale data.
+  const etag = `W/"s-${SERVER_INSTANCE_ID}-${currentVersion}"`;
   const cached = getCachedStateResponse();
   if (cached && isStateReady) {
     return { json: cached, etag, version: currentVersion };
@@ -721,6 +725,8 @@ function getOrBuildStateJson(): { json: string; etag: string; version: number } 
   return { json: jsonStr, etag, version: currentVersion };
 }
 
+let lastSelfHealResyncAt = 0;
+
 app.get("/api/state", async (req, res) => {
   try {
     // Wait for initial Firestore boot if needed
@@ -728,7 +734,12 @@ app.get("/api/state", async (req, res) => {
       await ensureStateReady(3500);
     }
     // Proactive self-healing: if server memory is suspiciously low on assessments or attendance, re-sync immediately
-    if (isStateReady && ((!state.chapterAssessments || state.chapterAssessments.length < 50) || (!state.attendance || state.attendance.length < 50))) {
+    // Throttled: this used to force a FULL Firestore reload on every /api/state
+    // poll from every device while either collection had fewer than 50 items
+    // (e.g. early in a term), multiplying Firestore reads and slowing replies.
+    if (isStateReady && Date.now() - lastSelfHealResyncAt > 5 * 60 * 1000 &&
+        ((!state.chapterAssessments || state.chapterAssessments.length < 50) || (!state.attendance || state.attendance.length < 50))) {
+      lastSelfHealResyncAt = Date.now();
       await triggerBackgroundResync(true).catch(() => {});
     }
   } catch (e) {}
