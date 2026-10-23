@@ -11,7 +11,7 @@ import { doc, getDoc } from "firebase/firestore";
 import { DEFAULT_GALLERY_ITEMS } from "./src/data/defaultGallery.ts";
 import { isHashedPassword, hashPassword, verifyPassword, stripPassword } from "./server/auth-utils.ts";
 import { handleStateUpdate } from "./server/handlers/index.ts";
-import { cleanupPhantomRegistrations } from "./server/handlers/registration.ts";
+import { hideConvertedRegistrations } from "./server/handlers/registration.ts";
 import { invalidateStateCache, getStateVersion, getCachedStateResponse, setCachedStateResponse } from "./server/stateCache.ts";
 import { todayJakartaISO } from "./src/lib/dateUtils.ts";
 import { nextSequentialId, collectUsedStudentIds } from "./src/lib/idGenerator.ts";
@@ -301,6 +301,7 @@ async function applyStudentChangeFeed(baseline: number): Promise<void> {
     changed = true;
   }
   if (changed) {
+    hideConvertedRegistrations(state);
     invalidateStateCache();
   }
 }
@@ -339,7 +340,7 @@ export async function triggerBackgroundResync(force = false): Promise<void> {
         }
       });
       isStateReady = true;
-      cleanupPhantomRegistrations(state);
+      hideConvertedRegistrations(state);
       invalidateStateCache();
       console.log(`🔄 [Resync] Synchronized state with Firestore: ${state.chapterAssessments?.length || 0} assessments, ${state.attendance?.length || 0} attendance, ${state.activeStudents?.length || 0} students`);
     }
@@ -1593,7 +1594,7 @@ async function startServer() {
         });
 
         isStateReady = true;
-        cleanupPhantomRegistrations(state);
+        hideConvertedRegistrations(state);
         invalidateStateCache();
         console.log("🔥 Memory state loaded & synchronized with Firestore successfully!");
 

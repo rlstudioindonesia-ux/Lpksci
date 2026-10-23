@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { findRegistrationUpdateTarget, isPhantomRegistration, findPhantomRegistrations } from "./registrationUpdate";
+import { findRegistrationUpdateTarget, isConvertedRegistration, visibleRegistrations } from "./registrationUpdate";
 
 const registered = [
   { id: "REG-1", name: "Siti Aminah", email: "siti@x.id" },
@@ -39,28 +39,36 @@ describe("findRegistrationUpdateTarget", () => {
   });
 });
 
-describe("isPhantomRegistration", () => {
-  it("flags registrations that share an id with an active student", () => {
-    expect(isPhantomRegistration({ id: "SIS-010", name: "Muhammad Rizki" }, active)).toBe(true);
-    expect(isPhantomRegistration({ id: "REG-1" }, active)).toBe(false);
-    expect(isPhantomRegistration({}, active)).toBe(false);
+describe("isConvertedRegistration", () => {
+  it("matches the same id, or the same email and name", () => {
+    expect(isConvertedRegistration({ id: "SIS-010", name: "Muhammad Rizki" }, active)).toBe(true);
+    expect(isConvertedRegistration({ id: "REG-5", name: " muhammad rizki ", email: "RIZKI2@x.id" }, active)).toBe(true);
+    expect(isConvertedRegistration({ id: "REG-1" }, active)).toBe(false);
+    expect(isConvertedRegistration({}, active)).toBe(false);
+  });
+
+  it("keeps a real registrant who only shares the email or only the name", () => {
+    expect(isConvertedRegistration({ id: "REG-6", name: "Adik Rizki", email: "rizki@x.id" }, active)).toBe(false);
+    expect(isConvertedRegistration({ id: "REG-7", name: "Muhammad Rizki", email: "rizki.baru@x.id" }, active)).toBe(false);
   });
 });
 
-describe("findPhantomRegistrations", () => {
-  it("returns copies of active students and empty records only", () => {
+describe("visibleRegistrations", () => {
+  it("hides converted and empty records, keeps real registrants", () => {
     const regs = [
       { id: "REG-1", name: "Siti Aminah", phone: "0812" },
       { id: "SIS-010", name: "Muhammad Rizki", status: "Belajar" },
       { id: "REG-7", verifiedDocs: ["docKTP"] },
       { id: "REG-8", name: "", email: "", phone: "", docKK: "kk.pdf|url" },
       { id: "REG-9", email: "baru@x.id" },
+      { id: "REG-10", name: "Muhammad Rizki", email: "rizki@x.id", status: "Pending" },
+      { id: "REG-11", name: "Muhammad Rizki", email: "rizki2@x.id", status: "Disetujui", statusPendaftaran: "Alumni" },
     ];
-    expect(findPhantomRegistrations(regs, active).map((r) => r.id)).toEqual(["SIS-010", "REG-7", "REG-8"]);
+    expect(visibleRegistrations(regs, active).map((r) => r.id)).toEqual(["REG-1", "REG-9", "REG-11"]);
   });
 
-  it("returns nothing for missing lists", () => {
-    expect(findPhantomRegistrations(undefined, active)).toEqual([]);
-    expect(findPhantomRegistrations([{ id: "REG-1", name: "A" }], undefined)).toEqual([]);
+  it("tolerates missing lists", () => {
+    expect(visibleRegistrations(undefined, active)).toEqual([]);
+    expect(visibleRegistrations([{ id: "REG-1", name: "A" }], undefined)).toEqual([{ id: "REG-1", name: "A" }]);
   });
 });

@@ -42,28 +42,40 @@ export function findRegistrationUpdateTarget(
 }
 
 /**
- * Registrations that are only leftovers of the bug above: they share their id
- * with an active student, so the person is already a student.
+ * 23-10-2026 (owner): a registration whose person is already an active
+ * student: same id (copies made by the old update bug) or same email AND
+ * same name (an approved registration written back by an instance whose
+ * memory was not yet updated). These are hidden, never shown in "Siswa Baru".
  */
-export function isPhantomRegistration(registration: any, active: any[] | null | undefined): boolean {
-  const id = norm(registration?.id);
-  if (!id || !Array.isArray(active)) return false;
-  return active.some((s) => s && norm(s.id) === id);
+export function isConvertedRegistration(registration: any, active: any[] | null | undefined): boolean {
+  if (!registration || !Array.isArray(active)) return false;
+  const id = norm(registration.id);
+  const email = norm(registration.email);
+  const name = norm(registration.name);
+  return active.some(
+    (s) => s && ((id && norm(s.id) === id) || (email && name && norm(s.email) === email && norm(s.name) === name)),
+  );
 }
 
 const isBlank = (v: any) => !String(v ?? "").trim();
 
 /**
- * 23-10-2026 (owner): automatic cleanup of phantom registrants. Returns the
- * registrations to delete: copies of an active student (same id) and empty
- * records without name, email and phone (left by updates that only carried an
- * id plus a document). Only the registration is deleted, never the student.
+ * 23-10-2026 (owner): phantom registrants must not appear at all, and must not
+ * be deleted again and again. The server keeps them out of its memory instead
+ * (so they are never served and never written back); Firestore is untouched.
+ * Hidden: registrations of people who are already active students (except
+ * approved alumni sign-ups), and empty
+ * records without name, email and phone.
  */
-export function findPhantomRegistrations(registered: any[] | null | undefined, active: any[] | null | undefined): any[] {
+export function isHiddenRegistration(registration: any, active: any[] | null | undefined): boolean {
+  if (!registration) return true;
+  // Alumni sign-ups are stored as "Disetujui" next to their active record on
+  // purpose (their documents live there) and never show in "Siswa Baru".
+  if (registration.status !== "Disetujui" && isConvertedRegistration(registration, active)) return true;
+  return isBlank(registration.name) && isBlank(registration.email) && isBlank(registration.phone);
+}
+
+export function visibleRegistrations(registered: any[] | null | undefined, active: any[] | null | undefined): any[] {
   if (!Array.isArray(registered)) return [];
-  return registered.filter(
-    (r) =>
-      r &&
-      (isPhantomRegistration(r, active) || (isBlank(r.name) && isBlank(r.email) && isBlank(r.phone))),
-  );
+  return registered.filter((r) => !isHiddenRegistration(r, active));
 }

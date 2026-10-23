@@ -54,7 +54,8 @@ Skill Claude Code ada di `.claude/skills/` (`alur-perubahan`, `aturan-data-siswa
 - Jangan fallback ke `"SIS-001"` untuk akun tanpa studentId.
 - Jenis kelamin dinormalisasi lewat `normalizeGender` (`src/lib/gender.ts`).
 - **Update pendaftar tidak pernah membuat pendaftar baru** (`src/lib/registrationUpdate.ts`): target = pendaftar (id) → siswa aktif (id) → pendaftar (email/nama unik) → 404. Pendaftar asli hanya lewat `/api/register`.
-- **Hapus pendaftar tidak menghapus siswa aktif**; akun login ikut terhapus hanya lewat id/email dan tidak untuk pendaftar "hantu" (id sama dengan siswa aktif, `isPhantomRegistration`).
+- **Hapus pendaftar tidak menghapus siswa aktif**; akun login ikut terhapus hanya lewat id/email dan tidak untuk pendaftar yang sudah jadi siswa (`isConvertedRegistration`).
+- **Pendaftar yang sudah jadi siswa disembunyikan di server** (`visibleRegistrations`, `hideConvertedRegistrations`); jangan diganti dengan penghapusan otomatis.
 
 ## PR yang sudah di-merge di sesi ini
 
@@ -66,7 +67,8 @@ Skill Claude Code ada di `.claude/skills/` (`alur-perubahan`, `aturan-data-siswa
 - #68 skill `.claude/skills` + `CLAUDE.md`
 - #69 pendaftar "hantu" di Siswa Baru (update berkas siswa aktif membuat pendaftar baru), hapus pendaftar tidak lagi menghapus siswa aktif
 - #70 pembersihan otomatis pendaftar hantu + tutup celah auto-sync yang menulis ulang siswa aktif sebagai pendaftar
-- berikutnya: satu rumus rujukan alumni (Admin/VVIP/dasbor alumni), pengurutan aman untuk data tanpa tanggal/nama
+- #71 satu rumus rujukan alumni (Admin/VVIP/dasbor alumni), pengurutan aman untuk data tanpa tanggal/nama
+- berikutnya: pendaftar hantu disembunyikan di server (tidak lagi dihapus otomatis berulang)
 
 ## Tindak lanjut terbuka
 
@@ -77,5 +79,5 @@ Skill Claude Code ada di `.claude/skills/` (`alur-perubahan`, `aturan-data-siswa
    - `firestore.rules` terbuka penuh.
 2. **Sudah diputuskan pemilik (23-10-2026) dan diterapkan:** nilai < 75 ikut rata-rata, essay diperketat, tab Alumni = Di Jepang. Sisa: rata-rata nilai & kehadiran di peramban masih mencocokkan siswa lewat nama juga (sengaja dibiarkan karena data lama); essay tanpa kunci jawaban tetap dianggap benar (ditinjau Sensei).
 3. **Data lama yang mungkin sudah rusak** (perbaikan hanya mencegah kejadian baru): siswa berstatus "Terverifikasi"/"Disetujui" (dari form edit lama), tagihan `PAY-<6 huruf>-…` yang tertukar, entri Buku Kas yang saling menimpa. Bisa dibuat skrip pemeriksa bila pemilik minta.
-4. **Pendaftar "hantu" dibersihkan otomatis** (disetujui pemilik 23-10-2026): `cleanupPhantomRegistrations` berjalan setiap server memuat/resync data; menghapus pendaftar yang ID-nya sama dengan siswa aktif atau tanpa nama/email/HP. Hanya pendaftar yang dihapus, siswa aktif & akun tidak disentuh. Jumlahnya tercatat di log server (`[Cleanup]`).
+4. **Pendaftar "hantu" disembunyikan, TIDAK dihapus otomatis** (keputusan pemilik 23-10-2026, menggantikan pembersihan otomatis #70 yang membuat pendaftar muncul-hilang berulang): `hideConvertedRegistrations` membuang dari memori server (bukan dari Firestore) pendaftar yang orangnya sudah siswa aktif (ID sama, atau email DAN nama sama; kecuali pendaftar alumni berstatus "Disetujui") dan pendaftar kosong. Berjalan setelah load, resync, dan change feed. Karena tidak ada di memori, pendaftar itu tidak pernah tampil dan tidak ditulis ulang.
 5. Semua perubahan belum diverifikasi langsung di produksi — minta pemilik menguji alur utama setelah deploy.
