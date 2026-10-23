@@ -7,4 +7,4 @@
   - `aturan-data-siswa` — aturan bisnis & pengaman data (Siswa Aktif, nilai kuis, berkas, tanggal WIB, pencocokan siswa, ID, sinkron);
   - `cek-bug` — pola bug yang sering muncul dan cara melapor.
 - Jangan menyertakan identitas model AI di commit, PR, atau kode.
-- Masalah login/keamanan **ditunda** sampai pemilik setuju.
+- Keamanan/login: **disetujui pemilik, dikerjakan bertahap** (lihat serah terima butir 1). Jangan lompat ke tahap berikutnya tanpa pemilik.

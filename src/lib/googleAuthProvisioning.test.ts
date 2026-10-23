@@ -10,9 +10,9 @@ describe("resolveGoogleSignupRole", () => {
     expect(resolveGoogleSignupRole("sulisindonesia@gmail.com", null, null)).toEqual({ role: "Pengajar" });
   });
 
-  it("grants Admin to any email containing 'admin'", () => {
-    expect(resolveGoogleSignupRole("admin@lpksci.com", null, null)).toEqual({ role: "Admin" });
-    expect(resolveGoogleSignupRole("superadmin123@gmail.com", null, null)).toEqual({ role: "Admin" });
+  it("grants Admin only to allow-listed emails, not to any email containing 'admin' (security, 23-10-2026)", () => {
+    expect(resolveGoogleSignupRole("sakti.wardana@lpksc.id", null, null)).toEqual({ role: "Admin" });
+    expect(resolveGoogleSignupRole("superadmin123@gmail.com", null, null)).toEqual({ role: "Siswa" });
   });
 
   it("grants Admin to the specific hardcoded staff email", () => {

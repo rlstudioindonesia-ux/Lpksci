@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect, useRef } from "react";
+import { rememberLoginResponse, loginWithGoogleOnServer } from "../lib/sessionToken";
 import { ConfirmForm } from "./ConfirmForm";
 import { X, ShieldAlert, Key, User, Eye, EyeOff, Camera, RefreshCw } from "lucide-react";
 import { UserAccount, SystemState } from "../types";
@@ -226,7 +227,8 @@ export default function LoginModal({
         if (verifiedUser.email) {
           createUserWithEmailAndPassword(auth, verifiedUser.email, cleanPassword).catch(() => {});
         }
-        onLoginSuccess(verifiedUser, isDefaultPasswordLogin(verifiedUser, cleanPassword));
+        rememberLoginResponse(data);
+        onLoginSuccess(verifiedUser, !data.mustChangePassword && isDefaultPasswordLogin(verifiedUser, cleanPassword));
         onClose();
         return;
       } else {
@@ -257,6 +259,18 @@ export default function LoginModal({
       const result = await signInWithPopup(auth, provider);
       const user = result.user;
       const email = (user.email || "").trim().toLowerCase();
+      // Verified by the server first (security stage 1); the browser-only flow below
+      // is only a fallback while an older server version is still running.
+      const serverLogin = await loginWithGoogleOnServer(user);
+      if (serverLogin.status === "ok") {
+        onLoginSuccess(serverLogin.user);
+        onClose();
+        return;
+      }
+      if (serverLogin.status === "error") {
+        setErrorMsg(serverLogin.message);
+        return;
+      }
 
       let existingUser = (systemState.unfilteredUsers || systemState.users || [])?.find(
         (u) => (u.email || "").trim().toLowerCase() === email || (u.username || "").trim().toLowerCase() === email,

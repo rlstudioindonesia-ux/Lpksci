@@ -1,4 +1,5 @@
 import { auth } from "../firebaseClient";
+import { rememberLoginResponse, loginWithGoogleOnServer } from "../lib/sessionToken";
 import { signInWithPopup, GoogleAuthProvider, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail } from "firebase/auth";
 import React, { useState } from "react";
 import {
@@ -127,7 +128,8 @@ export function InlineLoginPanel({
         if (verifiedUser.email) {
           createUserWithEmailAndPassword(auth, verifiedUser.email, cleanPassword).catch(() => {});
         }
-        onLoginSuccess(verifiedUser, isDefaultPasswordLogin(verifiedUser, cleanPassword));
+        rememberLoginResponse(data);
+        onLoginSuccess(verifiedUser, !data.mustChangePassword && isDefaultPasswordLogin(verifiedUser, cleanPassword));
         return;
       } else {
         setErrorMsg(data?.error || "Username/Email atau password salah.");
@@ -152,6 +154,17 @@ export function InlineLoginPanel({
       const result = await signInWithPopup(auth, provider);
       const user = result.user;
       const email = (user.email || "").trim().toLowerCase();
+      // Verified by the server first (security stage 1); the browser-only flow below
+      // is only a fallback while an older server version is still running.
+      const serverLogin = await loginWithGoogleOnServer(user);
+      if (serverLogin.status === "ok") {
+        onLoginSuccess(serverLogin.user);
+        return;
+      }
+      if (serverLogin.status === "error") {
+        setErrorMsg(serverLogin.message);
+        return;
+      }
 
       let existingUser = (systemState.unfilteredUsers || systemState.users || [])?.find(
         (u) => (u.email || "").trim().toLowerCase() === email || (u.username || "").trim().toLowerCase() === email,

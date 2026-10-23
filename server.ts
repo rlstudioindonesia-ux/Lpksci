@@ -6,10 +6,15 @@ import dotenv from "dotenv";
 import fs from "fs";
 import { getStudentStatusGroup, isAlumniStatusValue } from "./src/lib/studentStatusGroups.ts";
 import { findRecordIndex, findStudentUserIndex } from "./src/lib/recordMatching.ts";
-import { testConnection, loadStateFromFirestore, syncEntityToFirestore, syncCustomizationToFirestore, syncGalleriesToFirestore, syncLmsClassToFirestore, syncAllLmsClassesToFirestore, deleteEntityFromFirestore, uploadBufferToFirebaseStorage, getUserFromFirestore, getEntityFromFirestore, db, touchSyncMeta, setSyncInstanceId, parseSyncChangeValue, SYNC_CHANGES_DOC_ID, mergeEntityFieldsToFirestore } from "./src/db/firebase-adapter.ts";
+import { testConnection, loadStateFromFirestore, syncEntityToFirestore, syncEntityToFirestoreAsync, syncCustomizationToFirestore, syncGalleriesToFirestore, syncLmsClassToFirestore, syncAllLmsClassesToFirestore, deleteEntityFromFirestore, uploadBufferToFirebaseStorage, getUserFromFirestore, getEntityFromFirestore, db, touchSyncMeta, setSyncInstanceId, parseSyncChangeValue, SYNC_CHANGES_DOC_ID, mergeEntityFieldsToFirestore } from "./src/db/firebase-adapter.ts";
 import { doc, getDoc } from "firebase/firestore";
 import { DEFAULT_GALLERY_ITEMS } from "./src/data/defaultGallery.ts";
 import { isHashedPassword, hashPassword, verifyPassword, stripPassword } from "./server/auth-utils.ts";
+import { createSessionToken, resolveSessionUser, readBearerToken, hasStrongSessionSecret } from "./server/sessions.ts";
+import { verifyFirebaseIdToken } from "./server/googleIdToken.ts";
+import { evaluatePasswordLogin, validateNewPassword } from "./src/lib/loginPolicy.ts";
+import { resolveGoogleSignupRole } from "./src/lib/googleAuthProvisioning.ts";
+import firebaseAppletConfig from "./firebase-applet-config.json";
 import { handleStateUpdate } from "./server/handlers/index.ts";
 import { hideConvertedRegistrations } from "./server/handlers/registration.ts";
 import { invalidateStateCache, getStateVersion, getCachedStateResponse, setCachedStateResponse } from "./server/stateCache.ts";
@@ -47,6 +52,34 @@ app.use(compression());
 // Set safe body size limit (15mb) preventing buffer memory bloat and container OOM termination
 app.use(express.json({ limit: '15mb' }));
 app.use(express.urlencoded({ extended: true, limit: '15mb' }));
+
+// Security stage 1 (owner-approved 23-10-2026): resolve the login session of
+// every /api request (Authorization: Bearer <token> from /api/login). Requests
+// without a valid session are only RECORDED for now so we can see which
+// screens still call the server anonymously; stage 2 will reject them.
+const PUBLIC_API_PATHS = new Set([
+  "/health", "/ping", "/login", "/register", "/request-reset", "/reset-password",
+  "/auth/validate", "/auth/google", "/auth/change-password", "/broadcast-notifications",
+]);
+const anonymousApiCalls = new Map<string, { count: number; firstAt: string; lastAt: string }>();
+app.use("/api", (req, res, next) => {
+  const authUser = resolveSessionUser(req.headers, state?.users);
+  (req as any).authUser = authUser;
+  if (!authUser && !PUBLIC_API_PATHS.has(req.path)) {
+    const body: any = req.body || {};
+    const key = `${req.method} ${req.path}${body.dataType ? ` ${body.dataType}/${body.action || ""}` : ""}${readBearerToken(req.headers) ? " (token tidak sah)" : ""}`;
+    const nowIso = new Date().toISOString();
+    const entry = anonymousApiCalls.get(key);
+    if (entry) {
+      entry.count++;
+      entry.lastAt = nowIso;
+    } else {
+      anonymousApiCalls.set(key, { count: 1, firstAt: nowIso, lastAt: nowIso });
+      console.warn(`🔓 [Auth audit] Request without a valid session (allowed in stage 1): ${key}`);
+    }
+  }
+  next();
+});
 app.get("/api/health", (req, res) => res.json({ status: "ok", initialized: isStateReady }));
 app.get("/api/ping", async (req, res) => {
   // Trigger warm-up check asynchronously to ensure database connection is responsive
@@ -882,7 +915,14 @@ app.post("/api/login", async (req, res) => {
   const masterAdminUsernames = ["admin", "admin_super", "admin_biasa"];
   const validMasterPasswords = ["adminadmin", "admin123", "123456"];
 
-  if ((masterAdminUsernames.includes(normalized) || masterAdminEmails.includes(normalized)) && validMasterPasswords.includes(cleanPassword)) {
+  // 23-10-2026 (security): the master passwords only work until the account
+  // owner sets a real password (passwordChangedAt); after that the normal
+  // password check below applies. Such a login must change the password.
+  const existingMasterAccount = (state.users || []).find((u: any) =>
+    (u.username || "").trim().toLowerCase() === normalized ||
+    (u.email || "").trim().toLowerCase() === normalized
+  );
+  if ((masterAdminUsernames.includes(normalized) || masterAdminEmails.includes(normalized)) && validMasterPasswords.includes(cleanPassword) && !existingMasterAccount?.passwordChangedAt) {
     let role = "Admin";
     if (masterAdminEmails.includes(normalized)) role = "VVIP";
     else if (normalized === "admin_super") role = "Admin Super";
@@ -950,7 +990,7 @@ app.post("/api/login", async (req, res) => {
       console.warn("Failed to record master admin login audit log:", logErr);
     }
 
-    return res.json({ user: stripPassword(adminUser) });
+    return res.json({ user: stripPassword(adminUser), token: createSessionToken(adminUser), mustChangePassword: true });
   }
 
   // 2. Normal User Lookup in state.users
@@ -1040,16 +1080,25 @@ app.post("/api/login", async (req, res) => {
     return res.status(403).json({ error: "Akses Ditolak: Akun Anda telah disuspend oleh Admin atau Direktur." });
   }
 
-  // 6. Password Verification
-  const isDefaultPassword = cleanPassword === "123456" || cleanPassword === "adminadmin";
-  const isValidPassword = verifyPassword(cleanPassword, user.password) || isDefaultPassword || !user.password;
+  // 6. Password Verification (src/lib/loginPolicy.ts, 23-10-2026). Default
+  // passwords no longer open every account; accounts created by Google sign-in
+  // carry a fixed marker password and can only log in with Google.
+  if (user.password === "google-auth-user" || verifyPassword("google-auth-user", user.password)) {
+    return res.status(401).json({ error: "Akun ini dibuat lewat Google. Silakan masuk dengan tombol Google, atau minta Admin membuatkan kata sandi." });
+  }
+  const passwordCheck = evaluatePasswordLogin({
+    plain: cleanPassword,
+    stored: user.password,
+    passwordChangedAt: user.passwordChangedAt,
+    verify: verifyPassword,
+  });
 
-  if (!isValidPassword) {
+  if (!passwordCheck.valid) {
     return res.status(401).json({ error: "Password yang Anda masukkan salah." });
   }
 
-  // Re-hash or update password if it was plain or missing
-  if (!isHashedPassword(user.password)) {
+  // Re-hash a legacy plaintext password that matched, or set one for accounts without any.
+  if (!user.password || (!isHashedPassword(user.password) && verifyPassword(cleanPassword, user.password))) {
     user.password = hashPassword(cleanPassword);
     syncEntityToFirestore("users", user.username, user);
   }
@@ -1094,7 +1143,7 @@ app.post("/api/login", async (req, res) => {
     console.warn("Failed to record user login audit log:", logErr);
   }
 
-  return res.json({ user: stripPassword(user) });
+  return res.json({ user: stripPassword(user), token: createSessionToken(user), mustChangePassword: passwordCheck.mustChangePassword });
   } catch (error: any) {
     console.error("Login API error:", error);
     return res.status(500).json({ error: error.message || "Internal server error" });
@@ -1108,11 +1157,21 @@ app.post("/api/auth/validate", async (req, res) => {
   } catch (e) {}
 
   try {
+    // With a session token the token decides (23-10-2026); the username-only
+    // lookup below remains for sessions from before stage 1 and is recorded.
+    if (readBearerToken(req.headers)) {
+      const sessionUser = (req as any).authUser;
+      return sessionUser ? res.json({ valid: true, user: stripPassword(sessionUser) }) : res.json({ valid: false, reason: "session" });
+    }
     const { username, email } = req.body || {};
     const target = (username || email || "").trim().toLowerCase();
     if (!target) {
       return res.status(400).json({ error: "Username/Email required" });
     }
+    const legacyKey = "POST /auth/validate (tanpa tiket, cara lama)";
+    const legacyEntry = anonymousApiCalls.get(legacyKey);
+    if (legacyEntry) { legacyEntry.count++; legacyEntry.lastAt = new Date().toISOString(); }
+    else anonymousApiCalls.set(legacyKey, { count: 1, firstAt: new Date().toISOString(), lastAt: new Date().toISOString() });
 
     let user = (state.users || []).find((u: any) =>
       (u.username || "").trim().toLowerCase() === target ||
@@ -1141,6 +1200,118 @@ app.post("/api/auth/validate", async (req, res) => {
 });
 
 // Student sign up from the landing page with integrated Midtrans Sandbox Payment
+
+// Change your own password (security stage 1, 23-10-2026). Needs a valid
+// session, or the current password. Returns a fresh session token because a
+// password change invalidates older sessions.
+app.post("/api/auth/change-password", async (req, res) => {
+  try {
+    await ensureStateReady(30000);
+  } catch (e) {}
+  try {
+    const { username, currentPassword, newPassword } = req.body || {};
+    const sessionUser = (req as any).authUser;
+    let user = sessionUser;
+    if (!user) {
+      const target = String(username || "").trim().toLowerCase();
+      const candidate = (state.users || []).find((u: any) => (u.username || "").trim().toLowerCase() === target);
+      const check = candidate && evaluatePasswordLogin({ plain: String(currentPassword || ""), stored: candidate.password, passwordChangedAt: candidate.passwordChangedAt, verify: verifyPassword });
+      if (!candidate || !check || !check.valid) {
+        return res.status(401).json({ error: "Sesi berakhir atau kata sandi lama salah. Silakan login ulang." });
+      }
+      user = candidate;
+    }
+    const problem = validateNewPassword(newPassword, user.username);
+    if (problem) return res.status(400).json({ error: problem });
+    if (verifyPassword(String(newPassword), user.password)) {
+      return res.status(400).json({ error: "Kata sandi baru harus berbeda dari yang lama." });
+    }
+    user.password = hashPassword(String(newPassword));
+    user.passwordChangedAt = new Date().toISOString();
+    await syncEntityToFirestoreAsync("users", user.username, user);
+    invalidateStateCache();
+    try {
+      const logId = `LOG-PWD-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+      const nowIso = new Date().toISOString();
+      const entry = { id: logId, user: user.name || user.username, username: user.username, role: user.role, action: `Ganti Kata Sandi (@${user.username})`, type: "security", details: "Kata sandi diganti oleh pemilik akun", time: nowIso, timestamp: nowIso, status: "Berhasil" };
+      if (!state.logs) state.logs = [];
+      state.logs.unshift(entry);
+      if (state.logs.length > 500) state.logs.pop();
+      syncEntityToFirestore("logs", logId, entry);
+    } catch (e) {}
+    return res.json({ success: true, user: stripPassword(user), token: createSessionToken(user) });
+  } catch (error: any) {
+    console.error("Change-password API error:", error);
+    return res.status(500).json({ error: "Gagal mengganti kata sandi." });
+  }
+});
+
+// Google sign-in verified on the server (security stage 1, 23-10-2026): the
+// browser sends the Firebase ID token, the server checks Google's signature
+// and only then logs the account in (creating it on first sign-in).
+app.post("/api/auth/google", async (req, res) => {
+  try {
+    await ensureStateReady(30000);
+  } catch (e) {}
+  try {
+    const projectId = (firebaseAppletConfig as any)?.projectId || "";
+    const identity = await verifyFirebaseIdToken((req.body || {}).idToken, projectId);
+    if (!identity) {
+      return res.status(401).json({ error: "Login Google tidak dapat diverifikasi. Silakan coba lagi." });
+    }
+    if (!identity.emailVerified) {
+      return res.status(401).json({ error: "Email Google belum terverifikasi." });
+    }
+    const email = identity.email;
+    if (!state.users) state.users = [];
+    let user = state.users.find((u: any) =>
+      (u.email || "").trim().toLowerCase() === email || (u.username || "").trim().toLowerCase() === email
+    );
+    if (!user) {
+      const activeMatchIdx = findRecordIndex(state.activeStudents, { email });
+      const activeMatch = activeMatchIdx !== -1 ? state.activeStudents[activeMatchIdx] : undefined;
+      const regMatchIdx = findRecordIndex(state.registeredStudents, { email });
+      const regMatch = regMatchIdx !== -1 ? state.registeredStudents[regMatchIdx] : undefined;
+      const { role, studentId, assignedClass } = resolveGoogleSignupRole(email, activeMatch, regMatch);
+      user = {
+        username: email,
+        name: activeMatch?.name || regMatch?.name || identity.name || email.split("@")[0],
+        email,
+        role,
+        status: "Active",
+        studentId,
+        assignedClass,
+        profilePicture: identity.picture || activeMatch?.profilePicture || regMatch?.docFoto || "",
+        password: "google-auth-user",
+        lastActive: new Date().toISOString(),
+      };
+      state.users.push(user);
+      await syncEntityToFirestoreAsync("users", user.username, user);
+      invalidateStateCache();
+    }
+    if (user.status === "Suspended") {
+      return res.status(403).json({ error: "Akses Ditolak: Akun Anda disuspend." });
+    }
+    user.lastActive = new Date().toISOString();
+    syncEntityToFirestore("users", user.username, user);
+    return res.json({ user: stripPassword(user), token: createSessionToken(user), mustChangePassword: false });
+  } catch (error: any) {
+    console.error("Google auth API error:", error);
+    return res.status(500).json({ error: "Gagal masuk dengan Google." });
+  }
+});
+
+// Stage-1 audit (Admin/VVIP only): which calls still arrive without a valid session.
+app.get("/api/auth/audit", (req, res) => {
+  const authUser = (req as any).authUser;
+  if (!authUser || !["Admin", "Admin Super", "VVIP"].includes(authUser.role)) {
+    return res.status(403).json({ error: "Khusus Admin/VVIP." });
+  }
+  const entries = Array.from(anonymousApiCalls.entries())
+    .map(([key, v]) => ({ key, ...v }))
+    .sort((a, b) => b.count - a.count);
+  return res.json({ strongSecret: hasStrongSessionSecret(), instanceStartedEntries: entries.length, entries });
+});
 
 app.post("/api/register", async (req, res) => {
   // Duplicate-detection (alumni auto-approve matching by name/email against

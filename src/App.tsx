@@ -96,6 +96,8 @@ import {
 import PrivacyPolicyModal from "./components/PrivacyPolicyModal";
 import LoginModal from "./components/LoginModal";
 import StudentProfilePrompt from "./components/StudentProfilePrompt";
+import ForcePasswordChangeModal from "./components/ForcePasswordChangeModal";
+import { clearSession, setSessionToken, getMustChangePassword, AUTH_CHANGED_EVENT } from "./lib/sessionToken";
 import ApkUpdateBanner from "./components/ApkUpdateBanner";
 import ResetPasswordView from "./components/ResetPasswordView";
 import PembayaranSiswaView from "./components/PembayaranSiswaView";
@@ -451,6 +453,13 @@ export default function App() {
     }
   }, [currentUser, activeTab]);
   const [isPrivacyOpen, setIsPrivacyOpen] = useState<boolean>(false);
+  // Security stage 1: logged in with a default password -> must choose a new one.
+  const [mustChangePassword, setMustChangePasswordState] = useState<boolean>(() => getMustChangePassword());
+  useEffect(() => {
+    const sync = () => setMustChangePasswordState(getMustChangePassword());
+    window.addEventListener(AUTH_CHANGED_EVENT, sync);
+    return () => window.removeEventListener(AUTH_CHANGED_EVENT, sync);
+  }, []);
   const [showStudentProfilePrompt, setShowStudentProfilePrompt] = useState<boolean>(false);
   const [isDefaultPasswordPrompt, setIsDefaultPasswordPrompt] = useState<boolean>(false);
   const [pendingAdminStudentSearch, setPendingAdminStudentSearch] = useState<string>("");
@@ -1088,6 +1097,10 @@ export default function App() {
           .then(data => {
             if (data?.valid && data.user) {
               setCurrentUser(data.user);
+            } else if (data?.reason === "session") {
+              // Token expired or issued before a password change: drop it
+              // (stage 1 keeps the user signed in; stage 2 will ask to log in again).
+              setSessionToken(null);
             }
           })
           .catch(() => {});
@@ -1147,6 +1160,8 @@ export default function App() {
       });
       if (response.ok) {
         const resData = await response.json().catch(() => null);
+        // Own password changed: the server hands out a fresh session token.
+        if (resData?.sessionToken) setSessionToken(resData.sessionToken);
         if ((dataType === "lmsLessons" || dataType === "lmsQuizzes") && (action || "").toLowerCase() !== "delete") {
           const savedItems = [resData?.item, ...(Array.isArray(resData?.items) ? resData.items : []), ...(Array.isArray(payload?.quizzes) ? payload.quizzes : []), payload];
           const savedAt = Date.now();
@@ -1327,6 +1342,7 @@ export default function App() {
     setCurrentUser(null);
     setOriginalUser(null);
     setActiveTab("frontend");
+    clearSession();
     if (typeof window !== "undefined") {
       localStorage.removeItem("lpk_auth_session");
       localStorage.removeItem("lpk_original_session");
@@ -2253,7 +2269,17 @@ export default function App() {
         </div>
       )}
 
-      {showStudentProfilePrompt && currentUser && (
+      {mustChangePassword && currentUser && !originalUser && (
+        <ForcePasswordChangeModal
+          user={currentUser}
+          onChanged={(u) => {
+            if (u) setCurrentUser({ ...currentUser, ...u });
+          }}
+          onLogout={handleLogout}
+        />
+      )}
+
+      {showStudentProfilePrompt && currentUser && !mustChangePassword && (
         <StudentProfilePrompt
           user={currentUser}
           systemState={systemState}

@@ -1,4 +1,5 @@
 import { InlineLoginPanel } from "./InlineLoginPanel";
+import { rememberLoginResponse } from "../lib/sessionToken";
 import { findStudentForUser } from "../lib/recordMatching";
 import { getSafePhotoUrl, createSvgAvatar } from "../lib/storageHelper";
 import { isStudentAlumni } from "../lib/alumniStatus";
@@ -541,7 +542,8 @@ export default function MobileDashboardView({
         if (verifiedUser.email) {
           createUserWithEmailAndPassword(auth, verifiedUser.email, cleanPassword).catch(() => {});
         }
-        onLoginSuccess?.(verifiedUser, isDefaultPasswordLogin(verifiedUser, cleanPassword));
+        rememberLoginResponse(data);
+        onLoginSuccess?.(verifiedUser, !data.mustChangePassword && isDefaultPasswordLogin(verifiedUser, cleanPassword));
         return;
       } else {
         setLoginErrorMsg(data?.error || "Username/Email atau password salah.");
