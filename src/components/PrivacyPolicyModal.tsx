@@ -1,6 +1,7 @@
-import React from "react";
-import { X } from "lucide-react";
-import PrivacyPolicyView from "./PrivacyPolicyView";
+import React, { Suspense } from "react";
+import { X, Loader2 } from "lucide-react";
+
+const PrivacyPolicyView = React.lazy(() => import("./PrivacyPolicyView"));
 
 interface PrivacyPolicyModalProps {
   onClose: () => void;
@@ -25,7 +26,14 @@ export default function PrivacyPolicyModal({ onClose }: PrivacyPolicyModalProps)
 
         {/* Content Body - Scrollable */}
         <div className="p-4 overflow-y-auto flex-1">
-          <PrivacyPolicyView />
+          <Suspense fallback={
+            <div className="py-16 text-center text-slate-400 flex flex-col items-center justify-center gap-2">
+              <Loader2 className="w-6 h-6 animate-spin text-indigo-600" />
+              <span className="text-xs">Memuat dokumen privasi...</span>
+            </div>
+          }>
+            <PrivacyPolicyView />
+          </Suspense>
         </div>
 
         {/* Footer actions */}

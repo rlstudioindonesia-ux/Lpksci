@@ -3,31 +3,70 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { auth } from "./firebaseClient";
+import { auth, db } from "./firebaseClient";
 import { getRedirectResult } from "firebase/auth";
+import { doc, onSnapshot } from "firebase/firestore";
 import React, { useState, useEffect, useRef } from "react";
 
-function useIsMobile() {
-  const [isMobile, setIsMobile] = useState(() =>
-    typeof window !== "undefined"
-      ? window.matchMedia("(max-width: 1024px)").matches
-      : false
-  );
+function useDeviceDimensions() {
+  const [deviceInfo, setDeviceInfo] = useState(() => {
+    if (typeof window !== "undefined") {
+      const width = window.innerWidth;
+      const isLandscape = window.matchMedia("(orientation: landscape)").matches;
+      return {
+        width,
+        isMobileDevice: width < 768,
+        isTablet: width >= 640 && width <= 1366,
+        isLandscape,
+      };
+    }
+    return { width: 1200, isMobileDevice: false, isTablet: false, isLandscape: false };
+  });
 
   useEffect(() => {
-    const mql = window.matchMedia("(max-width: 1024px)");
-    const onChange = (e: MediaQueryListEvent) => setIsMobile(e.matches);
-    mql.addEventListener("change", onChange);
-    return () => mql.removeEventListener("change", onChange);
+    const handleResize = () => {
+      const width = window.innerWidth;
+      const isLandscape = window.matchMedia("(orientation: landscape)").matches;
+      setDeviceInfo({
+        width,
+        isMobileDevice: width < 768,
+        isTablet: width >= 640 && width <= 1366,
+        isLandscape,
+      });
+    };
+
+    window.addEventListener("resize", handleResize);
+    const mql = window.matchMedia("(orientation: landscape)");
+    mql.addEventListener("change", handleResize);
+    return () => {
+      window.removeEventListener("resize", handleResize);
+      mql.removeEventListener("change", handleResize);
+    };
   }, []);
 
-  return isMobile;
+  return deviceInfo;
 }
 
 import Navbar from "./components/Navbar";
+import RunningTextTicker from "./components/RunningTextTicker";
 import { SystemState, UserAccount, RegisteredStudent } from "./types";
+import {
+  requestNotificationPermission,
+  showOutsideApkNotification,
+  sendBroadcastNotification,
+  startBroadcastNotificationListener,
+  markNotificationAsRead,
+  stopAllNotificationChimes,
+  markAllNotificationsAsRead,
+  checkAndNotifyJobOrdersOnLogin,
+  unlockAudio,
+  BroadcastNotificationItem
+} from "./lib/notifications";
 import { hasStaffOversight } from "./lib/permissions";
 import {
+  Bell,
+  Volume2,
+  VolumeX,
   ShieldAlert,
   LogIn,
   Lock,
@@ -44,6 +83,12 @@ import {
   Share2,
   Copy,
   LogOut,
+  Smartphone,
+  Tablet,
+  Monitor,
+  CheckCircle2,
+  AlertTriangle,
+  RefreshCw,
 } from "lucide-react";
 import PrivacyPolicyModal from "./components/PrivacyPolicyModal";
 import LoginModal from "./components/LoginModal";
@@ -55,45 +100,69 @@ import JobsView from "./components/JobsView";
 import EksplorasiView from "./components/EksplorasiView";
 
 function safeLazy<T extends React.ComponentType<any>>(
-  factory: () => Promise<{ default: T }>
+  factory: () => Promise<{ default: T }>,
+  moduleName?: string
 ) {
   return React.lazy(async () => {
-    try {
-      return await factory();
-    } catch (error) {
-      console.warn("Retrying dynamic module import failure:", error);
+    const maxRetries = 3;
+    let lastError: any = null;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
       try {
-        await new Promise((resolve) => setTimeout(resolve, 300));
         return await factory();
-      } catch (retryError) {
-        const key = "chunk_failed_reload";
-        if (!sessionStorage.getItem(key)) {
-          sessionStorage.setItem(key, "true");
-          window.location.reload();
+      } catch (err) {
+        lastError = err;
+        console.warn(`[DynamicImport] Attempt ${attempt}/${maxRetries} failed for ${moduleName || "module"}:`, err);
+        if (attempt < maxRetries) {
+          await new Promise((r) => setTimeout(r, attempt * 400));
         }
-        throw retryError;
       }
     }
+
+    console.error(`[DynamicImport] All retry attempts failed for ${moduleName || "module"}:`, lastError);
+
+    const FallbackComponent: React.FC<any> = () => (
+      <div className="flex flex-col items-center justify-center p-8 sm:p-12 my-8 mx-auto max-w-lg bg-white rounded-3xl border border-slate-200 shadow-sm text-center">
+        <div className="w-14 h-14 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center font-bold text-xl mb-4">
+          ⚠️
+        </div>
+        <h3 className="text-base font-black text-slate-900 mb-1">
+          Gagal Memuat Modul {moduleName ? `(${moduleName})` : ""}
+        </h3>
+        <p className="text-xs text-slate-500 mb-6 leading-relaxed">
+          Koneksi ke server sempat terputus atau modul sedang diperbarui. Silakan klik tombol di bawah untuk memuat ulang modul.
+        </p>
+        <button
+          type="button"
+          onClick={() => window.location.reload()}
+          className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 active:scale-95 text-white text-xs font-bold rounded-xl transition-all shadow-md shadow-indigo-100 cursor-pointer"
+        >
+          Muat Ulang Halaman
+        </button>
+      </div>
+    );
+
+    return { default: FallbackComponent as unknown as T };
   });
 }
 
-const FrontendView = safeLazy(() => import("./components/FrontendView"));
-const LmsView = safeLazy(() => import("./components/LmsView"));
-const AdminView = safeLazy(() => import("./components/AdminView"));
-const VvipView = safeLazy(() => import("./components/VvipView"));
-const AccountSettingsView = safeLazy(() => import("./components/AccountSettingsView"));
-const CalendarView = safeLazy(() => import("./components/CalendarView"));
-const ChatView = safeLazy(() => import("./components/ChatView"));
-const RegistrationView = safeLazy(() => import("./components/RegistrationView"));
-const PrivacyPolicyView = safeLazy(() => import("./components/PrivacyPolicyView"));
-const AlumniDashboardView = safeLazy(() => import("./components/AlumniDashboardView"));
-const SenseiDashboardView = safeLazy(() => import("./components/SenseiDashboardView"));
-const IosInstallView = safeLazy(() => import("./components/IosInstallView"));
+const FrontendView = safeLazy(() => import("./components/FrontendView"), "Frontend");
+const LmsView = safeLazy(() => import("./components/LmsView"), "LMS");
+const AdminView = safeLazy(() => import("./components/AdminView"), "Admin Desk");
+const VvipView = safeLazy(() => import("./components/VvipView"), "VVIP Monitoring");
+const AccountSettingsView = safeLazy(() => import("./components/AccountSettingsView"), "Pengaturan Akun");
+const CalendarView = safeLazy(() => import("./components/CalendarView"), "Kalender");
+const ChatView = safeLazy(() => import("./components/ChatView"), "Chat");
+const RegistrationView = safeLazy(() => import("./components/RegistrationView"), "Pendaftaran");
+const PrivacyPolicyView = safeLazy(() => import("./components/PrivacyPolicyView"), "Kebijakan Privasi");
+const AlumniDashboardView = safeLazy(() => import("./components/AlumniDashboardView"), "Dashboard Alumni");
+const SenseiDashboardView = safeLazy(() => import("./components/SenseiDashboardView"), "Dashboard Sensei");
+const IosInstallView = safeLazy(() => import("./components/IosInstallView"), "Panduan iOS");
 // The mobile app shell is a very large component (dashboard, admin/VVIP panels,
 // chat, calendar, LMS, CV editor, etc.) - lazy-loading it keeps the initial
 // bundle small for every first-time mobile visitor, not just logged-in ones.
 // It already renders inside a <React.Suspense> boundary at its call site below.
-const MobileDashboardView = safeLazy(() => import("./components/MobileDashboardView"));
+const MobileDashboardView = safeLazy(() => import("./components/MobileDashboardView"), "Mobile Shell");
 
 export default function App() {
   const [activeTab, setActiveTabState] = useState<string>(() => {
@@ -151,6 +220,84 @@ export default function App() {
   const [showAppDownloadModal, setShowAppDownloadModal] = useState<boolean>(false);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [isInstallable, setIsInstallable] = useState<boolean>(false);
+  const [showNotificationPermissionPrompt, setShowNotificationPermissionPrompt] = useState<boolean>(false);
+  const [notificationPromptState, setNotificationPromptState] = useState<"idle" | "requesting" | "granted" | "denied">("idle");
+  const [isIframeEnvironment, setIsIframeEnvironment] = useState<boolean>(false);
+
+  const handlePromptNotificationPermissionOnLogin = () => {
+    try {
+      if (typeof window !== "undefined") {
+        const inIframe = window.self !== window.top;
+        setIsIframeEnvironment(inIframe);
+
+        const hasNativeBridge = Boolean(
+          ((window as any).Android && typeof (window as any).Android.requestNotificationPermission === "function") ||
+          ((window as any).JSBridge && typeof (window as any).JSBridge.requestNotificationPermission === "function")
+        );
+        if (hasNativeBridge) {
+          requestNotificationPermission().catch(() => {});
+          return;
+        }
+        if ("Notification" in window) {
+          if (Notification.permission !== "granted") {
+            setNotificationPromptState(Notification.permission === "denied" ? "denied" : "idle");
+            setShowNotificationPermissionPrompt(true);
+          }
+        }
+      }
+    } catch (_) {}
+  };
+
+  const handleAcceptNotificationPermission = async () => {
+    setNotificationPromptState("requesting");
+    try {
+      const perm = await requestNotificationPermission();
+      if (perm === "granted") {
+        setNotificationPromptState("granted");
+        try {
+          if (typeof navigator !== "undefined" && "vibrate" in navigator) {
+            navigator.vibrate([250, 100, 250]);
+          }
+        } catch (_) {}
+        showOutsideApkNotification(
+          "🔔 LPK SCI Pati (Resmi)",
+          "Notifikasi HP berhasil diizinkan! Informasi jadwal, materi, dan seleksi kerja Jepang akan masuk langsung ke layar HP Anda.",
+          { url: "/?tab=notifikasi", id: `login_welcome_${Date.now()}` }
+        );
+        setTimeout(() => {
+          setShowNotificationPermissionPrompt(false);
+          setNotificationPromptState("idle");
+        }, 2200);
+      } else {
+        setNotificationPromptState("denied");
+      }
+    } catch (e) {
+      setNotificationPromptState("denied");
+    }
+  };
+
+  const handleRecheckNotificationPermission = () => {
+    if (typeof window !== "undefined" && "Notification" in window) {
+      if (Notification.permission === "granted") {
+        setNotificationPromptState("granted");
+        showOutsideApkNotification(
+          "🔔 LPK SCI Pati",
+          "Izin notifikasi telah aktif! Notifikasi siap diterima di luar aplikasi.",
+          { url: "/?tab=notifikasi" }
+        );
+        setTimeout(() => {
+          setShowNotificationPermissionPrompt(false);
+          setNotificationPromptState("idle");
+        }, 1800);
+      } else {
+        alert("Izin notifikasi belum aktif. Di browser HP Anda, ketuk ikon gembok 🔒 di samping URL situs, pilih Izin > Notifikasi > Izinkan, lalu ketuk Cek Ulang.");
+      }
+    }
+  };
+
+  // Dynamic references to ensure broadcast notifications filter appropriately for the current user
+  const currentUserRef = useRef<UserAccount | null>(null);
+  const systemStateRef = useRef<SystemState | null>(null);
 
   useEffect(() => {
     const handleBeforeInstallPrompt = (e: any) => {
@@ -194,6 +341,18 @@ export default function App() {
   };
 
   useEffect(() => {
+    // Fire background health ping to warm up backend container and database connection
+    fetch("/api/ping").catch(() => {});
+
+    // Start listening for real-time broadcast notifications across all registered accounts
+    // Dispatches directly to user devices outside the application (OS notification center & lockscreen)
+    const unsubscribeBroadcast = startBroadcastNotificationListener(
+      undefined,
+      () => ({
+        user: currentUserRef.current,
+        activeStudents: systemStateRef.current?.activeStudents,
+      })
+    );
     // Parse referral code on mount and save to localStorage
     if (typeof window !== "undefined") {
       const params = new URLSearchParams(window.location.search);
@@ -202,6 +361,10 @@ export default function App() {
         localStorage.setItem("lpk_referral_code", refCode);
       }
     }
+
+    return () => {
+      unsubscribeBroadcast();
+    };
   }, []);
 
   useEffect(() => {
@@ -308,8 +471,18 @@ export default function App() {
   >("siswa");
   const [vvipViewMode, setVvipViewMode] = useState<"full" | "gaji" | "exec" | "eval" | "pajak" | "ai" | "security" | "kalender" | "afiliasi">("full");
 
-  // Synchronized Full-Stack State
-  const [systemState, setSystemState] = useState<SystemState>({
+  // Pure Firestore initialization: Do NOT cache or strip data in browser local storage.
+  // Immediately purge any legacy stripped state cache from browser storage.
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.removeItem("lpk_cached_system_state");
+        sessionStorage.removeItem("lpk_cached_system_state");
+      } catch (e) {}
+    }
+  }, []);
+
+  const initialEmptyState: SystemState = {
     registeredStudents: [],
     activeStudents: [],
     attendance: [],
@@ -319,9 +492,62 @@ export default function App() {
     users: [],
     lmsLessons: [],
     chapterAssessments: [],
-  });
+    galleries: [],
+    costConfig: {
+      registration: 500000,
+      dp: 5000000,
+      fullPayment: 2000000,
+      stage3: 3000000,
+      managementFee: 0,
+    },
+    customization: {
+      logoText: "LPK SCI",
+      logoIcon: "Award",
+      themeColor: "indigo",
+      logoUrl: "/logo.png",
+      faviconUrl: "/favicon.png",
+      runningText: "🇯🇵 Selamat Datang di Portal Resmi LPK Source Course Indonesia (SCI) Pati • Lembaga Resmi Pelatihan Kerja & Pengiriman Tenaga Profesional ke Jepang (Program Tokutei Ginou / SSW & Magang) • Bimbingan Bahasa Jepang Intensif N5, N4, JFT-Basic & Skill Kaigo Lansia • Info Pendaftaran & Konsultasi Hubungi Kantor LPK SCI Pati",
+      slides: [],
+      gallery: [],
+      landingConfig: {
+        ecosystemTitle: "Ekosistem Pendidikan & Penyaluran Karir",
+        ecosystemSubtitle: "Selamat datang di portal resmi LPK SCI (Source Course Indonesia).",
+        perks: [],
+        alumniTitle: "Testimoni Alumni",
+        alumniSubtitle: "Kisah sukses alumni LPK SCI.",
+        testimonials: [],
+        programsTitle: "Program Unggulan LPK SCI",
+        programsSubtitle: "Jalur karir spesifik (SSW) dan Magang (Ginou Jisshusei).",
+        programs: [],
+        opportunityImages: [
+          {
+            id: 1,
+            label: "Pelatihan Teori & Praktik",
+            url: "https://firebasestorage.googleapis.com/v0/b/gen-lang-client-0782283050.firebasestorage.app/o/galeri%2F1788397965132_WhatsApp_Image_2026-09-02_at_10.02.15.jpeg?alt=media&token=afd37c47-ed69-440a-bf04-0f524e94c79f"
+          },
+          {
+            id: 2,
+            label: "Penyerahan Sertifikat",
+            url: "https://firebasestorage.googleapis.com/v0/b/gen-lang-client-0782283050.firebasestorage.app/o/galeri%2F1788398049192_WhatsApp_Image_2026-09-02_at_09.10.45.jpeg?alt=media&token=f7bcb632-ff46-4e62-879e-9589b46ceecc"
+          },
+          {
+            id: 3,
+            label: "Foto Bersama Alumni",
+            url: "https://firebasestorage.googleapis.com/v0/b/gen-lang-client-0782283050.firebasestorage.app/o/galeri%2F1788398162422_WhatsApp_Image_2026-09-01_at_09.06.50.jpg?alt=media&token=a63b6a63-c29b-48db-9416-1cb10d74401d"
+          }
+        ]
+      }
+    }
+  };
+
+  // Synchronized Full-Stack State (hydrates directly from server & Firestore)
+  const [systemState, setSystemState] = useState<SystemState>(initialEmptyState);
+
+  currentUserRef.current = currentUser;
+  systemStateRef.current = systemState;
 
   const [isLoadingState, setIsLoadingState] = useState<boolean>(false);
+  const [syncStatus, setSyncStatus] = useState<"connected" | "connecting" | "syncing">("connecting");
 
   // Safety net: ensure loading state never hangs
   useEffect(() => {
@@ -369,7 +595,7 @@ export default function App() {
         user?.birthDate ||
         "";
 
-      isMissingBirthDate = !existingBirthDate || existingBirthDate === "-" || existingBirthDate.trim() === "";
+      isMissingBirthDate = !existingBirthDate || existingBirthDate === "-" || String(existingBirthDate).trim() === "";
     }
 
     if (isDefaultPass || (isStudent && isMissingBirthDate)) {
@@ -384,67 +610,244 @@ export default function App() {
   useEffect(() => {
     if (currentUser && !isLoadingState) {
       checkAndShowStudentProfilePrompt(currentUser, false);
+      checkAndNotifyJobOrdersOnLogin(currentUser, systemState);
     }
   }, [currentUser?.username, isLoadingState]);
 
-  // Load backend state on initialization with automatic retries for cold starts
+  // Load backend state on initialization with automatic persistent retries for cold starts
   const isFetchingStateRef = useRef<boolean>(false);
-  const lastFetchTimeRef = useRef<number>(0);
+  const lastFetchTimeRef = useRef<number>(Date.now());
+  const lastEtagRef = useRef<string | null>(null);
+  const retryTimeoutRef = useRef<any>(null);
 
-  const fetchState = async (retryCount = 0) => {
-    if (isFetchingStateRef.current && retryCount === 0) return;
+  const fetchState = async (retryCount = 0, force = false) => {
+    // Strictly prevent concurrent state fetches to avoid saturating mobile/iOS network
+    if (isFetchingStateRef.current) return;
     isFetchingStateRef.current = true;
+    lastFetchTimeRef.current = Date.now();
+
+    if (retryTimeoutRef.current) {
+      clearTimeout(retryTimeoutRef.current);
+      retryTimeoutRef.current = null;
+    }
+
     try {
-      const response = await fetch("/api/state");
+      setSyncStatus("syncing");
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 12000);
+
+      const headers: Record<string, string> = { "Cache-Control": "no-cache" };
+      if (force) {
+        lastEtagRef.current = null;
+      } else if (lastEtagRef.current) {
+        headers["If-None-Match"] = lastEtagRef.current;
+      }
+
+      const response = await fetch("/api/state", {
+        signal: controller.signal,
+        headers
+      });
+      clearTimeout(timeoutId);
+
+      // 304 Not Modified: Data on server is unchanged, zero payload needed!
+      if (response.status === 304) {
+        setSyncStatus("connected");
+        setIsLoadingState(false);
+        return;
+      }
+
       if (response.ok) {
+        const etag = response.headers.get("ETag");
+        if (etag) lastEtagRef.current = etag;
+
         const data = await response.json();
-        const hasStudents = Array.isArray(data?.activeStudents) && data.activeStudents.length > 0;
-        const hasUsers = Array.isArray(data?.users) && data.users.length > 3;
         const isServerReady = data?._isReady !== false;
 
         setSystemState((prevState) => {
           if (!data) return prevState;
           const safeData: any = { ...data };
-          const arrayKeys = [
-            "activeStudents", "registeredStudents", "users", "attendance",
-            "payments", "inventory", "taxes", "events", "jobOrders",
-            "lmsLessons", "lmsQuizzes", "lmsComments", "chapterAssessments",
-            "messages", "logs", "salaries", "cashLedger", "teacherLeaves",
-            "teacherReports", "teacherContracts", "lmsClasses"
-          ];
-          arrayKeys.forEach((key) => {
-            const prevArr = prevState[key as keyof typeof prevState];
-            if ((!safeData[key] || safeData[key].length === 0) && Array.isArray(prevArr) && prevArr.length > 0) {
-              safeData[key] = prevArr;
+          if (!isServerReady) {
+            const arrayKeys = [
+              "activeStudents", "registeredStudents", "users", "attendance",
+              "payments", "inventory", "taxes", "events", "jobOrders",
+              "lmsLessons", "lmsQuizzes", "lmsComments", "chapterAssessments",
+              "messages", "logs", "salaries", "cashLedger", "teacherLeaves",
+              "teacherReports", "teacherContracts", "lmsClasses", "galleries"
+            ];
+            arrayKeys.forEach((key) => {
+              const prevArr = prevState[key as keyof typeof prevState];
+              if ((!safeData[key] || safeData[key].length === 0) && Array.isArray(prevArr) && prevArr.length > 0) {
+                safeData[key] = prevArr;
+              }
+            });
+          }
+
+          // Safety merge: Never lose student scores (5S, ethics, math, japanese, attendance) on background refetches
+          if (Array.isArray(prevState?.activeStudents) && Array.isArray(safeData?.activeStudents)) {
+            safeData.activeStudents = safeData.activeStudents.map((servStudent: any) => {
+              const prev = prevState.activeStudents.find((p: any) => p && p.id && servStudent && servStudent.id && String(p.id).trim().toLowerCase() === String(servStudent.id).trim().toLowerCase());
+              if (!prev) return servStudent;
+              return {
+                ...servStudent,
+                fiveSScore: (servStudent.fiveSScore !== undefined && servStudent.fiveSScore !== null) ? servStudent.fiveSScore : (prev.fiveSScore || 0),
+                ethicsScore: (servStudent.ethicsScore !== undefined && servStudent.ethicsScore !== null) ? servStudent.ethicsScore : (prev.ethicsScore || 0),
+                mathScore: (servStudent.mathScore !== undefined && servStudent.mathScore !== null) ? servStudent.mathScore : (prev.mathScore || 0),
+                japaneseScore: (servStudent.japaneseScore !== undefined && servStudent.japaneseScore !== null) ? servStudent.japaneseScore : (prev.japaneseScore || 0),
+                attendanceScore: (servStudent.attendanceScore !== undefined && servStudent.attendanceScore !== null) ? servStudent.attendanceScore : (prev.attendanceScore || 0),
+              };
+            });
+          }
+
+          // Safety merge: Never lose recently added lessons or quizzes on background refetches
+          if (Array.isArray(prevState?.lmsLessons) && prevState.lmsLessons.length > 0) {
+            if (Array.isArray(safeData.lmsLessons)) {
+              const serverLessonIds = new Set(safeData.lmsLessons.map((l: any) => l.id));
+              const missingLocalLessons = prevState.lmsLessons.filter((l: any) => l && l.id && !serverLessonIds.has(l.id));
+              if (missingLocalLessons.length > 0) {
+                safeData.lmsLessons = [...safeData.lmsLessons, ...missingLocalLessons];
+              }
             }
-          });
+          }
+
+          if (Array.isArray(prevState?.lmsQuizzes) && prevState.lmsQuizzes.length > 0) {
+            if (Array.isArray(safeData.lmsQuizzes)) {
+              const serverQuizIds = new Set(safeData.lmsQuizzes.map((q: any) => q.id));
+              const missingLocalQuizzes = prevState.lmsQuizzes.filter((q: any) => q && q.id && !serverQuizIds.has(q.id));
+              if (missingLocalQuizzes.length > 0) {
+                safeData.lmsQuizzes = [...safeData.lmsQuizzes, ...missingLocalQuizzes];
+              }
+            }
+          }
+
+          // Safety merge & cross-class Mandiri sync: Never lose recently added mandiri chapters and ensure they propagate across all lmsClasses
+          const prevClasses = prevState?.customization?.lmsClasses || prevState?.lmsClasses;
+          const ensureMandiriChaptersInAllClasses = (classesList: any[]) => {
+            if (!Array.isArray(classesList) || classesList.length === 0) return classesList;
+            const mandiriChapters: any[] = [];
+            const mandiriMathChapters: any[] = [];
+            classesList.forEach((cls: any) => {
+              if (Array.isArray(cls.chapters)) {
+                cls.chapters.forEach((ch: any) => {
+                  if (ch && (ch.isMandiri || Number(ch.number) > 35)) {
+                    if (!mandiriChapters.some((m) => Number(m.number) === Number(ch.number))) {
+                      mandiriChapters.push({ ...ch, isMandiri: true, isActive: true });
+                    }
+                  }
+                });
+              }
+              if (Array.isArray(cls.mathChapters)) {
+                cls.mathChapters.forEach((ch: any) => {
+                  if (ch && (ch.isMandiri || Number(ch.number) > 25)) {
+                    if (!mandiriMathChapters.some((m) => Number(m.number) === Number(ch.number))) {
+                      mandiriMathChapters.push({ ...ch, isMandiri: true, isActive: true });
+                    }
+                  }
+                });
+              }
+            });
+
+            // Also incorporate any lessons marked as isMandiri so they appear for all classes
+            const lessonsList = Array.isArray(safeData.lmsLessons) ? safeData.lmsLessons : [];
+            lessonsList.forEach((l: any) => {
+              const chNum = Number(l?.chapterNumber);
+              if (!chNum) return;
+              const isMath = l?.subject && (String(l.subject).toLowerCase().includes("ssw") || String(l.subject).toLowerCase().includes("matematika"));
+              if (l.isMandiri || (isMath ? chNum > 25 : chNum > 35)) {
+                if (isMath) {
+                  if (!mandiriMathChapters.some((m) => Number(m.number) === chNum)) {
+                    mandiriMathChapters.push({ number: chNum, title: l.title || `Bab ${chNum} Mandiri SSW`, isMandiri: true, isActive: true });
+                  }
+                } else {
+                  if (!mandiriChapters.some((m) => Number(m.number) === chNum)) {
+                    mandiriChapters.push({ number: chNum, title: l.title || `Bab ${chNum} Mandiri`, isMandiri: true, isActive: true });
+                  }
+                }
+              }
+            });
+
+            return classesList.map((cls: any) => {
+              let chapters = cls.chapters || [];
+              if (mandiriChapters.length > 0) {
+                const existingNums = new Set(chapters.map((ch: any) => Number(ch.number)));
+                const toAdd = mandiriChapters.filter((m) => !existingNums.has(Number(m.number)));
+                if (toAdd.length > 0) {
+                  chapters = [...chapters, ...toAdd].sort((a: any, b: any) => Number(a.number) - Number(b.number));
+                }
+              }
+              let mathChapters = cls.mathChapters || [];
+              if (mandiriMathChapters.length > 0) {
+                const existingMathNums = new Set(mathChapters.map((ch: any) => Number(ch.number)));
+                const toAddMath = mandiriMathChapters.filter((m) => !existingMathNums.has(Number(m.number)));
+                if (toAddMath.length > 0) {
+                  mathChapters = [...mathChapters, ...toAddMath].sort((a: any, b: any) => Number(a.number) - Number(b.number));
+                }
+              }
+              return { ...cls, chapters, mathChapters };
+            });
+          };
+
+          const mergeClassesWithPrev = (targetClasses: any[]) => {
+            if (!Array.isArray(targetClasses)) return targetClasses;
+            return targetClasses.map((tc: any) => {
+              const pc = Array.isArray(prevClasses) ? prevClasses.find((p: any) => (p.name || p.id || "").trim().toLowerCase() === (tc.name || tc.id || "").trim().toLowerCase()) : null;
+              if (!pc) return tc;
+              let mergedChapters = tc.chapters || [];
+              if (Array.isArray(pc.chapters)) {
+                const tcChapterNums = new Set((tc.chapters || []).map((ch: any) => Number(ch.number)));
+                const extraChapters = pc.chapters.filter((ch: any) => ch && ch.isMandiri && !tcChapterNums.has(Number(ch.number)));
+                if (extraChapters.length > 0) {
+                  mergedChapters = [...mergedChapters, ...extraChapters].sort((a: any, b: any) => Number(a.number) - Number(b.number));
+                }
+              }
+              let mergedMathChapters = tc.mathChapters || [];
+              if (Array.isArray(pc.mathChapters)) {
+                const tcMathNums = new Set((tc.mathChapters || []).map((ch: any) => Number(ch.number)));
+                const extraMathChapters = pc.mathChapters.filter((ch: any) => ch && ch.isMandiri && !tcMathNums.has(Number(ch.number)));
+                if (extraMathChapters.length > 0) {
+                  mergedMathChapters = [...mergedMathChapters, ...extraMathChapters].sort((a: any, b: any) => Number(a.number) - Number(b.number));
+                }
+              }
+              return {
+                ...tc,
+                chapters: mergedChapters,
+                mathChapters: mergedMathChapters
+              };
+            });
+          };
+
+          if (safeData.customization && Array.isArray(safeData.customization.lmsClasses)) {
+            safeData.customization.lmsClasses = ensureMandiriChaptersInAllClasses(
+              mergeClassesWithPrev(safeData.customization.lmsClasses)
+            );
+          }
+          if (Array.isArray(safeData.lmsClasses)) {
+            safeData.lmsClasses = ensureMandiriChaptersInAllClasses(
+              mergeClassesWithPrev(safeData.lmsClasses)
+            );
+          }
+          return safeData;
           return safeData;
         });
-        lastFetchTimeRef.current = Date.now();
         setIsLoadingState(false);
 
-        // If server indicated it was not yet ready or returned empty dataset during cold start, retry in 1.5s
-        if ((!isServerReady || (!hasStudents && !hasUsers)) && retryCount < 10) {
-          setTimeout(() => fetchState(retryCount + 1), 1500);
+        if (!isServerReady) {
+          setSyncStatus("connecting");
+          const nextRetry = Math.min(3000 + retryCount * 2000, 15000);
+          retryTimeoutRef.current = setTimeout(() => fetchState(retryCount + 1), nextRetry);
+        } else {
+          setSyncStatus("connected");
         }
       } else {
-        if (retryCount < 5) {
-          setTimeout(() => fetchState(retryCount + 1), (retryCount + 1) * 1500);
-        } else {
-          setIsLoadingState(false);
-        }
-      }
-    } catch (error) {
-      if (retryCount < 4) {
-        setTimeout(() => fetchState(retryCount + 1), (retryCount + 1) * 1500);
-      } else {
-        if (error instanceof TypeError && error.message === "Failed to fetch") {
-          console.warn("Polling state: server temporarily unreachable, retrying in background...");
-        } else {
-          console.error("Unable to connect to synchronized server database:", error);
-        }
+        setSyncStatus("connecting");
+        const nextRetry = Math.min(5000 + retryCount * 3000, 25000);
+        retryTimeoutRef.current = setTimeout(() => fetchState(retryCount + 1), nextRetry);
         setIsLoadingState(false);
       }
+    } catch (error) {
+      setSyncStatus("connecting");
+      setIsLoadingState(false);
+      const nextRetry = Math.min(5000 + retryCount * 3000, 25000);
+      retryTimeoutRef.current = setTimeout(() => fetchState(retryCount + 1), nextRetry);
     } finally {
       isFetchingStateRef.current = false;
     }
@@ -453,25 +856,18 @@ export default function App() {
   useEffect(() => {
     fetchState();
 
-    // Refresh state periodically. /api/state currently returns the full
-    // synchronized dataset (several MB, since uploaded photos/documents are
-    // embedded as base64 rather than living in Storage) - every open tab
-    // re-downloading and re-serializing that on a tight interval directly
-    // drives up Cloud Run CPU-time and egress cost. Widening the interval to
-    // 60s, and skipping the tick entirely while the tab is in the background,
-    // cuts that recurring cost substantially; focus/visibility/online
-    // listeners below still refetch immediately when the tab becomes active.
+    // Refresh state periodically with safe, non-congesting interval (every 25 seconds)
     const intervalId = setInterval(() => {
       if (document.visibilityState === "visible") {
         fetchState();
       }
-    }, 60000);
+    }, 25000);
 
     const triggerDebouncedFetch = () => {
       const now = Date.now();
-      // Only fetch on focus if at least 10 seconds have passed since last fetch
-      if (now - lastFetchTimeRef.current > 10000) {
-        fetchState();
+      // Refetch on interaction/focus only if at least 20 seconds have passed
+      if (now - lastFetchTimeRef.current > 20000) {
+        fetchState(0, true);
       }
     };
 
@@ -485,6 +881,70 @@ export default function App() {
     };
     document.addEventListener("visibilitychange", handleVisibility);
 
+    return () => {
+      clearInterval(intervalId);
+      if (retryTimeoutRef.current) clearTimeout(retryTimeoutRef.current);
+      window.removeEventListener("focus", triggerDebouncedFetch);
+      window.removeEventListener("online", triggerDebouncedFetch);
+      window.removeEventListener("pageshow", triggerDebouncedFetch);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, []);
+
+  // Real-time synchronization across all tabs and domain mappings (e.g. lpksci.com)
+  useEffect(() => {
+    if (!db) return;
+    let unsub: (() => void) | null = null;
+    try {
+      unsub = onSnapshot(doc(db, "system", "sync_meta"), (snapshot) => {
+        if (!snapshot.exists()) return;
+        const data = snapshot.data();
+        const updateAge = Date.now() - (data?.updatedAt || 0);
+        // Instant refetch if update was within the last 60 seconds
+        if (updateAge < 60000) {
+          fetchState(0, true);
+        }
+      }, (err) => {
+        // Silently tolerate if offline or network hiccup; background interval polling handles fallback
+      });
+    } catch (e) {}
+
+    return () => {
+      if (unsub) unsub();
+    };
+  }, []);
+
+  // Dedicated instant real-time synchronization for SOP Cost Configuration (costConfig)
+  useEffect(() => {
+    if (!db) return;
+    let unsub: (() => void) | null = null;
+    try {
+      unsub = onSnapshot(doc(db, "system", "costConfig"), (snapshot) => {
+        if (!snapshot.exists()) return;
+        const freshCost = snapshot.data();
+        if (freshCost) {
+          setSystemState((prev: any) => {
+            if (!prev) return prev;
+            return {
+              ...prev,
+              costConfig: {
+                ...(prev?.costConfig || {}),
+                ...freshCost
+              }
+            };
+          });
+        }
+      }, (err) => {
+        // Silently tolerate if offline
+      });
+    } catch (e) {}
+
+    return () => {
+      if (unsub) unsub();
+    };
+  }, []);
+
+  useEffect(() => {
     // Check for redirect result from Google Sign-In
     const checkRedirect = async () => {
       if (!auth) return;
@@ -596,14 +1056,6 @@ export default function App() {
     };
 
     checkRedirect();
-
-    return () => {
-      clearInterval(intervalId);
-      window.removeEventListener("focus", triggerDebouncedFetch);
-      window.removeEventListener("online", triggerDebouncedFetch);
-      window.removeEventListener("pageshow", triggerDebouncedFetch);
-      document.removeEventListener("visibilitychange", handleVisibility);
-    };
   }, []);
 
   useEffect(() => {
@@ -699,8 +1151,175 @@ export default function App() {
       });
       if (response.ok) {
         const resData = await response.json().catch(() => null);
-        // Refresh client database silently in the background
-        fetchState().catch(() => {});
+        if (dataType === "activeStudents" || dataType === "registeredStudents") {
+          const item = resData?.item || resData?.updated || payload;
+          if (item) {
+            setSystemState((prev: any) => {
+              if (!prev) return prev;
+              const actList = Array.isArray(prev.activeStudents) ? [...prev.activeStudents] : [];
+              const regList = Array.isArray(prev.registeredStudents) ? [...prev.registeredStudents] : [];
+
+              const actIdx = actList.findIndex((s: any) => 
+                (item.id && s.id && String(s.id).trim().toLowerCase() === String(item.id).trim().toLowerCase()) ||
+                (item.name && s.name && s.name.trim().toLowerCase() === item.name.trim().toLowerCase())
+              );
+              if (actIdx !== -1) {
+                actList[actIdx] = { ...actList[actIdx], ...item };
+              } else if (dataType === "activeStudents" && action === "add") {
+                actList.push(item);
+              }
+
+              const regIdx = regList.findIndex((r: any) => 
+                (item.id && r.id && String(r.id).trim().toLowerCase() === String(item.id).trim().toLowerCase()) ||
+                (item.name && r.name && r.name.trim().toLowerCase() === item.name.trim().toLowerCase())
+              );
+              if (regIdx !== -1) {
+                regList[regIdx] = { ...regList[regIdx], ...item };
+              } else if (dataType === "registeredStudents" && action === "add") {
+                regList.push(item);
+              }
+
+              return {
+                ...prev,
+                activeStudents: actList,
+                registeredStudents: regList
+              };
+            });
+          }
+        }
+        if (resData?.item && dataType === "chapterAssessments") {
+          setSystemState((prev: any) => {
+            if (!prev) return prev;
+            const currentList = Array.isArray(prev.chapterAssessments) ? [...prev.chapterAssessments] : [];
+            const item = resData.item;
+            const idx = currentList.findIndex((c: any) => c.id === item.id || ((c.studentId || "").trim() === (item.studentId || "").trim() && Number(c.chapterNumber) === Number(item.chapterNumber) && (c.subject || "Bahasa Jepang").trim().toLowerCase() === (item.subject || "Bahasa Jepang").trim().toLowerCase() && (!item.lessonId || c.lessonId === item.lessonId)));
+            if (idx !== -1) {
+              currentList[idx] = item;
+            } else {
+              currentList.push(item);
+            }
+            return { ...prev, chapterAssessments: currentList };
+          });
+        }
+        if (dataType === "lmsLessons") {
+          setSystemState((prev: any) => {
+            if (!prev) return prev;
+            const currentList = Array.isArray(prev.lmsLessons) ? [...prev.lmsLessons] : [];
+            if (action === "delete") {
+              const targetId = payload?.id;
+              return {
+                ...prev,
+                lmsLessons: currentList.filter((l: any) => l.id !== targetId)
+              };
+            }
+            const item = resData?.item || payload;
+            if (item && item.id) {
+              const idx = currentList.findIndex((l: any) => l.id === item.id);
+              if (idx !== -1) {
+                currentList[idx] = { ...currentList[idx], ...item };
+              } else {
+                currentList.push(item);
+              }
+            }
+            return { ...prev, lmsLessons: currentList };
+          });
+        }
+        if (dataType === "lmsClasses") {
+          const classesList = Array.isArray(payload) ? payload : (payload?.lmsClasses || payload?.classes || [payload]);
+          setSystemState((prev: any) => {
+            if (!prev) return prev;
+            return {
+              ...prev,
+              lmsClasses: classesList,
+              customization: {
+                ...(prev.customization || {}),
+                lmsClasses: classesList
+              }
+            };
+          });
+        }
+        if (dataType === "lmsQuizzes") {
+          setSystemState((prev: any) => {
+            if (!prev) return prev;
+            const currentList = Array.isArray(prev.lmsQuizzes) ? [...prev.lmsQuizzes] : [];
+            const normAct = (action || "").toLowerCase();
+            if (normAct === "batch_upsert" || normAct === "batch_save" || normAct === "save_batch") {
+              const chNum = Number(payload?.chapterNumber || payload?.chapterId || resData?.chapterNumber || 1);
+              const subj = payload?.subject || resData?.subject || "Bahasa Jepang";
+              const subTitle = (payload?.subTitle ? String(payload.subTitle).trim() : (resData?.subTitle ? String(resData.subTitle).trim() : ""));
+              const lessonId = (payload?.lessonId ? String(payload.lessonId).trim() : (resData?.lessonId ? String(resData.lessonId).trim() : ""));
+              const items = Array.isArray(resData?.items) ? resData.items : (Array.isArray(payload?.quizzes) ? payload.quizzes : []);
+              const otherQuizzes = currentList.filter((q: any) => {
+                const qCh = Number(q.chapterNumber !== undefined ? q.chapterNumber : q.chapterId);
+                const qSubj = q.subject || "Bahasa Jepang";
+                if (qCh !== chNum || qSubj !== subj) return true;
+                if (subTitle) {
+                  return (q.subTitle || "").trim().toLowerCase() !== subTitle.toLowerCase();
+                }
+                if (lessonId) {
+                  return (q.lessonId || "").trim() !== lessonId;
+                }
+                return false;
+              });
+              return { ...prev, lmsQuizzes: [...otherQuizzes, ...items] };
+            }
+            if (action === "delete") {
+              const targetId = payload?.id;
+              return {
+                ...prev,
+                lmsQuizzes: currentList.filter((q: any) => q.id !== targetId)
+              };
+            }
+            const item = resData?.item || payload;
+            if (item && item.id) {
+              const idx = currentList.findIndex((q: any) => q.id === item.id);
+              if (idx !== -1) {
+                currentList[idx] = { ...currentList[idx], ...item };
+              } else {
+                currentList.push(item);
+              }
+            }
+            return { ...prev, lmsQuizzes: currentList };
+          });
+        }
+        if (dataType === "costConfig") {
+          setSystemState((prev: any) => {
+            if (!prev) return prev;
+            return {
+              ...prev,
+              costConfig: {
+                ...(prev?.costConfig || {}),
+                ...(resData?.costConfig || payload || {})
+              }
+            };
+          });
+        }
+        if (dataType === "customization") {
+          setSystemState((prev: any) => {
+            const nextCust = {
+              ...(prev?.customization || {}),
+              ...(payload || {}),
+            };
+            return {
+              ...prev,
+              customization: nextCust,
+              ...(payload?.lmsClasses ? { lmsClasses: payload.lmsClasses } : {})
+            };
+          });
+        }
+        if (dataType === "galleries" || dataType === "gallery") {
+          const newList = resData?.item?.data || (Array.isArray(payload) ? payload : (payload?.data || payload?.gallery || payload?.galleries || []));
+          setSystemState((prev: any) => ({
+            ...prev,
+            galleries: newList,
+            customization: {
+              ...(prev?.customization || {}),
+              gallery: newList,
+            },
+          }));
+        }
+        // Instantly refresh client state from server without delay
+        fetchState(0, true).catch(() => {});
         return true;
       }
     } catch (err) {
@@ -719,7 +1338,31 @@ export default function App() {
     }
   };
 
-  const isMobile = useIsMobile();
+  const { isMobileDevice, isTablet, isLandscape } = useDeviceDimensions();
+  const [preferredDisplayMode, setPreferredDisplayMode] = useState<"auto" | "web" | "mobile">(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("preferred_display_mode");
+      if (saved === "web" || saved === "mobile") return saved;
+    }
+    return "auto";
+  });
+
+  const handleSetDisplayMode = (mode: "auto" | "web" | "mobile") => {
+    setPreferredDisplayMode(mode);
+    if (typeof window !== "undefined") {
+      if (mode === "auto") {
+        localStorage.removeItem("preferred_display_mode");
+      } else {
+        localStorage.setItem("preferred_display_mode", mode);
+      }
+    }
+  };
+
+  const isMobile = preferredDisplayMode === "mobile" 
+    ? true 
+    : preferredDisplayMode === "web" 
+      ? false 
+      : isMobileDevice;
 
   const isMainTab = activeTab && [
     "kalender",
@@ -742,7 +1385,10 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    const rawIcon = systemState?.customization?.faviconUrl || systemState?.customization?.logoUrl || "/logo.png";
+    let rawIcon = systemState?.customization?.faviconUrl || systemState?.customization?.logoUrl || "/favicon.png";
+    if (typeof rawIcon === "string" && (rawIcon.includes("1792028427128_favicon.png") || rawIcon.includes("1788528497434_7bd439c1"))) {
+      rawIcon = "/favicon.png";
+    }
     if (rawIcon) {
       // Update all standard icon links
       const iconSelectors = [
@@ -771,7 +1417,7 @@ export default function App() {
   }, [systemState?.customization?.logoUrl, systemState?.customization?.faviconUrl]);
 
   const filteredSystemState = React.useMemo(() => {
-    const hiddenEmails = ["linggadhani79@gmail.com", "rlstudioindonesia@gmail.com", "linggadhani95@gmail.com", "admin"];
+    const hiddenEmails = ["linggadhani79@gmail.com", "rlstudioindonesia@gmail.com", "admin"];
     
     const devUsers = (systemState.users || []).filter(u => 
       (u.email && hiddenEmails.includes(u.email.toLowerCase().trim())) ||
@@ -783,10 +1429,7 @@ export default function App() {
 
     return {
       ...systemState,
-      users: (systemState.users || []).filter(u => {
-        const email = (u.email || u.username || "").toLowerCase().trim();
-        return !hiddenEmails.includes(email);
-      }),
+      users: systemState.users || [],
       activeStudents: (systemState.activeStudents || []).filter(s => {
         if (s.id && devStudentIds.includes(s.id)) return false;
         if (s.name && devNames.includes(s.name.toLowerCase().trim())) return false;
@@ -815,6 +1458,8 @@ export default function App() {
       className="min-h-screen bg-transparent flex flex-col justify-between pb-0"
     >
       <ApkUpdateBanner customization={systemState.customization} />
+
+
       {(() => {
         const systemState = filteredSystemState;
         return (
@@ -833,6 +1478,15 @@ export default function App() {
           customization={systemState?.customization}
           isOverlay={activeTab === "frontend"}
           onOpenDownloadModal={() => setShowAppDownloadModal(true)}
+          onSwitchToMobile={() => handleSetDisplayMode("mobile")}
+        />
+
+        {/* Global Desktop Running Text Ticker */}
+        <RunningTextTicker
+          customization={systemState?.customization}
+          events={systemState?.events}
+          variant="desktop"
+          className={activeTab === "frontend" ? "relative z-30 mt-16 sm:mt-20 border-t border-slate-800" : "sticky top-16 z-30"}
         />
 
         {/* Main viewport Container with desktop boundaries */}
@@ -948,7 +1602,7 @@ export default function App() {
                       <AccessDeniedAlert
                         requiredRole="Direktur Utama (VVIP)"
                         onLoginClick={() => setIsLoginOpen(true)}
-                        description="Tab VVIP Executive Monitoring khusus diperuntukkan bagi CEO / Pemilik LPK Source Course Indonesia untuk memantau neraca laporan keuangan instan, grafik profitabilitas bulanan, sebaran siswa alumni di peta Jepang, serta konsultasi program model cerdas Gemini AI."
+                        description="Tab VVIP Executive Monitoring khusus diperuntukkan bagi CEO / Pemilik LPK Source Course Indonesia untuk memantau neraca laporan keuangan instan, grafik profitabilitas bulanan, sebaran siswa alumni di peta Jepang, serta ringkasan rekomendasi strategis eksekutif."
                       />
                     );
                   }
@@ -970,7 +1624,10 @@ export default function App() {
                            setOriginalUser(currentUser);
                            localStorage.setItem("lpk_original_session", JSON.stringify(currentUser));
                         }
-                        setCurrentUser({ ...user, lastActive: now });
+                        const targetUser = { ...user, lastActive: now };
+                        setCurrentUser(targetUser);
+                        handlePromptNotificationPermissionOnLogin();
+                        checkAndNotifyJobOrdersOnLogin(targetUser, systemState);
                         if (user.role === "Siswa" || user.role === "Pengajar" || user.role === "Alumni") setActiveTab("lms");
                         else if (user.role === "Admin" || user.role === "Admin Super" || user.role === "Admin Biasa") setActiveTab("admin");
                         else if (user.role === "VVIP") setActiveTab("vvip");
@@ -988,7 +1645,10 @@ export default function App() {
                   onLoginSuccess={(u) => {
                     const now = new Date().toISOString();
                     handleUpdateState("users", "edit", { username: u.username, lastActive: now });
-                    setCurrentUser({ ...u, lastActive: now });
+                    const targetUser = { ...u, lastActive: now };
+                    setCurrentUser(targetUser);
+                    handlePromptNotificationPermissionOnLogin();
+                    checkAndNotifyJobOrdersOnLogin(targetUser, systemState);
                   }}
                   onOpenLogin={() => setIsLoginOpen(true)}
                 />
@@ -1237,20 +1897,20 @@ export default function App() {
                             const statsByReferrer: { [key: string]: { name: string, regs: number, actives: number } } = {};
                             
                             allRegs.forEach(s => {
-                              if (s.referrer) {
+                              if (s?.referrer && typeof s.referrer === "string" && s.referrer.trim()) {
                                 const refKey = s.referrer.trim().toLowerCase();
                                 if (!statsByReferrer[refKey]) {
-                                  statsByReferrer[refKey] = { name: s.referrer, regs: 0, actives: 0 };
+                                  statsByReferrer[refKey] = { name: s.referrer.trim(), regs: 0, actives: 0 };
                                 }
                                 statsByReferrer[refKey].regs += 1;
                               }
                             });
 
                             allActives.forEach(s => {
-                              if (s.referrer) {
+                              if (s?.referrer && typeof s.referrer === "string" && s.referrer.trim()) {
                                 const refKey = s.referrer.trim().toLowerCase();
                                 if (!statsByReferrer[refKey]) {
-                                  statsByReferrer[refKey] = { name: s.referrer, regs: 0, actives: 0 };
+                                  statsByReferrer[refKey] = { name: s.referrer.trim(), regs: 0, actives: 0 };
                                 }
                                 statsByReferrer[refKey].actives += 1;
                               }
@@ -1390,11 +2050,11 @@ export default function App() {
       </div>
       )}
 
-      {/* Mobile view: full custom landing portal as requested */}
+      {/* Mobile view: full custom landing portal occupying 100% full width and height on tablet and mobile */}
       {isMobile && (
-      <div className="flex-1 flex flex-col w-full bg-slate-100/80 sm:p-8 justify-center items-center">
+      <div className="flex-1 flex flex-col w-full min-h-screen justify-start items-stretch p-0 bg-slate-50">
         <div 
-          className="w-full bg-slate-50 relative flex-1 flex flex-col max-w-[414px] sm:max-h-[896px] shadow-[0_30px_60px_-15px_rgba(0,0,0,0.2)] overflow-hidden sm:rounded-[3rem] sm:border-[8px] sm:border-white ring-1 ring-slate-200/50"
+          className="w-full bg-slate-50 relative flex-1 flex flex-col min-h-screen overflow-x-hidden"
         >
           <div className="w-full flex-1 overflow-y-auto overflow-x-hidden no-scrollbar flex flex-col bg-slate-50">
             <React.Suspense fallback={
@@ -1407,7 +2067,7 @@ export default function App() {
               systemState={systemState}
               onOpenLogin={() => setIsLoginOpen(true)}
               onLogout={handleLogout}
-
+              onSwitchToWeb={() => handleSetDisplayMode("web")}
               handleRegisterSubmit={handleRegisterSubmit}
               handleUpdateState={handleUpdateState}
               activeTab={activeTab}
@@ -1417,8 +2077,10 @@ export default function App() {
                 handleUpdateState("users", "edit", { username: user.username, lastActive: now });
                 const updatedUser = { ...user, lastActive: now };
                 setCurrentUser(updatedUser);
+                handlePromptNotificationPermissionOnLogin();
                 checkAndShowStudentProfilePrompt(updatedUser, !!isDefaultPassword);
-                if (user.role === "Siswa" || user.role === "Pengajar")
+                checkAndNotifyJobOrdersOnLogin(updatedUser, systemState);
+                if (user.role === "Siswa" || user.role === "Pengajar" || user.role === "Alumni")
                   setActiveTab("lms");
                 if (user.role === "Admin" || user.role === "Admin Super" || user.role === "Admin Biasa") setActiveTab("admin");
                 if (user.role === "VVIP") setActiveTab("vvip");
@@ -1432,7 +2094,10 @@ export default function App() {
                    setOriginalUser(currentUser);
                    localStorage.setItem("lpk_original_session", JSON.stringify(currentUser));
                 }
-                setCurrentUser({ ...user, lastActive: now });
+                const targetUser = { ...user, lastActive: now };
+                setCurrentUser(targetUser);
+                handlePromptNotificationPermissionOnLogin();
+                checkAndNotifyJobOrdersOnLogin(targetUser, systemState);
                 if (user.role === "Siswa" || user.role === "Pengajar" || user.role === "Alumni") setActiveTab("lms");
                 else if (user.role === "Admin" || user.role === "Admin Super" || user.role === "Admin Biasa") setActiveTab("admin");
                 else if (user.role === "VVIP") setActiveTab("vvip");
@@ -1454,14 +2119,143 @@ export default function App() {
             handleUpdateState("users", "edit", { username: user.username, lastActive: now });
             const updatedUser = { ...user, lastActive: now };
             setCurrentUser(updatedUser);
+            handlePromptNotificationPermissionOnLogin();
             checkAndShowStudentProfilePrompt(updatedUser, !!isDefaultPassword);
+            checkAndNotifyJobOrdersOnLogin(updatedUser, systemState);
             // Auto redirect to authorized view for exceptional onboarding experience!
-            if (user.role === "Siswa" || user.role === "Pengajar")
+            if (user.role === "Siswa" || user.role === "Pengajar" || user.role === "Alumni")
               setActiveTab("lms");
             if (user.role === "Admin" || user.role === "Admin Super" || user.role === "Admin Biasa") setActiveTab("admin");
             if (user.role === "VVIP") setActiveTab("vvip");
           }}
         />
+      )}
+
+      {/* Mobile & Web Notification Permission Request Modal upon Login */}
+      {showNotificationPermissionPrompt && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-950/75 backdrop-blur-sm p-4 animate-in fade-in duration-200 font-sans">
+          <div className="bg-white rounded-3xl p-6 sm:p-7 max-w-sm w-full shadow-2xl border border-slate-100 text-center space-y-4">
+            
+            {notificationPromptState === "granted" ? (
+              <>
+                <div className="h-14 w-14 bg-gradient-to-tr from-emerald-500 to-teal-600 rounded-2xl mx-auto flex items-center justify-center text-white shadow-lg shadow-emerald-500/25">
+                  <CheckCircle2 className="h-7 w-7 animate-bounce" />
+                </div>
+                <div className="space-y-1.5">
+                  <h3 className="font-display font-extrabold text-slate-900 text-base sm:text-lg">
+                    Izin Notifikasi Berhasil Aktif! 🎉
+                  </h3>
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    Sinyal getar dan notifikasi telah dikirim langsung ke status bar / layar notifikasi HP Anda di luar aplikasi.
+                  </p>
+                </div>
+                <div className="pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowNotificationPermissionPrompt(false)}
+                    className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] text-white text-xs font-bold uppercase tracking-wider rounded-xl transition shadow-md cursor-pointer"
+                  >
+                    Selesai & Buka Aplikasi
+                  </button>
+                </div>
+              </>
+            ) : notificationPromptState === "denied" ? (
+              <>
+                <div className="h-14 w-14 bg-gradient-to-tr from-rose-500 to-amber-600 rounded-2xl mx-auto flex items-center justify-center text-white shadow-lg shadow-rose-500/25">
+                  <AlertTriangle className="h-7 w-7" />
+                </div>
+                <div className="space-y-1.5">
+                  <h3 className="font-display font-extrabold text-slate-900 text-base sm:text-lg text-rose-700">
+                    Izin Notifikasi Diblokir di Browser
+                  </h3>
+                  <p className="text-xs text-slate-500 leading-relaxed">
+                    Browser HP Anda saat ini mengatur notifikasi dalam status diblokir. Karena privasi browser, izin perlu diaktifkan manual:
+                  </p>
+                </div>
+                <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-3 text-left space-y-2 text-[11px] text-slate-700">
+                  <div className="flex items-start gap-2">
+                    <span className="h-4 w-4 rounded-full bg-indigo-100 text-indigo-700 font-bold flex items-center justify-center text-[10px] shrink-0 mt-0.5">1</span>
+                    <span>Ketuk ikon <strong>Gembok 🔒</strong> atau <strong>Setelan Situs</strong> di samping alamat web browser (URL atas).</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <span className="h-4 w-4 rounded-full bg-indigo-100 text-indigo-700 font-bold flex items-center justify-center text-[10px] shrink-0 mt-0.5">2</span>
+                    <span>Pilih menu <strong>Izin (Permissions)</strong> &gt; <strong>Notifikasi</strong>.</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <span className="h-4 w-4 rounded-full bg-indigo-100 text-indigo-700 font-bold flex items-center justify-center text-[10px] shrink-0 mt-0.5">3</span>
+                    <span>Ubah menjadi <strong>Izinkan (Allow)</strong>, lalu ketuk tombol Cek Ulang di bawah.</span>
+                  </div>
+                </div>
+                <div className="pt-1 space-y-2">
+                  <button
+                    type="button"
+                    onClick={handleRecheckNotificationPermission}
+                    className="w-full py-2.5 px-4 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl transition shadow-md flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <RefreshCw className="h-3.5 w-3.5" />
+                    <span>Cek Ulang Izin Notifikasi</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowNotificationPermissionPrompt(false)}
+                    className="w-full py-2 px-4 text-xs font-semibold text-slate-500 hover:text-slate-800 transition rounded-xl cursor-pointer"
+                  >
+                    Tutup
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="h-14 w-14 bg-gradient-to-tr from-indigo-500 to-indigo-600 rounded-2xl mx-auto flex items-center justify-center text-white shadow-lg shadow-indigo-500/25">
+                  <Bell className="h-7 w-7 animate-bounce" />
+                </div>
+                <div className="space-y-1.5">
+                  <h3 className="font-display font-extrabold text-slate-900 text-base sm:text-lg">
+                    Izinkan Notifikasi di HP
+                  </h3>
+                  <p className="text-xs text-slate-500 leading-relaxed">
+                    Aktifkan notifikasi untuk menerima informasi jadwal kelas, pengumuman penting, dan seleksi kerja Jepang langsung di status bar & layar HP Anda.
+                  </p>
+                </div>
+
+                {isIframeEnvironment && (
+                  <div className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200/80 p-2 rounded-xl text-left leading-normal">
+                    💡 <em>Tips:</em> Jika membuka di dalam jendela preview, buka web di tab browser HP baru (Chrome/Safari) agar izin notifikasi sistem HP dapat langsung aktif.
+                  </div>
+                )}
+
+                <div className="pt-2 space-y-2">
+                  <button
+                    type="button"
+                    disabled={notificationPromptState === "requesting"}
+                    onClick={handleAcceptNotificationPermission}
+                    className="w-full py-3 px-4 bg-indigo-600 hover:bg-indigo-700 active:scale-[0.99] disabled:opacity-75 text-white text-xs font-bold uppercase tracking-wider rounded-xl transition shadow-md flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    {notificationPromptState === "requesting" ? (
+                      <>
+                        <span className="h-3.5 w-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                        <span>Meminta Izin HP...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Bell className="h-4 w-4" />
+                        <span>Izinkan Notifikasi Sekarang</span>
+                      </>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowNotificationPermissionPrompt(false)}
+                    className="w-full py-2.5 px-4 text-xs font-semibold text-slate-500 hover:text-slate-800 transition rounded-xl cursor-pointer"
+                  >
+                    Nanti Saja
+                  </button>
+                </div>
+              </>
+            )}
+
+          </div>
+        </div>
       )}
 
       {showStudentProfilePrompt && currentUser && (

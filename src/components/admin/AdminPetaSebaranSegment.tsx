@@ -87,7 +87,9 @@ export default function AdminPetaSebaranSegment({ adminMapInstanceRef, adminMapR
                                 setSelectedMapPref(null);
                                 setSebaranPage(1);
                                 if (adminMapInstanceRef.current) {
-                                  adminMapInstanceRef.current.setView([36.2048, 138.2529], 5);
+                                  try {
+                                    adminMapInstanceRef.current.setView([36.2048, 138.2529], 5);
+                                  } catch (e) {}
                                 }
                               }}
                               className="bg-red-50 hover:bg-red-100 text-red-700 font-extrabold py-1 px-2.5 rounded-lg text-[9px] uppercase tracking-wider transition cursor-pointer border border-red-100 flex items-center gap-1 shadow-xs"

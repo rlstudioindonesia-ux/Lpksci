@@ -22,13 +22,14 @@ const MARKERS: Record<string, string> = {
   informasi: "BROADCAST INFORMASI LPK",
   petasebaran: "DATA PETA SEBARAN ALUMNI LPK",
   joborders: "Manajemen Job Order & Rekomendasi Kerja Jepang",
+  monitoringBelajar: "monitoring-belajar-section",
 };
 
 const currentUser = makeMockUser("Admin Super");
 const systemState = makeMockSystemState();
 
 function hasMarker(mainContent: HTMLElement, marker: string): boolean {
-  if (marker === "tabel-siswa-section") {
+  if (marker === "tabel-siswa-section" || marker === "monitoring-belajar-section") {
     return !!mainContent.querySelector(`#${marker}`);
   }
   return within(mainContent).queryAllByText(marker, { exact: false }).length > 0;

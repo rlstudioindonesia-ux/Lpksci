@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { UserAccount, SystemState } from "../types";
-import { dataURLtoBlob, resolveAttendancePhotoUrl, uploadFileToFirebase } from "../lib/storageHelper";
+import { uploadFileToFirebase, cleanDocUrl, resolveAttendancePhotoUrl, STRIPPED_PHOTO_PLACEHOLDER } from "../lib/storageHelper";
+import { MediaViewerModal } from "./MediaViewerModal";
 import { 
   FileText, CheckSquare, Receipt, Clock, Users, Search,
   Camera, MapPin, Upload, AlertTriangle, CheckCircle, Image as ImageIcon, Video, HelpCircle, Eye
@@ -28,28 +29,39 @@ export function TeacherDashboardPanel({
   const [reportType, setReportType] = useState<"SPT" | "BPJS" | "Agenda">("Agenda");
   const [reportText, setReportText] = useState("");
   const [reportLink, setReportLink] = useState("");
+  const [viewingPhotoUrl, setViewingPhotoUrl] = useState<string | null>(null);
   const [presensiBiometricStatus, setPresensiBiometricStatus] = useState<"idle" | "scanning" | "success" | "error">("idle");
   const [presensiNotes, setPresensiNotes] = useState("");
   const [studentSearchQuery, setStudentSearchQuery] = useState("");
   const [selectedLogForPreview, setSelectedLogForPreview] = useState<any>(null);
-  const [previewPhotoUrl, setPreviewPhotoUrl] = useState<string | null>(null);
-  const [previewPhotoLoading, setPreviewPhotoLoading] = useState(false);
+  const [loadingLogPhotoId, setLoadingLogPhotoId] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!selectedLogForPreview?.photoUrl) {
-      setPreviewPhotoUrl(null);
-      return;
-    }
-    let cancelled = false;
-    setPreviewPhotoLoading(true);
-    resolveAttendancePhotoUrl(selectedLogForPreview.id, selectedLogForPreview.photoUrl).then((url) => {
-      if (!cancelled) {
-        setPreviewPhotoUrl(url);
-        setPreviewPhotoLoading(false);
+  const handleOpenLogPreview = async (log: any) => {
+    setSelectedLogForPreview(log);
+    if (log.photoUrl === STRIPPED_PHOTO_PLACEHOLDER) {
+      setLoadingLogPhotoId(log.id);
+      const resolved = await resolveAttendancePhotoUrl(log.id, log.photoUrl);
+      setLoadingLogPhotoId(null);
+      if (resolved) {
+        setSelectedLogForPreview((prev: any) => (prev && prev.id === log.id ? { ...prev, photoUrl: resolved } : prev));
       }
-    });
-    return () => { cancelled = true; };
-  }, [selectedLogForPreview]);
+    }
+  };
+
+  const handleViewPhoto = async (photoUrl: string, logId?: string) => {
+    if (photoUrl === STRIPPED_PHOTO_PLACEHOLDER && logId) {
+      setLoadingLogPhotoId(logId);
+      const resolved = await resolveAttendancePhotoUrl(logId, photoUrl);
+      setLoadingLogPhotoId(null);
+      if (resolved) {
+        setViewingPhotoUrl(resolved);
+      } else {
+        alert("Foto bukti presensi ini tidak ditemukan atau gagal dimuat.");
+      }
+    } else {
+      setViewingPhotoUrl(photoUrl);
+    }
+  };
 
   const [presensiType, setPresensiType] = useState<"MASUK" | "PULANG">("MASUK");
   const [presensiMode, setPresensiMode] = useState<"REGULER" | "ZOOM">("REGULER");
@@ -58,12 +70,17 @@ export function TeacherDashboardPanel({
   const [presensiPhoto, setPresensiPhoto] = useState<string | null>(null);
   const [isUploadingPhoto, setIsUploadingPhoto] = useState(false);
   const [selectedClassFilter, setSelectedClassFilter] = useState(currentUser.assignedClass || "Semua");
+  const isPrivilegedUser = ["VVIP", "Admin Super", "Admin", "Admin Biasa"].includes(currentUser?.role || "");
+  const [selectedStaffForPresensi, setSelectedStaffForPresensi] = useState<string>(currentUser?.name || currentUser?.username || "all");
 
   React.useEffect(() => {
     if (currentUser) {
       setTeacherBankName(currentUser.bankAccount?.split(' - ')[0] || "");
       setTeacherBankNum(currentUser.bankAccount?.split(' - ')[1] || "");
       setSelectedClassFilter(currentUser.assignedClass || "Semua");
+      if (currentUser.name || currentUser.username) {
+        setSelectedStaffForPresensi(currentUser.name || currentUser.username);
+      }
     }
   }, [currentUser]);
 
@@ -394,27 +411,34 @@ export function TeacherDashboardPanel({
       setPresensiBiometricStatus("scanning");
       setTimeout(async () => {
         const liveFacePhoto = captureFaceSnapshot();
-        const gpsStr = presensiGps
-          ? `${presensiGps.latitude}, ${presensiGps.longitude} (Akurasi: ${presensiGps.accuracy}m)`
+        const gpsStr = presensiGps 
+          ? `${presensiGps.latitude}, ${presensiGps.longitude} (Akurasi: ${presensiGps.accuracy}m)` 
           : "Lokasi tidak terdeteksi";
 
         // If no class photo was uploaded, use the biometric snapshot as evidence photo!
-        // The snapshot is a raw base64 data: URL, which the server strips out of
-        // /api/state responses (replaced with a "[FOTO_TERSIMPAN]" placeholder) to
-        // avoid multi-megabyte state payloads - so it must be uploaded to Storage
-        // first and referenced by URL, or the photo becomes permanently unopenable
-        // for anyone viewing it after their next state refresh (e.g. VVIP/HR).
-        let finalPhoto = presensiPhoto || "";
-        if (!finalPhoto && liveFacePhoto) {
+        const rawPhoto = presensiPhoto || liveFacePhoto || "";
+        let finalPhoto = rawPhoto;
+
+        // Upload photo to Firebase Storage via /api/upload
+        if (rawPhoto && typeof rawPhoto === "string" && rawPhoto.startsWith("data:image")) {
           try {
-            const blob = dataURLtoBlob(liveFacePhoto);
-            if (blob) {
-              const snapshotFile = new File([blob], `presensi_${currentUser.username}_${Date.now()}.jpg`, { type: blob.type || "image/jpeg" });
-              finalPhoto = await uploadFileToFirebase(snapshotFile, "attendance_photos");
+            const uploadRes = await fetch("/api/upload", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                fileName: `presensi_${currentUser.username || "teacher"}_${Date.now()}.jpg`,
+                fileData: rawPhoto,
+                folder: "attendance_photos"
+              })
+            });
+            if (uploadRes.ok) {
+              const uploadData = await uploadRes.json();
+              if (uploadData.url) {
+                finalPhoto = uploadData.url;
+              }
             }
-          } catch (err) {
-            console.error("Gagal mengunggah foto bukti presensi biometrik:", err);
-            finalPhoto = liveFacePhoto;
+          } catch (uploadErr) {
+            console.warn("Storage upload note (fallback applied):", uploadErr);
           }
         }
 
@@ -629,21 +653,42 @@ export function TeacherDashboardPanel({
 
       <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
         <div className="flex flex-col sm:flex-row justify-between sm:items-center border-b border-slate-100 pb-4 gap-4">
-          <h4 className="font-black text-sm text-slate-800">Kehadiran & Presensi</h4>
+          <h4 className="font-black text-sm text-slate-800">
+            {isPrivilegedUser ? "Pemantauan Presensi Pengajar & Staf" : "Kehadiran & Presensi"}
+          </h4>
           <button onClick={() => setShowTeacherModal("presensi")} className="px-4 py-2.5 bg-emerald-600 text-white rounded-xl text-xs font-bold shadow-sm hover:bg-emerald-700 transition cursor-pointer">
             Absen Masuk Sekarang
           </button>
         </div>
         <div className="flex justify-between items-center p-4 bg-slate-50 rounded-xl border border-slate-100">
           <div>
-            <p className="font-bold text-xs text-slate-700">Kehadiran Bulan Ini</p>
+            <p className="font-bold text-xs text-slate-700">
+              {selectedStaffForPresensi === "all" ? "Total Presensi Seluruh Staf" : `Kehadiran (${selectedStaffForPresensi === (currentUser?.name || currentUser?.username) ? "Anda" : selectedStaffForPresensi})`}
+            </p>
             <p className="text-xs text-slate-500 mt-1">
-              {systemState.logs?.filter(l => l.type === "PRESENSI_PENGAJAR" && l.user === currentUser.name).length || 0} Hari Hadir
+              {(() => {
+                const logs = (systemState.logs || []).filter((l: any) => l.type === "PRESENSI_PENGAJAR");
+                if (selectedStaffForPresensi === "all") {
+                  return `${logs.length} Total Riwayat Presensi Staf & Sensei`;
+                }
+                const myLogs = logs.filter((l: any) => l.user === selectedStaffForPresensi || (selectedStaffForPresensi === currentUser?.name && l.user === currentUser?.username) || (selectedStaffForPresensi === currentUser?.username && l.user === currentUser?.name));
+                return `${myLogs.length} Hari Hadir Terdata`;
+              })()}
             </p>
           </div>
           <div className="text-right">
             <span className="text-2xl font-black text-emerald-600 block">
-              {Math.min(100, Math.round(((systemState.logs?.filter(l => l.type === "PRESENSI_PENGAJAR" && l.user === currentUser.name).length || 0) / 20) * 100))}%
+              {(() => {
+                const logs = (systemState.logs || []).filter((l: any) => l.type === "PRESENSI_PENGAJAR");
+                if (selectedStaffForPresensi === "all") {
+                  return logs.length;
+                }
+                const myLogs = logs.filter((l: any) => l.user === selectedStaffForPresensi || (selectedStaffForPresensi === currentUser?.name && l.user === currentUser?.username) || (selectedStaffForPresensi === currentUser?.username && l.user === currentUser?.name));
+                return `${Math.min(100, Math.round((myLogs.length / 20) * 100))}%`;
+              })()}
+            </span>
+            <span className="text-[10px] text-slate-400 font-bold uppercase">
+              {selectedStaffForPresensi === "all" ? "Data Presensi" : "Target Kehadiran"}
             </span>
           </div>
         </div>
@@ -651,18 +696,55 @@ export function TeacherDashboardPanel({
 
       {/* Timetable & Detail Kehadiran (Absensi) */}
       <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
-        <div className="flex items-center gap-2 border-b border-slate-100 pb-3">
-          <Clock className="w-5 h-5 text-indigo-600" />
-          <h4 className="font-black text-sm text-slate-800 font-sans">Jadwal & Timetable Kehadiran Anda</h4>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+          <div className="flex items-center gap-2">
+            <Clock className="w-5 h-5 text-indigo-600" />
+            <h4 className="font-black text-sm text-slate-800 font-sans">
+              {selectedStaffForPresensi === "all" 
+                ? "Jadwal & Riwayat Presensi Seluruh Staf & Sensei" 
+                : `Jadwal & Timetable Kehadiran (${selectedStaffForPresensi === (currentUser?.name || currentUser?.username) ? "Anda" : selectedStaffForPresensi})`}
+            </h4>
+          </div>
+          {isPrivilegedUser && (
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-bold text-slate-500 uppercase">Filter Nama:</span>
+              <select
+                value={selectedStaffForPresensi}
+                onChange={(e) => setSelectedStaffForPresensi(e.target.value)}
+                className="bg-slate-50 border border-slate-200 text-xs font-bold text-slate-700 px-3 py-1.5 rounded-xl outline-none focus:border-indigo-500 cursor-pointer shadow-2xs"
+              >
+                {currentUser?.name || currentUser?.username ? (
+                  <option value={currentUser.name || currentUser.username}>
+                    Presensi Saya ({currentUser.name || currentUser.username})
+                  </option>
+                ) : null}
+                <option value="all">Semua Sensei & Staf ({(systemState.logs || []).filter((l: any) => l.type === "PRESENSI_PENGAJAR").length} Data)</option>
+                {Array.from(new Set(
+                  (systemState.logs || [])
+                    .filter((l: any) => l.type === "PRESENSI_PENGAJAR" && l.user && l.user !== currentUser?.name && l.user !== currentUser?.username)
+                    .map((l: any) => l.user)
+                )).sort().map((staffName: any) => {
+                  const staffCount = (systemState.logs || []).filter((l: any) => l.type === "PRESENSI_PENGAJAR" && l.user === staffName).length;
+                  return (
+                    <option key={staffName} value={staffName}>
+                      {staffName} ({staffCount} Presensi)
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+          )}
         </div>
         <p className="text-[11px] text-slate-500 font-medium">
-          Daftar riwayat presensi masuk dan pulang Anda. Status ketepatan diukur berdasarkan jadwal staff resmi LPK.
+          Daftar riwayat presensi masuk dan pulang. Status ketepatan diukur berdasarkan jadwal staff resmi LPK.
         </p>
 
         {(() => {
-          const teacherLogs = (systemState.logs || []).filter(
-            l => l.type === "PRESENSI_PENGAJAR" && (l.user === currentUser.name || l.user === currentUser.username)
-          );
+          const teacherLogs = (systemState.logs || []).filter((l: any) => {
+            if (l.type !== "PRESENSI_PENGAJAR") return false;
+            if (selectedStaffForPresensi === "all") return true;
+            return l.user === selectedStaffForPresensi || (selectedStaffForPresensi === currentUser?.name && l.user === currentUser?.username) || (selectedStaffForPresensi === currentUser?.username && l.user === currentUser?.name);
+          });
           const sortedTeacherLogs = [...teacherLogs].sort((a, b) => new Date(b.timestamp || b.time).getTime() - new Date(a.timestamp || a.time).getTime());
 
           const todayStr = new Date().toDateString();
@@ -671,7 +753,7 @@ export function TeacherDashboardPanel({
           if (sortedTeacherLogs.length === 0) {
             return (
               <div className="text-center py-8 text-slate-400 text-xs italic bg-slate-50 border border-slate-100 rounded-xl">
-                Belum ada riwayat presensi yang tercatat.
+                Belum ada riwayat presensi yang tercatat{isPrivilegedUser && selectedStaffForPresensi !== "all" ? ` untuk ${selectedStaffForPresensi}` : ""}.
               </div>
             );
           }
@@ -684,7 +766,7 @@ export function TeacherDashboardPanel({
                   <div className="flex justify-between items-start gap-4">
                     <div>
                       <span className="text-[9px] font-black uppercase tracking-wider text-indigo-600 bg-indigo-100/70 border border-indigo-200/50 px-2.5 py-1 rounded-full">
-                        Kegiatan Kelas Hari Ini
+                        Kegiatan Kelas Hari Ini {todayLog.user ? `• ${todayLog.user}` : ""}
                       </span>
                       <h5 className="font-extrabold text-slate-800 text-xs mt-2">
                         {new Date(todayLog.timestamp || todayLog.time).toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long" })}
@@ -712,6 +794,9 @@ export function TeacherDashboardPanel({
                 <table className="w-full text-left border-collapse min-w-[600px]">
                   <thead>
                     <tr className="border-b border-slate-100 text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
+                      {isPrivilegedUser && selectedStaffForPresensi === "all" && (
+                        <th className="py-2.5">Pengajar / Staf</th>
+                      )}
                       <th className="py-2.5">Tanggal & Hari</th>
                       <th className="py-2.5">Tipe & Mode</th>
                       <th className="py-2.5">Waktu</th>
@@ -735,6 +820,11 @@ export function TeacherDashboardPanel({
 
                       return (
                         <tr key={log.id || log.timestamp || log.time} className="hover:bg-slate-50/80 transition-colors">
+                          {isPrivilegedUser && selectedStaffForPresensi === "all" && (
+                            <td className="py-3 font-bold text-slate-800">
+                              <span className="block font-black text-slate-800 text-xs">{log.user || "-"}</span>
+                            </td>
+                          )}
                           <td className="py-3">
                             <span className="font-semibold text-slate-900 block">{dateStr}</span>
                             <span className="text-[10px] text-slate-400 font-bold uppercase">{dayName}</span>
@@ -766,19 +856,30 @@ export function TeacherDashboardPanel({
 
                             {log.photoUrl && (
                               <div className="flex items-center gap-1.5 mt-1">
-                                <img
-                                  src={log.photoUrl}
-                                  alt="Bukti"
-                                  className="w-8 h-8 rounded-md object-cover border border-slate-200 shadow-xs cursor-pointer hover:scale-110 transition-transform shrink-0"
-                                  onClick={() => setSelectedLogForPreview(log)}
-                                  referrerPolicy="no-referrer"
-                                />
+                                {log.photoUrl !== STRIPPED_PHOTO_PLACEHOLDER ? (
+                                  <img
+                                    src={log.photoUrl}
+                                    alt="Bukti"
+                                    className="w-8 h-8 rounded-md object-cover border border-slate-200 shadow-xs cursor-pointer hover:scale-110 transition-transform shrink-0"
+                                    onClick={() => handleOpenLogPreview(log)}
+                                    referrerPolicy="no-referrer"
+                                  />
+                                ) : (
+                                  <span
+                                    onClick={() => handleOpenLogPreview(log)}
+                                    className="w-8 h-8 rounded-md bg-indigo-50 border border-indigo-200 flex items-center justify-center text-xs cursor-pointer hover:scale-110 transition-transform shrink-0"
+                                    title="Foto Tersimpan"
+                                  >
+                                    📷
+                                  </span>
+                                )}
                                 <button
                                   type="button"
-                                  onClick={() => setSelectedLogForPreview(log)}
-                                  className="text-[10px] text-indigo-600 hover:underline font-bold cursor-pointer"
+                                  disabled={loadingLogPhotoId === log.id}
+                                  onClick={() => handleOpenLogPreview(log)}
+                                  className="text-[10px] text-indigo-600 hover:underline font-bold cursor-pointer disabled:opacity-50"
                                 >
-                                  Lihat
+                                  {loadingLogPhotoId === log.id ? "Memuat..." : "Lihat"}
                                 </button>
                               </div>
                             )}
@@ -811,9 +912,9 @@ export function TeacherDashboardPanel({
 
       <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm">
         <h4 className="font-black text-sm text-slate-800 mb-4">Histori Gaji & Slip</h4>
-        {systemState.salaries?.filter(s => s.staffName === currentUser.name).length ? (
+        {(systemState.salaries || []).filter(s => s.staffName === currentUser?.name).length ? (
           <div className="space-y-3">
-            {systemState.salaries.filter(s => s.staffName === currentUser.name).map((sal, i) => (
+            {(systemState.salaries || []).filter(s => s.staffName === currentUser?.name).map((sal, i) => (
               <div key={i} className="flex flex-col sm:flex-row gap-4 p-4 bg-slate-50 border border-slate-100 rounded-xl justify-between sm:items-center">
                 <div>
                   <p className="font-bold text-sm text-slate-800">{sal.monthString}</p>
@@ -886,7 +987,7 @@ export function TeacherDashboardPanel({
                   <label className="text-[10px] font-bold text-slate-500">Unggah Dokumen (PDF / Gambar) - Opsional</label>
                   <input type="file" accept="image/*,.pdf" onChange={async (e) => {
                      const file = e.target.files?.[0];
-                     const { uploadFileToFirebase } = await import("../lib/storageHelper"); if (file) { uploadFileToFirebase(file, "reports").then(url => setReportLink(url)).catch(err => { console.error(err); alert("Gagal"); }); }
+                     if (file) { uploadFileToFirebase(file, "reports").then(url => setReportLink(url)).catch(err => { console.error(err); alert("Gagal"); }); }
                   }} className="w-full p-2 border border-slate-200 rounded-xl text-xs bg-slate-50" />
                 </div>
                 <button onClick={handleReportSubmit} className="w-full bg-indigo-600 text-white p-3 rounded-xl font-bold text-sm cursor-pointer">Kirim Laporan</button>
@@ -1116,9 +1217,17 @@ export function TeacherDashboardPanel({
 
       {/* MODAL PREVIEW KEGIATAN */}
       {selectedLogForPreview && createPortal(
-        <div className="fixed inset-0 z-[100000] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs">
-          <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-md w-full overflow-hidden animate-fade-in text-left">
-            <div className="bg-gradient-to-r from-indigo-600 to-indigo-800 text-white p-5 flex items-center justify-between">
+        <div 
+          className="fixed inset-0 z-[100000] flex items-center justify-center p-4 sm:p-6 overflow-y-auto bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200"
+          onClick={() => setSelectedLogForPreview(null)}
+          role="dialog"
+          aria-modal="true"
+        >
+          <div 
+            className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-md w-full max-h-[90vh] flex flex-col overflow-hidden my-auto animate-in zoom-in-95 duration-150 text-left"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="bg-gradient-to-r from-indigo-600 to-indigo-800 text-white p-5 flex items-center justify-between shrink-0">
               <div>
                 <span className="text-[9px] font-black tracking-widest uppercase text-indigo-200">
                   Detail Kegiatan Kelas
@@ -1135,7 +1244,7 @@ export function TeacherDashboardPanel({
               </button>
             </div>
 
-            <div className="p-6 space-y-4">
+            <div className="p-6 space-y-4 overflow-y-auto flex-1 overscroll-contain">
               {/* Jam Kehadiran */}
               <div className="flex items-center justify-between border-b border-slate-100 pb-3">
                 <span className="text-xs text-slate-500 font-bold">Waktu Kehadiran:</span>
@@ -1175,22 +1284,38 @@ export function TeacherDashboardPanel({
                 <div className="space-y-3 pt-2">
                   {selectedLogForPreview.photoUrl && (
                     <div className="space-y-1">
-                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">
-                        Dokumentasi Kegiatan
-                      </span>
-                      <div className="relative rounded-2xl overflow-hidden border border-slate-200 min-h-[9rem] flex items-center justify-center bg-slate-50">
-                        {previewPhotoLoading ? (
-                          <span className="text-[10px] text-slate-400 font-bold py-8">⏳ Memuat foto...</span>
-                        ) : previewPhotoUrl ? (
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider block">
+                          Dokumentasi Kegiatan
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleViewPhoto(selectedLogForPreview.photoUrl, selectedLogForPreview.id)}
+                          className="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 transition cursor-pointer"
+                        >
+                          🔍 Perbesar Foto
+                        </button>
+                      </div>
+                      <div
+                        className="relative rounded-2xl overflow-hidden border border-slate-200 cursor-pointer group"
+                        onClick={() => handleViewPhoto(selectedLogForPreview.photoUrl, selectedLogForPreview.id)}
+                      >
+                        {selectedLogForPreview.photoUrl !== STRIPPED_PHOTO_PLACEHOLDER ? (
                           <img
-                            src={previewPhotoUrl}
+                            src={cleanDocUrl(selectedLogForPreview.photoUrl)}
                             alt="Dokumentasi Kelas"
-                            className="w-full h-36 object-cover"
+                            className="w-full h-36 object-cover group-hover:scale-105 transition-transform duration-300"
                             referrerPolicy="no-referrer"
                           />
                         ) : (
-                          <span className="text-[10px] text-slate-400 font-bold py-8">Foto tidak ditemukan.</span>
+                          <div className="w-full h-36 bg-slate-100 flex flex-col items-center justify-center text-slate-500 gap-2">
+                            <span className="text-3xl">📷</span>
+                            <span className="text-xs font-semibold">{loadingLogPhotoId === selectedLogForPreview.id ? "Memuat Foto..." : "Klik untuk Memuat Foto"}</span>
+                          </div>
                         )}
+                        <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-xs font-bold">
+                          Klik untuk Perbesar
+                        </div>
                       </div>
                     </div>
                   )}
@@ -1216,6 +1341,14 @@ export function TeacherDashboardPanel({
           </div>
         </div>,
         document.body
+      )}
+
+      {viewingPhotoUrl && (
+        <MediaViewerModal
+          url={viewingPhotoUrl}
+          title="Foto Dokumentasi / Presensi"
+          onClose={() => setViewingPhotoUrl(null)}
+        />
       )}
     </div>
   );

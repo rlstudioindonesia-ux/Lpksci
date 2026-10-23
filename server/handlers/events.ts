@@ -35,6 +35,28 @@ export function handleEventsState(req: Request, res: Response, dataType: string,
         } catch (e) {
           console.error("Failed to sync newly added event to Firestore:", e);
         }
+
+        // Also publish to broadcast_notifications in Firestore and state
+        const broadcastItem = {
+          id: `notif_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+          title: `📅 Agenda / Jadwal Harian Baru: ${title || "Kegiatan LPK"}`,
+          body: `Agenda baru untuk tanggal ${date || "hari ini"}: ${title || "Jadwal LPK"}. ${desc ? String(desc).slice(0, 90) : ""}`,
+          type: "jadwal_harian",
+          url: "/?tab=kalender",
+          createdAt: Date.now(),
+          timestamp: new Date().toISOString()
+        };
+        if (!state.broadcastNotifications) state.broadcastNotifications = [];
+        state.broadcastNotifications.unshift(broadcastItem);
+        if (state.broadcastNotifications.length > 50) {
+          state.broadcastNotifications = state.broadcastNotifications.slice(0, 50);
+        }
+        try {
+          syncEntityToFirestore("broadcast_notifications", broadcastItem.id, broadcastItem);
+        } catch (e) {
+          console.error("Failed to sync broadcast notification for event:", e);
+        }
+
         return res.json({ success: true, item: newEvent });
       }
       if (action === "update") {

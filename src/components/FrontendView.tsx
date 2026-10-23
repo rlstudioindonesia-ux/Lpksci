@@ -274,6 +274,10 @@ export default function FrontendView({
 
   // OpenStreetMap dynamic loader
   useEffect(() => {
+    let isMounted = true;
+    let retryTimer: any = null;
+    let retryCount = 0;
+
     // 1. Inject Leaflet CDN style sheet
     const linkId = "leaflet-css-pkg";
     if (!document.getElementById(linkId)) {
@@ -281,7 +285,6 @@ export default function FrontendView({
       link.id = linkId;
       link.rel = "stylesheet";
       link.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
-      link.integrity = "sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=";
       link.crossOrigin = "";
       document.head.appendChild(link);
     }
@@ -293,106 +296,132 @@ export default function FrontendView({
       script = document.createElement("script");
       script.id = scriptId;
       script.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
-      script.integrity = "sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=";
       script.crossOrigin = "";
       document.body.appendChild(script);
     }
 
     const loadRadarMap = () => {
+      if (!isMounted) return;
       const L = (window as any).L;
-      if (!L || !mapContainerRef.current) return;
-
-      // Ensure no past double allocations
-      if (mapInstanceRef.current) {
-        mapInstanceRef.current.remove();
-        mapInstanceRef.current = null;
+      if (!L || !mapContainerRef.current) {
+        if (retryCount < 15 && isMounted) {
+          retryCount++;
+          retryTimer = setTimeout(loadRadarMap, 100);
+        }
+        return;
       }
 
-      // Initialize map, locked default zoom values
-      const map = L.map(mapContainerRef.current, {
-        center: [36.2048, 138.2529],
-        zoom: 5,
-        zoomControl: true,
-        scrollWheelZoom: false,
-        attributionControl: false,
-      });
-
-      mapInstanceRef.current = map;
-      setTimeout(() => { try { if (map && map._container) map.invalidateSize(); } catch (e) {} }, 250);
-
-      // Use OpenStreetMap tile layer
-      L.tileLayer(
-        "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
-        {
-          attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+      try {
+        // Ensure no past double allocations
+        if (mapInstanceRef.current) {
+          try {
+            mapInstanceRef.current.remove();
+          } catch (e) {}
+          mapInstanceRef.current = null;
         }
-      ).addTo(map);
 
-      // Use our comprehensive 48 prefectures coordinates map
-      const coordinates = ALL_48_PREFECTURES_COORDINATES;
+        if (mapContainerRef.current) {
+          delete (mapContainerRef.current as any)._leaflet_id;
+        }
 
-      Object.keys(coordinates).forEach((key) => {
-        const [lat, lng] = coordinates[key];
-        const info = prefectureStats[key as keyof typeof prefectureStats];
-        const isCurrent = selectedPref === key;
-        const totalAlumni = info ? info.inmates.length : 0;
-
-        // Visual layout optimization: only plot circles if it is currently selected OR has alumni
-        if (!isCurrent && totalAlumni === 0) return;
-
-        const pulseColor = isCurrent
-          ? "#3b82f6"
-          : totalAlumni > 0
-            ? "#10b981"
-            : "#64748b";
-
-        // Custom circle marker mimicking glowing endpoints
-        const marker = L.circleMarker([lat, lng], {
-          radius: isCurrent ? 14 : 9,
-          fillColor: pulseColor,
-          color: "#ffffff",
-          weight: 2,
-          opacity: 1,
-          fillOpacity: 0.85,
-        }).addTo(map);
-
-        const inmatesList = info ? info.inmates : [];
-        const inmatesHtml = inmatesList
-          .map(
-            (stu) => `
-          <div style="margin-top: 5px; padding-top: 5px; border-top: 1px dashed #e2e8f0;">
-            <div style="font-weight: 800; color: #1e293b; font-size: 10px;">${stu.name}</div>
-            <div style="font-size: 9px; color: #0d9488; font-weight: 700;">🏢 ${stu.company || "Perusahaan Jepang"}</div>
-          </div>
-        `,
-          )
-          .slice(0, 3)
-          .join("");
-        const hasMore =
-          inmatesList.length > 3
-            ? `<div style="font-size: 8px; color: #64748b; font-style: italic; margin-top: 3.5px; font-weight: 600;">+ ${inmatesList.length - 3} alumni lainnya...</div>`
-            : "";
-
-        marker.bindPopup(`
-          <div style="font-family: inherit; font-size: 11px; padding: 2px; width: 180px;">
-            <strong style="color: #0f172a; font-size: 12px; display: block; border-b: 1px solid #cbd5e1; padding-bottom: 2px; margin-bottom: 4px;">🇯🇵 Prefektur ${key}</strong>
-            <span style="color: #64748b; font-weight: 500;">Wilayah: ${info?.region || "Jepang"}</span><br/>
-            <span style="color: #16a34a; font-weight: 800;">${totalAlumni} Alumni Aktif</span>
-            <div style="margin-top: 6px;">
-              ${inmatesHtml}
-              ${hasMore}
-            </div>
-          </div>
-        `);
-
-        marker.on("click", (e: any) => {
-          if (e.originalEvent) {
-            e.originalEvent.stopPropagation();
-          }
-          setSelectedPref(key);
-          map.setView([lat, lng], 10, { animate: false });
+        // Initialize map, locked default zoom values
+        const map = L.map(mapContainerRef.current, {
+          center: [36.2048, 138.2529],
+          zoom: 5,
+          zoomControl: true,
+          scrollWheelZoom: false,
+          attributionControl: false,
         });
-      });
+
+        mapInstanceRef.current = map;
+        setTimeout(() => {
+          try {
+            if (map && map._container) map.invalidateSize();
+          } catch (e) {}
+        }, 250);
+
+        // Standard OpenStreetMap tiles (free, no API key required)
+        L.tileLayer(
+          "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+          {
+            subdomains: ["a", "b", "c"],
+            maxZoom: 19,
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+          }
+        ).addTo(map);
+
+        // Use our comprehensive 48 prefectures coordinates map
+        const coordinates = ALL_48_PREFECTURES_COORDINATES || {};
+
+        Object.keys(coordinates).forEach((key) => {
+          const coord = coordinates[key];
+          if (!coord || !Array.isArray(coord)) return;
+          const [lat, lng] = coord;
+          if (isNaN(lat) || isNaN(lng)) return;
+
+          const info = prefectureStats[key as keyof typeof prefectureStats];
+          const isCurrent = selectedPref === key;
+          const totalAlumni = info ? info.inmates.length : 0;
+
+          // Visual layout optimization: only plot circles if it is currently selected OR has alumni
+          if (!isCurrent && totalAlumni === 0) return;
+
+          const pulseColor = isCurrent
+            ? "#3b82f6"
+            : totalAlumni > 0
+              ? "#10b981"
+              : "#64748b";
+
+          // Custom circle marker mimicking glowing endpoints
+          const marker = L.circleMarker([lat, lng], {
+            radius: isCurrent ? 14 : 9,
+            fillColor: pulseColor,
+            color: "#ffffff",
+            weight: 2,
+            opacity: 1,
+            fillOpacity: 0.85,
+          }).addTo(map);
+
+          const inmatesList = info ? info.inmates : [];
+          const inmatesHtml = inmatesList
+            .map(
+              (stu) => `
+            <div style="margin-top: 5px; padding-top: 5px; border-top: 1px dashed #e2e8f0;">
+              <div style="font-weight: 800; color: #1e293b; font-size: 10px;">${stu.name}</div>
+              <div style="font-size: 9px; color: #0d9488; font-weight: 700;">🏢 ${stu.company || "Perusahaan Jepang"}</div>
+            </div>
+          `,
+            )
+            .slice(0, 3)
+            .join("");
+          const hasMore =
+            inmatesList.length > 3
+              ? `<div style="font-size: 8px; color: #64748b; font-style: italic; margin-top: 3.5px; font-weight: 600;">+ ${inmatesList.length - 3} alumni lainnya...</div>`
+              : "";
+
+          marker.bindPopup(`
+            <div style="font-family: inherit; font-size: 11px; padding: 2px; width: 180px;">
+              <strong style="color: #0f172a; font-size: 12px; display: block; border-b: 1px solid #cbd5e1; padding-bottom: 2px; margin-bottom: 4px;">🇯🇵 Prefektur ${key}</strong>
+              <span style="color: #64748b; font-weight: 500;">Wilayah: ${info?.region || "Jepang"}</span><br/>
+              <span style="color: #16a34a; font-weight: 800;">${totalAlumni} Alumni Aktif</span>
+              <div style="margin-top: 6px;">
+                ${inmatesHtml}
+                ${hasMore}
+              </div>
+            </div>
+          `);
+
+          marker.on("click", (e: any) => {
+            if (e.originalEvent) {
+              e.originalEvent.stopPropagation();
+            }
+            setSelectedPref(key);
+            map.setView([lat, lng], 10, { animate: false });
+          });
+        });
+      } catch (err) {
+        console.error("Error loading Frontend Leaflet Radar Map:", err);
+      }
     };
 
     if ((window as any).L) {
@@ -402,9 +431,16 @@ export default function FrontendView({
     }
 
     return () => {
+      isMounted = false;
+      if (retryTimer) clearTimeout(retryTimer);
       if (mapInstanceRef.current) {
-        mapInstanceRef.current.remove();
+        try {
+          mapInstanceRef.current.remove();
+        } catch (e) {}
         mapInstanceRef.current = null;
+      }
+      if (mapContainerRef.current) {
+        delete (mapContainerRef.current as any)._leaflet_id;
       }
     };
   }, [expatriates.length, selectedPref, activeFrontendTab]);
@@ -726,15 +762,21 @@ export default function FrontendView({
           <div className="md:col-span-3 grid grid-cols-3 gap-3 relative items-center">
             {(() => {
               const defaultOppImages = [
-                { url: "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=400&q=80", label: "Pelatihan Teori" },
-                { url: "https://images.unsplash.com/photo-1523240795612-9a054b0db644?auto=format&fit=crop&w=400&q=80", label: "Penyerahan Sertifikat" },
-                { url: "https://images.unsplash.com/photo-1524178232363-1fb2b075b655?auto=format&fit=crop&w=400&q=80", label: "Foto Bersama Alumni" }
+                { url: "https://firebasestorage.googleapis.com/v0/b/gen-lang-client-0782283050.firebasestorage.app/o/galeri%2F1788397965132_WhatsApp_Image_2026-09-02_at_10.02.15.jpeg?alt=media&token=afd37c47-ed69-440a-bf04-0f524e94c79f", label: "Pelatihan Teori & Praktik" },
+                { url: "https://firebasestorage.googleapis.com/v0/b/gen-lang-client-0782283050.firebasestorage.app/o/galeri%2F1788398049192_WhatsApp_Image_2026-09-02_at_09.10.45.jpeg?alt=media&token=f7bcb632-ff46-4e62-879e-9589b46ceecc", label: "Penyerahan Sertifikat" },
+                { url: "https://firebasestorage.googleapis.com/v0/b/gen-lang-client-0782283050.firebasestorage.app/o/galeri%2F1788398162422_WhatsApp_Image_2026-09-01_at_09.06.50.jpg?alt=media&token=a63b6a63-c29b-48db-9416-1cb10d74401d", label: "Foto Bersama Alumni" }
               ];
-              const customList = customization?.landingConfig?.opportunityImages || [];
+              // Check if they uploaded images in root or in landingConfig
+              const customList = customization?.landingConfig?.opportunityImages?.length 
+                ? customization.landingConfig.opportunityImages 
+                : customization?.opportunityImages?.length 
+                ? customization.opportunityImages 
+                : [];
+              
               const displayList = [
-                customList[0]?.url ? customList[0] : defaultOppImages[0],
-                customList[1]?.url ? customList[1] : defaultOppImages[1],
-                customList[2]?.url ? customList[2] : defaultOppImages[2],
+                customList[0]?.url ? { ...defaultOppImages[0], ...customList[0] } : defaultOppImages[0],
+                customList[1]?.url ? { ...defaultOppImages[1], ...customList[1] } : defaultOppImages[1],
+                customList[2]?.url ? { ...defaultOppImages[2], ...customList[2] } : defaultOppImages[2],
               ];
 
               return (
@@ -1001,7 +1043,7 @@ export default function FrontendView({
         </div>
         <div className="grid gap-6 md:grid-cols-3 px-4 sm:px-0">
           {(customization?.landingConfig?.programs || []).map((prog: any, i: number) => {
-            const hasTag = prog.tag && prog.tag.trim() !== "" && !prog.tag.toLowerCase().includes("sultan") && !prog.tag.toLowerCase().includes("entry") && !prog.tag.toLowerCase().includes("quick");
+            const hasTag = prog?.tag && typeof prog.tag === "string" && prog.tag.trim() !== "" && !prog.tag.toLowerCase().includes("sultan") && !prog.tag.toLowerCase().includes("entry") && !prog.tag.toLowerCase().includes("quick");
             return (
             <div key={prog.id || i} className="bg-white/10 backdrop-blur-md rounded-3xl p-6 border border-white/5 shadow-2xl hover:scale-[1.02] hover:bg-white/15 transition-all duration-300 space-y-4">
               {hasTag && (
@@ -1275,18 +1317,24 @@ export default function FrontendView({
                   TOTAL INVESTASI PENDIDIKAN
                 </span>
                 <span className="text-2xl font-black text-indigo-600 font-mono leading-none block mt-1">
-                  {costConfig ? `Rp ${(costConfig.registration + costConfig.dp + costConfig.fullPayment + costConfig.managementFee).toLocaleString('id-ID')}` : 'Rp 11.000.000'}
+                  {`Rp ${(
+                    (costConfig?.registration ?? 500000) + 
+                    (costConfig?.dp ?? 5000000) + 
+                    (costConfig?.fullPayment ?? 2000000) + 
+                    (costConfig?.stage3 ?? 3000000) + 
+                    (costConfig?.managementFee ?? 0)
+                  ).toLocaleString('id-ID')}`}
                 </span>
                 
                 <span className="text-[9px] text-slate-500 font-light block mt-0.5 font-sans">
-                  {costConfig ? `(Adms Rp${(costConfig.registration / 1000).toLocaleString('id-ID')}k + Belajar Rp${((costConfig.dp + costConfig.fullPayment)/1000000).toLocaleString('id-ID')}jt + Management Rp${(costConfig.managementFee/1000000).toLocaleString('id-ID')}jt)` : "(Adms Rp500rb + Belajar Rp5.5jt + Management Rp5jt)"}
+                  {`(Adms Rp${((costConfig?.registration ?? 500000) / 1000).toLocaleString('id-ID')}k + Tahap 1 Rp${((costConfig?.dp ?? 5000000)/1000000).toLocaleString('id-ID')}jt + Tahap 2 Rp${((costConfig?.fullPayment ?? 2000000)/1000000).toLocaleString('id-ID')}jt + Tahap 3 (N4) Rp${((costConfig?.stage3 ?? 3000000)/1000000).toLocaleString('id-ID')}jt${(costConfig?.managementFee && costConfig.managementFee > 0) ? ` + Mgmt Rp${(costConfig.managementFee/1000000).toLocaleString('id-ID')}jt` : ''})`}
                 </span>
               </div>
             </div>
 
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 font-sans">
+            <div className={`grid gap-4 sm:grid-cols-2 ${(costConfig?.managementFee && costConfig.managementFee > 0) ? 'lg:grid-cols-5' : 'lg:grid-cols-4'} font-sans`}>
               {/* Card 1 */}
-              <div className="bg-white/80 backdrop-blur-md rounded-3xl p-6 border border-slate-100 shadow-[0_8px_30px_rgba(15,23,42,0.02)] flex flex-col justify-between hover:scale-[1.02] hover:bg-white hover:shadow-md transition-all duration-300 font-sans">
+              <div className="bg-white/80 backdrop-blur-md rounded-3xl p-5 border border-slate-100 shadow-[0_8px_30px_rgba(15,23,42,0.02)] flex flex-col justify-between hover:scale-[1.02] hover:bg-white hover:shadow-md transition-all duration-300 font-sans">
                 <div className="space-y-3 font-sans">
                   <div className="flex justify-between items-center font-sans">
                     <span className="h-7 w-7 rounded-lg bg-blue-50 text-blue-700 flex items-center justify-center font-bold text-xs font-mono">
@@ -1321,19 +1369,19 @@ export default function FrontendView({
               </div>
 
               {/* Card 2 */}
-              <div className="bg-white/80 backdrop-blur-md rounded-3xl p-6 border border-slate-100 shadow-[0_8px_30px_rgba(15,23,42,0.02)] flex flex-col justify-between hover:scale-[1.02] hover:bg-white hover:shadow-md transition-all duration-300">
+              <div className="bg-white/80 backdrop-blur-md rounded-3xl p-5 border border-slate-100 shadow-[0_8px_30px_rgba(15,23,42,0.02)] flex flex-col justify-between hover:scale-[1.02] hover:bg-white hover:shadow-md transition-all duration-300">
                 <div className="space-y-3">
                   <div className="flex justify-between items-center">
                     <span className="h-7 w-7 rounded-lg bg-indigo-50 text-indigo-700 flex items-center justify-center font-bold text-xs font-mono">
                       02
                     </span>
                     <span className="bg-amber-100 text-amber-850 text-[8px] font-bold px-1.5 py-0.5 rounded uppercase font-sans">
-                      DP Pembelajaran
+                      Tahap 1
                     </span>
                   </div>
                   <div>
                     <h4 className="text-xs font-black text-slate-950 uppercase">
-                      Pembayaran Awal / DP
+                      Biaya Belajar Tahap 1
                     </h4>
                     <p className="text-[10px] text-slate-400 mt-0.5 uppercase tracking-wider font-mono">
                       START KELAS
@@ -1345,42 +1393,40 @@ export default function FrontendView({
                 </div>
                 <div className="pt-4 border-t border-slate-100 mt-4">
                   <span className="text-slate-400 text-[9px] block font-mono">
-                    CICILAN-1 / DP AWAL
+                    BIAYA TAHAP 1
                   </span>
                   <span className="text-md font-black text-slate-900 font-mono">
-                    {costConfig?.dp ? `Rp ${costConfig.dp.toLocaleString('id-ID')}` : 'Rp 3.500.000'}
+                    {costConfig?.dp ? `Rp ${costConfig.dp.toLocaleString('id-ID')}` : 'Rp 5.000.000'}
                   </span>
                 </div>
               </div>
 
               {/* Card 3 */}
-              <div className="bg-white/80 backdrop-blur-md rounded-3xl p-6 border border-slate-100 shadow-[0_8px_30px_rgba(15,23,42,0.02)] flex flex-col justify-between hover:scale-[1.02] hover:bg-white hover:shadow-md transition-all duration-300 font-sans">
+              <div className="bg-white/80 backdrop-blur-md rounded-3xl p-5 border border-slate-100 shadow-[0_8px_30px_rgba(15,23,42,0.02)] flex flex-col justify-between hover:scale-[1.02] hover:bg-white hover:shadow-md transition-all duration-300 font-sans">
                 <div className="space-y-3 font-sans">
                   <div className="flex justify-between items-center">
                     <span className="h-7 w-7 rounded-lg bg-orange-50 text-orange-700 flex items-center justify-center font-bold text-xs font-mono">
                       03
                     </span>
                     <span className="bg-orange-100 text-orange-850 text-[8px] font-bold px-1.5 py-0.5 rounded uppercase">
-                      Sisa Tahap 1
+                      Tahap 2
                     </span>
                   </div>
                   <div>
                     <h4 className="text-xs font-black text-slate-950 uppercase">
-                      Pelunasan Belajar
+                      Biaya Belajar Tahap 2
                     </h4>
                     <p className="text-[10px] text-slate-400 mt-0.5 uppercase tracking-wider font-mono">
                       TEMPO 1 BULAN
                     </p>
                   </div>
                   <p className="text-[11px] text-slate-600 leading-relaxed font-light font-sans">
-                    Pembayaran pelunasan biaya belajar bahasa Jepang. Jatuh
-                    tempo pelunasan adalah maksimal 1 bulan setelah masa
-                    pembelajaran di LPK SCI resmi dimulai.
+                    Pembayaran tahap kedua pembelajaran bahasa Jepang reguler. Meliputi modul lanjutan, pendampingan sensei, dan evaluasi berkala.
                   </p>
                 </div>
                 <div className="pt-4 border-t border-slate-100 mt-4">
                   <span className="text-slate-400 text-[9px] block font-mono">
-                    PELUNASAN SPP KELAS
+                    BIAYA TAHAP 2
                   </span>
                   <span className="text-md font-black text-slate-900 font-mono">
                     {costConfig?.fullPayment ? `Rp ${costConfig.fullPayment.toLocaleString('id-ID')}` : 'Rp 2.000.000'}
@@ -1388,41 +1434,75 @@ export default function FrontendView({
                 </div>
               </div>
 
-              {/* Card 4 */}
-              <div className="bg-slate-900 rounded-3xl p-6 text-white shadow-xl hover:shadow-2xl transition-all duration-300 flex flex-col justify-between relative overflow-hidden">
-                <div className="absolute top-0 right-0 h-28 w-28 bg-yellow-500/10 rounded-full blur-xl"></div>
-                <div className="space-y-3 relative z-10">
-                  <div className="flex justify-between items-center font-sans">
-                    <span className="h-7 w-7 rounded-lg bg-yellow-400/20 text-yellow-300 flex items-center justify-center font-bold text-xs font-mono">
+              {/* Card 4: Tahap 3 (Level Belajar N4) */}
+              <div className="bg-white/80 backdrop-blur-md rounded-3xl p-5 border border-purple-100 shadow-[0_8px_30px_rgba(15,23,42,0.02)] flex flex-col justify-between hover:scale-[1.02] hover:bg-white hover:shadow-md transition-all duration-300 font-sans">
+                <div className="space-y-3 font-sans">
+                  <div className="flex justify-between items-center">
+                    <span className="h-7 w-7 rounded-lg bg-purple-50 text-purple-700 flex items-center justify-center font-bold text-xs font-mono">
                       04
                     </span>
-                    <span className="bg-yellow-400 text-slate-950 text-[8px] font-extrabold px-1.5 py-0.5 rounded uppercase font-mono animate-pulse font-sans">
-                      Lolos Interview
+                    <span className="bg-purple-100 text-purple-850 text-[8px] font-bold px-1.5 py-0.5 rounded uppercase">
+                      Level N4
                     </span>
                   </div>
                   <div>
-                    <h4 className="text-xs font-black text-yellow-400 uppercase">
-                      Management Fee
+                    <h4 className="text-xs font-black text-slate-950 uppercase">
+                      Biaya Belajar Tahap 3
                     </h4>
-                    <p className="text-[10px] text-zinc-400 mt-0.5 uppercase tracking-wider font-mono font-sans">
-                      PASCA SELEKSI USER
+                    <p className="text-[10px] text-purple-600 mt-0.5 uppercase tracking-wider font-mono font-bold">
+                      LEVEL BELAJAR N4
                     </p>
                   </div>
-                  <p className="text-[11px] text-slate-200 leading-relaxed font-light font-sans">
-                    Hanya ditagihkan setelah siswa dinyatakan Lulus / Keluar
-                    Pengumuman Interview Kerja dengan perwakilan Jepang. Jika
-                    kontrak hanya 1 tahun, mendapatkan CASHBACK Rp 3.000.000!
+                  <p className="text-[11px] text-slate-600 leading-relaxed font-light font-sans">
+                    Pemantapan materi tingkat N4, simulasi ujian kelulusan resmi JFT-Basic / JLPT N4, serta persiapan interview spesifik bidang kerja di Jepang.
                   </p>
                 </div>
-                <div className="pt-4 border-t border-slate-800 mt-4 relative z-10 font-mono">
-                  <span className="text-yellow-400/90 text-[9px] block font-mono">
-                    MANAGEMENT FEE PASCA-LOLOS
+                <div className="pt-4 border-t border-slate-100 mt-4">
+                  <span className="text-slate-400 text-[9px] block font-mono">
+                    BIAYA TAHAP 3 (N4)
                   </span>
-                  <span className="text-md font-black text-white font-mono">
-                    {costConfig?.managementFee ? `Rp ${costConfig.managementFee.toLocaleString('id-ID')}` : 'Rp 5.000.000'}
+                  <span className="text-md font-black text-purple-700 font-mono">
+                    {costConfig?.stage3 ? `Rp ${costConfig.stage3.toLocaleString('id-ID')}` : 'Rp 3.000.000'}
                   </span>
                 </div>
               </div>
+
+              {/* Card 5: Management Fee (if configured) */}
+              {costConfig?.managementFee && costConfig.managementFee > 0 && (
+                <div className="bg-slate-900 rounded-3xl p-5 text-white shadow-xl hover:shadow-2xl transition-all duration-300 flex flex-col justify-between relative overflow-hidden">
+                  <div className="absolute top-0 right-0 h-28 w-28 bg-yellow-500/10 rounded-full blur-xl"></div>
+                  <div className="space-y-3 relative z-10">
+                    <div className="flex justify-between items-center font-sans">
+                      <span className="h-7 w-7 rounded-lg bg-yellow-400/20 text-yellow-300 flex items-center justify-center font-bold text-xs font-mono">
+                        05
+                      </span>
+                      <span className="bg-yellow-400 text-slate-950 text-[8px] font-extrabold px-1.5 py-0.5 rounded uppercase font-mono animate-pulse font-sans">
+                        Lolos Interview
+                      </span>
+                    </div>
+                    <div>
+                      <h4 className="text-xs font-black text-yellow-400 uppercase">
+                        Management Fee
+                      </h4>
+                      <p className="text-[10px] text-zinc-400 mt-0.5 uppercase tracking-wider font-mono font-sans">
+                        PASCA SELEKSI USER
+                      </p>
+                    </div>
+                    <p className="text-[11px] text-slate-200 leading-relaxed font-light font-sans">
+                      Hanya ditagihkan setelah siswa dinyatakan Lulus / Keluar
+                      Pengumuman Interview Kerja dengan perwakilan Jepang.
+                    </p>
+                  </div>
+                  <div className="pt-4 border-t border-slate-800 mt-4 relative z-10 font-mono">
+                    <span className="text-yellow-400/90 text-[9px] block font-mono">
+                      MANAGEMENT FEE PASCA-LOLOS
+                    </span>
+                    <span className="text-md font-black text-white font-mono">
+                      {`Rp ${costConfig.managementFee.toLocaleString('id-ID')}`}
+                    </span>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Program regular details info box (Asrama, books, moduls) */}
@@ -1634,51 +1714,51 @@ export default function FrontendView({
           const defaultGalleryList = [
             {
               id: 1,
-              title: "Kegiatan LPK SCI",
-              image: "https://images.unsplash.com/photo-1490730141103-6cac27aaab94?auto=format&fit=crop&w=800&q=80",
+              title: "Pelatihan Bahasa Jepang & Teori",
+              image: "https://firebasestorage.googleapis.com/v0/b/gen-lang-client-0782283050.firebasestorage.app/o/galeri%2F1788397965132_WhatsApp_Image_2026-09-02_at_10.02.15.jpeg?alt=media&token=afd37c47-ed69-440a-bf04-0f524e94c79f",
               tag: "PELATIHAN",
               description: "Kegiatan belajar mengajar bahasa Jepang intensif di ruang kelas LPK SCI Pati."
             },
             {
               id: 2,
-              title: "PRA - MCU",
-              image: "https://images.unsplash.com/photo-1516549655169-df83a0774514?auto=format&fit=crop&w=800&q=80",
+              title: "PRA - MCU & Medical Check Up",
+              image: "https://firebasestorage.googleapis.com/v0/b/gen-lang-client-0782283050.firebasestorage.app/o/galeri%2F1788398049192_WhatsApp_Image_2026-09-02_at_09.10.45.jpeg?alt=media&token=f7bcb632-ff46-4e62-879e-9589b46ceecc",
               tag: "KESEHATAN",
               description: "Pemeriksaan kesehatan awal Medical Check Up di klinik rujukan untuk memastikan calon siswa prima."
             },
             {
               id: 3,
               title: "GIAT BIMTEK - DISNAKER KAB.PATI",
-              image: "https://images.unsplash.com/photo-1531482615713-2afd69097998?auto=format&fit=crop&w=800&q=80",
+              image: "https://firebasestorage.googleapis.com/v0/b/gen-lang-client-0782283050.firebasestorage.app/o/galeri%2F1788398162422_WhatsApp_Image_2026-09-01_at_09.06.50.jpg?alt=media&token=a63b6a63-c29b-48db-9416-1cb10d74401d",
               tag: "BIMTEK",
               description: "Bimbingan teknis akreditasi LPKS tahun 2026 bersama jajaran Disnaker Kab. Pati."
             },
             {
               id: 4,
               title: "PEMBERANGKATAN SISWA MAGANG",
-              image: "https://images.unsplash.com/photo-1436491865332-7a61a109cc05?auto=format&fit=crop&w=800&q=80",
+              image: "https://firebasestorage.googleapis.com/v0/b/gen-lang-client-0782283050.firebasestorage.app/o/galeri%2F1788398214532_WhatsApp_Image_2026-09-01_at_08.51.35.jpeg?alt=media&token=a42f46c8-e95f-47c3-8f29-6b70ccd0e40e",
               tag: "KEBERANGKATAN",
               description: "Acara resmi pelepasan & keberangkatan siswa LPK SCI di Bandara Internasional Soekarno-Hatta."
             },
             {
               id: 5,
-              title: "TEST BAHASA JEPANG",
-              image: "https://images.unsplash.com/photo-1434030216411-0b793f4b4173?auto=format&fit=crop&w=800&q=80",
+              title: "TEST BAHASA JEPANG & SERTIFIKASI",
+              image: "https://firebasestorage.googleapis.com/v0/b/gen-lang-client-0782283050.firebasestorage.app/o/galeri%2F1788398251318_WhatsApp_Image_2026-08-30_at_06.01.29.jpg?alt=media&token=a864e10d-8547-4232-b598-a99e42eccf09",
               tag: "UJIAN",
               description: "Simulasi dan ujian evaluasi kelulusan sertifikasi JFT-Basic A2 & JLPT N4."
             },
             {
               id: 6,
               title: "LATIHAN MENSETSU & FISIK",
-              image: "https://images.unsplash.com/photo-1503899036084-c55cdd92da26?auto=format&fit=crop&w=800&q=80",
+              image: "https://firebasestorage.googleapis.com/v0/b/gen-lang-client-0782283050.firebasestorage.app/o/galeri%2F1788398352571_WhatsApp_Image_2026-08-28_at_17.07.35.jpg?alt=media&token=95c8a564-9c4a-4521-ad0b-4b6b12496082",
               tag: "SIMULASI",
               description: "Persiapan dan latihan wawancara kerja (Mensetsu) langsung dengan user perusahaan Jepang."
             }
           ];
 
-          const activeItems = (customization?.gallery && customization.gallery.length > 0)
-            ? customization.gallery
-            : ((galleries && galleries.length > 0) ? galleries : defaultGalleryList);
+          const activeItems = (galleries && galleries.length > 0)
+            ? galleries
+            : ((customization?.gallery && customization.gallery.length > 0) ? customization.gallery : defaultGalleryList);
 
           return (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 gap-6">
@@ -1758,51 +1838,51 @@ export default function FrontendView({
               const defaultGalleryList = [
                 {
                   id: 1,
-                  title: "Kegiatan LPK SCI",
-                  image: "https://images.unsplash.com/photo-1490730141103-6cac27aaab94?auto=format&fit=crop&w=800&q=80",
+                  title: "Pelatihan Bahasa Jepang & Teori",
+                  image: "https://firebasestorage.googleapis.com/v0/b/gen-lang-client-0782283050.firebasestorage.app/o/galeri%2F1788397965132_WhatsApp_Image_2026-09-02_at_10.02.15.jpeg?alt=media&token=afd37c47-ed69-440a-bf04-0f524e94c79f",
                   tag: "PELATIHAN",
                   description: "Kegiatan belajar mengajar bahasa Jepang intensif di ruang kelas LPK SCI Pati."
                 },
                 {
                   id: 2,
-                  title: "PRA - MCU",
-                  image: "https://images.unsplash.com/photo-1516549655169-df83a0774514?auto=format&fit=crop&w=800&q=80",
+                  title: "PRA - MCU & Medical Check Up",
+                  image: "https://firebasestorage.googleapis.com/v0/b/gen-lang-client-0782283050.firebasestorage.app/o/galeri%2F1788398049192_WhatsApp_Image_2026-09-02_at_09.10.45.jpeg?alt=media&token=f7bcb632-ff46-4e62-879e-9589b46ceecc",
                   tag: "KESEHATAN",
                   description: "Pemeriksaan kesehatan awal Medical Check Up di klinik rujukan untuk memastikan calon siswa prima."
                 },
                 {
                   id: 3,
                   title: "GIAT BIMTEK - DISNAKER KAB.PATI",
-                  image: "https://images.unsplash.com/photo-1531482615713-2afd69097998?auto=format&fit=crop&w=800&q=80",
+                  image: "https://firebasestorage.googleapis.com/v0/b/gen-lang-client-0782283050.firebasestorage.app/o/galeri%2F1788398162422_WhatsApp_Image_2026-09-01_at_09.06.50.jpg?alt=media&token=a63b6a63-c29b-48db-9416-1cb10d74401d",
                   tag: "BIMTEK",
                   description: "Bimbingan teknis akreditasi LPKS tahun 2026 bersama jajaran Disnaker Kab. Pati."
                 },
                 {
                   id: 4,
                   title: "PEMBERANGKATAN SISWA MAGANG",
-                  image: "https://images.unsplash.com/photo-1436491865332-7a61a109cc05?auto=format&fit=crop&w=800&q=80",
+                  image: "https://firebasestorage.googleapis.com/v0/b/gen-lang-client-0782283050.firebasestorage.app/o/galeri%2F1788398214532_WhatsApp_Image_2026-09-01_at_08.51.35.jpeg?alt=media&token=a42f46c8-e95f-47c3-8f29-6b70ccd0e40e",
                   tag: "KEBERANGKATAN",
                   description: "Acara resmi pelepasan & keberangkatan siswa LPK SCI di Bandara Internasional Soekarno-Hatta."
                 },
                 {
                   id: 5,
-                  title: "TEST BAHASA JEPANG",
-                  image: "https://images.unsplash.com/photo-1434030216411-0b793f4b4173?auto=format&fit=crop&w=800&q=80",
+                  title: "TEST BAHASA JEPANG & SERTIFIKASI",
+                  image: "https://firebasestorage.googleapis.com/v0/b/gen-lang-client-0782283050.firebasestorage.app/o/galeri%2F1788398251318_WhatsApp_Image_2026-08-30_at_06.01.29.jpg?alt=media&token=a864e10d-8547-4232-b598-a99e42eccf09",
                   tag: "UJIAN",
                   description: "Simulasi dan ujian evaluasi kelulusan sertifikasi JFT-Basic A2 & JLPT N4."
                 },
                 {
                   id: 6,
                   title: "LATIHAN MENSETSU & FISIK",
-                  image: "https://images.unsplash.com/photo-1503899036084-c55cdd92da26?auto=format&fit=crop&w=800&q=80",
+                  image: "https://firebasestorage.googleapis.com/v0/b/gen-lang-client-0782283050.firebasestorage.app/o/galeri%2F1788398352571_WhatsApp_Image_2026-08-28_at_17.07.35.jpg?alt=media&token=95c8a564-9c4a-4521-ad0b-4b6b12496082",
                   tag: "SIMULASI",
                   description: "Persiapan dan latihan wawancara kerja (Mensetsu) langsung dengan user perusahaan Jepang."
                 }
               ];
 
-              const activeItems = (customization?.gallery && customization.gallery.length > 0)
-                ? customization.gallery
-                : ((galleries && galleries.length > 0) ? galleries : defaultGalleryList);
+              const activeItems = (galleries && galleries.length > 0)
+                ? galleries
+                : ((customization?.gallery && customization.gallery.length > 0) ? customization.gallery : defaultGalleryList);
 
               return (
                 <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 pt-4">

@@ -1,8 +1,9 @@
 import React from "react";
-import { Award, BookOpen, Brain, Check, FileText, Hash, Info, MessageSquare, Percent, RefreshCw, RotateCcw, Save, Scale, Star, User, Users } from "lucide-react";
+import { Award, BookOpen, Brain, Check, Download, Eye, FileText, Hash, Info, MessageSquare, Percent, RefreshCw, RotateCcw, Save, Scale, Star, User, Users } from "lucide-react";
 import { CHAPTERS_LIST, MATH_CHAPTERS_LIST } from "../../chapters";
 import { computeAttendanceRate } from "../../lib/attendanceMetrics";
 import { computeSubjectAverage } from "../../lib/scoreAveraging";
+import { isSameSubject } from "../../lib/subjectHelper";
 
 interface LmsProgressSegmentProps {
   assessmentSubject: any;
@@ -14,6 +15,8 @@ interface LmsProgressSegmentProps {
   evalSelectedLessonId: any;
   filteredActiveStudents: any;
   getClassChaptersCount: any;
+  getClassChaptersList?: any;
+  activeStudentClass?: string;
   gradingNotes: any;
   handleGradeSubmit: any;
   isAlumniClass: any;
@@ -59,7 +62,11 @@ interface LmsProgressSegmentProps {
   tugasScores: any;
 }
 
-export default function LmsProgressSegment({ assessmentSubject, attendanceRecords, babCurrentPage, chapterAssessments, currentUser, evalSelectedBabId, evalSelectedLessonId, filteredActiveStudents, getClassChaptersCount, gradingNotes, handleGradeSubmit, isAlumniClass, isGradingSubmitting, isReadOnlyView, isVvipOrAdmin, itemsPerPage, lmsLessons, onUpdateState, paginatedBabStudents, paginatedTugasStudents, progressTabMode, scoreBumpo, scoreKaiwa, scoreKanji, scoreKotoba, selectedClassFilter, selectedStudentId, setAssessmentSubject, setBabCurrentPage, setEvalSelectedBabId, setEvalSelectedLessonId, setGradingNotes, setPdfViewerUrl, setProgressTabMode, setScoreBumpo, setScoreKaiwa, setScoreKanji, setScoreKotoba, setSelectedStudentId, setTugasCurrentPage, setTugasGrades, setTugasGradingSubmitting, setTugasNotes, setTugasScores, studentAttendanceMap, systemState, totalBabPages, totalTugasPages, tugasCurrentPage, tugasGradingSubmitting, tugasNotes, tugasScores }: LmsProgressSegmentProps) {
+export default function LmsProgressSegment({ assessmentSubject, attendanceRecords, babCurrentPage, chapterAssessments, currentUser, evalSelectedBabId, evalSelectedLessonId, filteredActiveStudents, getClassChaptersCount, getClassChaptersList, activeStudentClass, gradingNotes, handleGradeSubmit, isAlumniClass, isGradingSubmitting, isReadOnlyView, isVvipOrAdmin, itemsPerPage, lmsLessons, onUpdateState, paginatedBabStudents, paginatedTugasStudents, progressTabMode, scoreBumpo, scoreKaiwa, scoreKanji, scoreKotoba, selectedClassFilter, selectedStudentId, setAssessmentSubject, setBabCurrentPage, setEvalSelectedBabId, setEvalSelectedLessonId, setGradingNotes, setPdfViewerUrl, setProgressTabMode, setScoreBumpo, setScoreKaiwa, setScoreKanji, setScoreKotoba, setSelectedStudentId, setTugasCurrentPage, setTugasGrades, setTugasGradingSubmitting, setTugasNotes, setTugasScores, studentAttendanceMap, systemState, totalBabPages, totalTugasPages, tugasCurrentPage, tugasGradingSubmitting, tugasNotes, tugasScores }: LmsProgressSegmentProps) {
+  const [sikapScores, setSikapScores] = React.useState<Record<string, { fiveS?: number | string; ethics?: number | string; math?: number | string; jpn?: number | string; att?: number | string }>>({});
+  const [savingSikapMap, setSavingSikapMap] = React.useState<Record<string, boolean>>({});
+  const [savingAllSikap, setSavingAllSikap] = React.useState<boolean>(false);
+
   return (
     <div className="space-y-6 animate-fade-in text-left">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-4 bg-white p-4 rounded-3xl border border-slate-200 shadow-3xs">
@@ -110,10 +117,10 @@ export default function LmsProgressSegment({ assessmentSubject, attendanceRecord
                     </div>
                     
                     {(() => {
-                      const chaptersList = assessmentSubject === "SSW" 
-                        ? MATH_CHAPTERS_LIST 
-                        : CHAPTERS_LIST;
-                      const selectedBab = evalSelectedBabId !== "" ? chaptersList.find(c => c.number === evalSelectedBabId) : null;
+                      const chaptersList = typeof getClassChaptersList === "function"
+                        ? getClassChaptersList(activeStudentClass || selectedClassFilter || "", assessmentSubject, true)
+                        : (assessmentSubject === "SSW" ? MATH_CHAPTERS_LIST : CHAPTERS_LIST);
+                      const selectedBab = evalSelectedBabId !== "" ? chaptersList.find((c: any) => c.number === evalSelectedBabId) : null;
                       
                       return (
                         <div className="space-y-6">
@@ -164,9 +171,62 @@ export default function LmsProgressSegment({ assessmentSubject, attendanceRecord
                                 ) : (
                                   paginatedBabStudents.map((student) => {
                                     const isSelected = selectedStudentId === student.id;
-                                    const studentAssessment = (chapterAssessments || []).find(
-                                      (a: any) => a.studentId === student.id && a.chapterNumber === Number(selectedBab.number) && (a.subject || "Bahasa Jepang") === assessmentSubject
+                                    const normSubj = (assessmentSubject || "Bahasa Jepang").trim();
+                                    const normId = (student.id || "").trim().toLowerCase();
+                                    const altId = (student.studentId || "").trim().toLowerCase();
+                                    const sEmail = (student.email || "").trim().toLowerCase();
+                                    const sName = (student.name || "").trim().toLowerCase();
+
+                                    const allAssessList = Array.from(
+                                      new Map(
+                                        [...(chapterAssessments || []), ...(systemState?.chapterAssessments || [])].map((item: any) => [item.id, item])
+                                      ).values()
                                     );
+
+                                    const matchingAssessments = allAssessList.filter(
+                                      (a: any) => {
+                                        if (Number(a.chapterNumber) !== Number(selectedBab.number)) return false;
+                                        if (a.subject && !isSameSubject(a.subject, normSubj)) return false;
+                                        const aId = (a.studentId || "").trim().toLowerCase();
+                                        const aEmail = (a.studentEmail || "").trim().toLowerCase();
+                                        const aName = (a.studentName || "").trim().toLowerCase();
+                                        if (normId && aId === normId) return true;
+                                        if (altId && aId === altId) return true;
+                                        if (sEmail && (aEmail === sEmail || aId === sEmail)) return true;
+                                        if (sName && aName && (aName === sName || sName.includes(aName) || aName.includes(sName))) return true;
+                                        if (student.id && (a.id || "").toLowerCase().includes(String(student.id).toLowerCase())) return true;
+                                        return false;
+                                      }
+                                    );
+                                    
+                                    const studentAssessment = matchingAssessments.length === 0 
+                                      ? undefined 
+                                      : matchingAssessments.length === 1 
+                                        ? matchingAssessments[0] 
+                                        : [...matchingAssessments].sort((a: any, b: any) => {
+                                            const parseEpoch = (dStr: any, idStr: string) => {
+                                              if (typeof dStr === "number") return dStr;
+                                              const match = idStr ? idStr.match(/(\d{13})$/) : null;
+                                              if (match) return Number(match[1]);
+                                              if (!dStr) return 0;
+                                              if (typeof dStr === "string" && dStr.includes("/")) {
+                                                const parts = dStr.split("/");
+                                                if (parts.length === 3) {
+                                                  const d = Number(parts[0]);
+                                                  const m = Number(parts[1]) - 1;
+                                                  const y = Number(parts[2]);
+                                                  const dateObj = new Date(y, m, d);
+                                                  if (!isNaN(dateObj.getTime())) return dateObj.getTime();
+                                                }
+                                              }
+                                              const t = new Date(dStr).getTime();
+                                              return isNaN(t) ? 0 : t;
+                                            };
+                                            const timeA = a.timestamp || parseEpoch(a.assessedDate, a.id || "");
+                                            const timeB = b.timestamp || parseEpoch(b.assessedDate, b.id || "");
+                                            if (timeB !== timeA) return timeB - timeA;
+                                            return (Number(b.score) || 0) - (Number(a.score) || 0);
+                                          })[0];
     
                                     return (
                                       <div 
@@ -185,6 +245,11 @@ export default function LmsProgressSegment({ assessmentSubject, attendanceRecord
                                               setSelectedStudentId("");
                                             } else {
                                               setSelectedStudentId(student.id);
+                                              setScoreKotoba(studentAssessment?.scoreKotoba ?? studentAssessment?.details?.kotoba ?? studentAssessment?.details?.aritmatika ?? "");
+                                              setScoreBumpo(studentAssessment?.scoreBumpo ?? studentAssessment?.details?.bumpo ?? studentAssessment?.details?.rasio ?? "");
+                                              setScoreKaiwa(studentAssessment?.scoreKaiwa ?? studentAssessment?.details?.kaiwa ?? studentAssessment?.details?.spasial ?? "");
+                                              setScoreKanji(studentAssessment?.scoreKanji ?? studentAssessment?.details?.kanji ?? studentAssessment?.details?.logika ?? "");
+                                              setGradingNotes(studentAssessment?.notes || "");
                                             }
                                           }}
                                         >
@@ -204,7 +269,7 @@ export default function LmsProgressSegment({ assessmentSubject, attendanceRecord
     
                                           <div className="flex items-center gap-2 self-start sm:self-center">
                                             {/* Status Badge */}
-                                            {studentAssessment?.status === "Telah Dinilai" ? (
+                                            {studentAssessment?.status === "Telah Dinilai" || (studentAssessment?.grade && studentAssessment?.score !== undefined) ? (
                                               <span className="text-[10px] font-extrabold uppercase px-2.5 py-1 rounded-md tracking-wider border bg-emerald-50 text-emerald-700 border-emerald-100 flex items-center gap-1.5 font-mono">
                                                 <span>⭐ {studentAssessment.score}</span>
                                                 <span className="opacity-55">|</span>
@@ -222,6 +287,19 @@ export default function LmsProgressSegment({ assessmentSubject, attendanceRecord
     
                                             <button
                                               type="button"
+                                              onClick={(e) => {
+                                                e.stopPropagation();
+                                                if (isSelected) {
+                                                  setSelectedStudentId("");
+                                                } else {
+                                                  setSelectedStudentId(student.id);
+                                                  setScoreKotoba(studentAssessment?.scoreKotoba ?? studentAssessment?.details?.kotoba ?? studentAssessment?.details?.aritmatika ?? "");
+                                                  setScoreBumpo(studentAssessment?.scoreBumpo ?? studentAssessment?.details?.bumpo ?? studentAssessment?.details?.rasio ?? "");
+                                                  setScoreKaiwa(studentAssessment?.scoreKaiwa ?? studentAssessment?.details?.kaiwa ?? studentAssessment?.details?.spasial ?? "");
+                                                  setScoreKanji(studentAssessment?.scoreKanji ?? studentAssessment?.details?.kanji ?? studentAssessment?.details?.logika ?? "");
+                                                  setGradingNotes(studentAssessment?.notes || "");
+                                                }
+                                              }}
                                               className={`px-3 py-1.5 rounded-lg font-bold text-[10px] transition cursor-pointer ${
                                                 isSelected 
                                                   ? "bg-slate-100 text-slate-600 hover:bg-slate-200" 
@@ -282,9 +360,15 @@ export default function LmsProgressSegment({ assessmentSubject, attendanceRecord
                                                       min={0}
                                                       max={100}
                                                       placeholder="0"
-                                                      value={scoreKotoba === 0 ? "" : scoreKotoba}
+                                                      value={scoreKotoba === undefined || scoreKotoba === null ? "" : scoreKotoba}
                                                       onChange={(e) => {
-                                                        let val = Number(e.target.value);
+                                                        const raw = e.target.value;
+                                                        if (raw === "") {
+                                                          setScoreKotoba("");
+                                                          return;
+                                                        }
+                                                        let val = Number(raw);
+                                                        if (isNaN(val)) return;
                                                         if (val > 100) val = 100;
                                                         if (val < 0) val = 0;
                                                         setScoreKotoba(val);
@@ -322,9 +406,15 @@ export default function LmsProgressSegment({ assessmentSubject, attendanceRecord
                                                       min={0}
                                                       max={100}
                                                       placeholder="0"
-                                                      value={scoreBumpo === 0 ? "" : scoreBumpo}
+                                                      value={scoreBumpo === undefined || scoreBumpo === null ? "" : scoreBumpo}
                                                       onChange={(e) => {
-                                                        let val = Number(e.target.value);
+                                                        const raw = e.target.value;
+                                                        if (raw === "") {
+                                                          setScoreBumpo("");
+                                                          return;
+                                                        }
+                                                        let val = Number(raw);
+                                                        if (isNaN(val)) return;
                                                         if (val > 100) val = 100;
                                                         if (val < 0) val = 0;
                                                         setScoreBumpo(val);
@@ -362,9 +452,15 @@ export default function LmsProgressSegment({ assessmentSubject, attendanceRecord
                                                       min={0}
                                                       max={100}
                                                       placeholder="0"
-                                                      value={scoreKaiwa === 0 ? "" : scoreKaiwa}
+                                                      value={scoreKaiwa === undefined || scoreKaiwa === null ? "" : scoreKaiwa}
                                                       onChange={(e) => {
-                                                        let val = Number(e.target.value);
+                                                        const raw = e.target.value;
+                                                        if (raw === "") {
+                                                          setScoreKaiwa("");
+                                                          return;
+                                                        }
+                                                        let val = Number(raw);
+                                                        if (isNaN(val)) return;
                                                         if (val > 100) val = 100;
                                                         if (val < 0) val = 0;
                                                         setScoreKaiwa(val);
@@ -402,9 +498,15 @@ export default function LmsProgressSegment({ assessmentSubject, attendanceRecord
                                                       min={0}
                                                       max={100}
                                                       placeholder="0"
-                                                      value={scoreKanji === 0 ? "" : scoreKanji}
+                                                      value={scoreKanji === undefined || scoreKanji === null ? "" : scoreKanji}
                                                       onChange={(e) => {
-                                                        let val = Number(e.target.value);
+                                                        const raw = e.target.value;
+                                                        if (raw === "") {
+                                                          setScoreKanji("");
+                                                          return;
+                                                        }
+                                                        let val = Number(raw);
+                                                        if (isNaN(val)) return;
                                                         if (val > 100) val = 100;
                                                         if (val < 0) val = 0;
                                                         setScoreKanji(val);
@@ -534,7 +636,18 @@ export default function LmsProgressSegment({ assessmentSubject, attendanceRecord
     
                                                 <button
                                                   type="button"
-                                                  onClick={() => handleGradeSubmit(new Event('submit'))}
+                                                  onClick={() => handleGradeSubmit(
+                                                    new Event('submit'),
+                                                    student.id,
+                                                    Number(selectedBab.number),
+                                                    {
+                                                      scoreKotoba,
+                                                      scoreBumpo,
+                                                      scoreKaiwa,
+                                                      scoreKanji,
+                                                      notes: gradingNotes
+                                                    }
+                                                  )}
                                                   disabled={isGradingSubmitting || isReadOnlyView}
                                                   className={`w-full sm:w-auto px-6 py-2.5 text-white font-extrabold text-xs rounded-xl transition flex items-center justify-center gap-2 shadow-sm disabled:opacity-50 ${
                                                     isReadOnlyView ? "bg-slate-400 cursor-not-allowed" :
@@ -626,16 +739,93 @@ export default function LmsProgressSegment({ assessmentSubject, attendanceRecord
                 )}
     
                 {progressTabMode === "sikap" && (
-                  <div className="bg-white border border-slate-200 rounded-3xl p-5 shadow-xs animate-fade-in text-left">
-                    <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="bg-white border border-slate-200 rounded-3xl p-5 sm:p-6 shadow-xs animate-fade-in text-left space-y-6">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-slate-100 pb-5">
                       <div>
-                        <h3 className="font-display font-extrabold text-lg text-slate-800">
-                          Penilaian Kelayakan Order Job
+                        <h3 className="font-display font-extrabold text-lg text-slate-800 flex items-center gap-2">
+                          <span>Penilaian Kelayakan Order Job & 5S</span>
+                          <span className="text-[10px] font-bold px-2.5 py-0.5 bg-emerald-100 text-emerald-800 rounded-full border border-emerald-200">Terintegrasi Database</span>
                         </h3>
-                        <p className="text-xs text-slate-500 mt-1">
-                          Nilai sikap (5S), etika, Bahasa Jepang, matematika, dan kehadiran untuk menentukan kelayakan siswa mengikuti Order Job. Nilai Bahasa Jepang, Matematika, dan Kehadiran (%) dihitung secara otomatis dari progres &amp; presensi siswa.
+                        <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                          Nilai sikap (5S), etika, Bahasa Jepang, matematika, dan kehadiran untuk menentukan kelayakan siswa mengikuti Order Job. Nilai Bahasa Jepang, Matematika, dan Kehadiran (%) dihitung secara otomatis jika tersedia dari kurikulum & presensi, atau dapat Anda sesuaikan manual.
                         </p>
                       </div>
+
+                      {filteredActiveStudents.length > 0 && onUpdateState && (
+                        <button
+                          type="button"
+                          disabled={savingAllSikap || isReadOnlyView}
+                          onClick={async () => {
+                            setSavingAllSikap(true);
+                            try {
+                              let savedCount = 0;
+                              const assessmentsSource = chapterAssessments && chapterAssessments.length > 0 ? chapterAssessments : (systemState?.chapterAssessments || []);
+                              for (const student of filteredActiveStudents) {
+                                const jpnAvg = computeSubjectAverage(assessmentsSource, student, "Bahasa Jepang");
+                                const hasJpnAssessments = jpnAvg.gradedCount > 0;
+                                const computedJpnAvg = jpnAvg.average ?? (student.japaneseScore || 0);
+
+                                const mathAvg = computeSubjectAverage(assessmentsSource, student, "Matematika");
+                                const hasMathAssessments = mathAvg.gradedCount > 0;
+                                const computedMathAvg = mathAvg.average ?? (student.mathScore || 0);
+
+                                const { rate: attRate, totalRecords: totalAttRecords } = computeAttendanceRate(student, attendanceRecords);
+                                const hasAttRecords = totalAttRecords > 0;
+                                const computedAttendanceRate = attRate ?? (student.attendanceScore || 0);
+
+                                const sScores = sikapScores[student.id] || {};
+                                const fiveSVal = Number(sScores.fiveS !== undefined ? sScores.fiveS : (student.fiveSScore || 0));
+                                const ethicsVal = Number(sScores.ethics !== undefined ? sScores.ethics : (student.ethicsScore || 0));
+                                const mathVal = (sScores.math !== undefined && sScores.math !== "") ? Number(sScores.math) : (hasMathAssessments ? computedMathAvg : (Number(student.mathScore) || 0));
+                                const jpnVal = (sScores.jpn !== undefined && sScores.jpn !== "") ? Number(sScores.jpn) : (hasJpnAssessments ? computedJpnAvg : (Number(student.japaneseScore) || 0));
+                                const attVal = (sScores.att !== undefined && sScores.att !== "") ? Number(sScores.att) : (hasAttRecords ? computedAttendanceRate : (Number(student.attendanceScore) || 0));
+
+                                const payload = {
+                                  ...student,
+                                  fiveSScore: fiveSVal,
+                                  ethicsScore: ethicsVal,
+                                  mathScore: mathVal,
+                                  japaneseScore: jpnVal,
+                                  attendanceScore: attVal
+                                };
+                                const ok = await onUpdateState("activeStudents", "update", payload);
+                                if (ok) {
+                                  savedCount++;
+                                  setSikapScores(prev => ({
+                                    ...prev,
+                                    [student.id]: {
+                                      fiveS: fiveSVal,
+                                      ethics: ethicsVal,
+                                      math: mathVal,
+                                      jpn: jpnVal,
+                                      att: attVal
+                                    }
+                                  }));
+                                }
+                              }
+                              alert(`Berhasil menyimpan penilaian 5S & Kelayakan untuk ${savedCount} siswa!`);
+                            } catch (err) {
+                              console.error("Error saving 5S assessments:", err);
+                              alert("Gagal menyimpan penilaian 5S.");
+                            } finally {
+                              setSavingAllSikap(false);
+                            }
+                          }}
+                          className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-extrabold text-xs rounded-xl transition flex items-center justify-center gap-2 shadow-sm shrink-0 cursor-pointer disabled:opacity-50"
+                        >
+                          {savingAllSikap ? (
+                            <>
+                              <RefreshCw className="w-4 h-4 animate-spin" />
+                              <span>Menyimpan Semua...</span>
+                            </>
+                          ) : (
+                            <>
+                              <Save className="w-4 h-4" />
+                              <span>Simpan Semua Penilaian 5S</span>
+                            </>
+                          )}
+                        </button>
+                      )}
                     </div>
                     
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -656,150 +846,232 @@ export default function LmsProgressSegment({ assessmentSubject, attendanceRecord
                         const { rate: attRate, hadirCount: presentCount, totalRecords: totalAttRecords } = computeAttendanceRate(student, attendanceRecords);
                         const hasAttRecords = totalAttRecords > 0;
                         const computedAttendanceRate = attRate ?? (student.attendanceScore || 0);
-    
+
+                        const studentScores = sikapScores[student.id] || {};
+                        const valFiveS = studentScores.fiveS !== undefined ? studentScores.fiveS : (student.fiveSScore || 0);
+                        const valEthics = studentScores.ethics !== undefined ? studentScores.ethics : (student.ethicsScore || 0);
+                        const valMath = studentScores.math !== undefined ? studentScores.math : (student.mathScore || 0);
+                        const valJpn = studentScores.jpn !== undefined ? studentScores.jpn : (student.japaneseScore || 0);
+                        const valAtt = studentScores.att !== undefined ? studentScores.att : (student.attendanceScore || 0);
+
+                        const isSavingStudent = savingSikapMap[student.id] || false;
+
                         return (
-                          <div key={student.id} className="p-4 border border-slate-200 bg-white rounded-2xl flex flex-col gap-3 relative shadow-2xs hover:shadow-xs transition">
-                            <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
-                              <div className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 font-bold text-xs">
-                                {student.name ? student.name.charAt(0).toUpperCase() : <Users className="w-4 h-4" />}
-                              </div>
-                              <div className="flex-1 min-w-0">
-                                <h4 className="font-bold text-sm text-slate-800 truncate">{student.name}</h4>
-                                <div className="text-[10px] text-slate-500 font-medium font-mono truncate">{student.id} {student.class ? `• ${student.class}` : ''}</div>
-                              </div>
-                            </div>
-                            
-                            <div className="grid grid-cols-2 gap-2.5 mt-1">
-                              {/* NILAI 5S */}
-                              <div className="space-y-1">
-                                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Nilai 5S</label>
-                                <input 
-                                  type="number"
-                                  min="0" max="100"
-                                  defaultValue={student.fiveSScore || 0}
-                                  onBlur={(e) => {
-                                    if (onUpdateState) {
-                                      onUpdateState("activeStudents", "update", { ...student, fiveSScore: parseInt(e.target.value) || 0 });
-                                    }
-                                  }}
-                                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs text-center font-bold text-slate-800 focus:outline-emerald-500 focus:bg-white"
-                                />
-                              </div>
-    
-                              {/* NILAI ETIKA */}
-                              <div className="space-y-1">
-                                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Nilai Etika</label>
-                                <input 
-                                  type="number"
-                                  min="0" max="100"
-                                  defaultValue={student.ethicsScore || 0}
-                                  onBlur={(e) => {
-                                    if (onUpdateState) {
-                                      onUpdateState("activeStudents", "update", { ...student, ethicsScore: parseInt(e.target.value) || 0 });
-                                    }
-                                  }}
-                                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs text-center font-bold text-slate-800 focus:outline-emerald-500 focus:bg-white"
-                                />
-                              </div>
-    
-                              {/* BAHASA JEPANG */}
-                              <div className="space-y-1">
-                                <div className="flex items-center justify-between">
-                                  <label className="text-[10px] font-bold text-amber-700 uppercase tracking-wider">B. Jepang</label>
-                                  {hasJpnAssessments && (
-                                    <span className="text-[8.5px] font-extrabold text-amber-700 bg-amber-50 px-1 py-0.5 rounded border border-amber-200" title={`Diambil dari rata-rata ${jpnAvg.gradedCount} bab`}>
-                                      Auto ({jpnAvg.gradedCount} Bab)
-                                    </span>
-                                  )}
+                          <div key={student.id} className="p-4 border border-slate-200 bg-white rounded-2xl flex flex-col justify-between gap-3 relative shadow-2xs hover:shadow-xs transition">
+                            <div className="space-y-3">
+                              <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
+                                <div className="w-8 h-8 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 font-bold text-xs">
+                                  {student.name ? student.name.charAt(0).toUpperCase() : <Users className="w-4 h-4" />}
                                 </div>
-                                {hasJpnAssessments ? (
-                                  <div 
-                                    className="w-full bg-amber-50/80 border border-amber-200 rounded-lg px-2 py-1.5 text-xs text-center font-black text-amber-900 shadow-2xs"
-                                    title={`Rata-rata dari ${jpnAvg.gradedCount} bab Bahasa Jepang yang telah dinilai`}
-                                  >
-                                    {computedJpnAvg} <span className="text-[9px] font-semibold text-amber-600">/ 100</span>
-                                  </div>
-                                ) : (
+                                <div className="flex-1 min-w-0">
+                                  <h4 className="font-bold text-sm text-slate-800 truncate">{student.name}</h4>
+                                  <div className="text-[10px] text-slate-500 font-medium font-mono truncate">{student.id} {student.class ? `• ${student.class}` : ''}</div>
+                                </div>
+                              </div>
+                              
+                              <div className="grid grid-cols-2 gap-2.5 mt-1">
+                                {/* NILAI 5S */}
+                                <div className="space-y-1">
+                                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Nilai 5S</label>
                                   <input 
                                     type="number"
                                     min="0" max="100"
-                                    defaultValue={student.japaneseScore || 0}
-                                    onBlur={(e) => {
-                                      if (onUpdateState) {
-                                        onUpdateState("activeStudents", "update", { ...student, japaneseScore: parseInt(e.target.value) || 0 });
-                                      }
+                                    value={valFiveS}
+                                    onChange={(e) => {
+                                      const raw = e.target.value;
+                                      const num = raw === "" ? "" : Number(raw);
+                                      setSikapScores(prev => ({
+                                        ...prev,
+                                        [student.id]: { ...(prev[student.id] || {}), fiveS: num }
+                                      }));
                                     }}
-                                    placeholder="Manual"
-                                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs text-center font-bold text-slate-800 focus:outline-amber-500 focus:bg-white"
-                                  />
-                                )}
-                              </div>
-    
-                              {/* MATEMATIKA */}
-                              <div className="space-y-1">
-                                <div className="flex items-center justify-between">
-                                  <label className="text-[10px] font-bold text-blue-700 uppercase tracking-wider">Matematika</label>
-                                  {hasMathAssessments && (
-                                    <span className="text-[8.5px] font-extrabold text-blue-700 bg-blue-50 px-1 py-0.5 rounded border border-blue-200" title={`Diambil dari rata-rata ${mathAvg.gradedCount} bab SSW`}>
-                                      Auto ({mathAvg.gradedCount} Bab)
-                                    </span>
-                                  )}
-                                </div>
-                                {hasMathAssessments ? (
-                                  <div 
-                                    className="w-full bg-blue-50/80 border border-blue-200 rounded-lg px-2 py-1.5 text-xs text-center font-black text-blue-900 shadow-2xs"
-                                    title={`Rata-rata dari ${mathAvg.gradedCount} bab Matematika/SSW yang telah dinilai`}
-                                  >
-                                    {computedMathAvg} <span className="text-[9px] font-semibold text-blue-600">/ 100</span>
-                                  </div>
-                                ) : (
-                                  <input 
-                                    type="number"
-                                    min="0" max="100"
-                                    defaultValue={student.mathScore || 0}
-                                    onBlur={(e) => {
-                                      if (onUpdateState) {
-                                        onUpdateState("activeStudents", "update", { ...student, mathScore: parseInt(e.target.value) || 0 });
-                                      }
-                                    }}
-                                    placeholder="Manual"
-                                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs text-center font-bold text-slate-800 focus:outline-blue-500 focus:bg-white"
-                                  />
-                                )}
-                              </div>
-    
-                              {/* KEHADIRAN (%) */}
-                              <div className="space-y-1 col-span-2 sm:col-span-1">
-                                <div className="flex items-center justify-between">
-                                  <label className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider">Kehadiran (%)</label>
-                                  {hasAttRecords && (
-                                    <span className="text-[8.5px] font-extrabold text-emerald-700 bg-emerald-50 px-1 py-0.5 rounded border border-emerald-200" title={`Akumulasi ${presentCount} presensi hadir dari ${totalAttRecords} total presensi`}>
-                                      Auto ({presentCount}/{totalAttRecords})
-                                    </span>
-                                  )}
-                                </div>
-                                {hasAttRecords ? (
-                                  <div
-                                    className="w-full bg-emerald-50/80 border border-emerald-200 rounded-lg px-2 py-1.5 text-xs text-center font-black text-emerald-900 shadow-2xs"
-                                    title={`Persentase kehadiran: ${presentCount} hadir / ${totalAttRecords} total presensi (${computedAttendanceRate}%)`}
-                                  >
-                                    {computedAttendanceRate}% <span className="text-[9px] font-semibold text-emerald-600">({presentCount}/{totalAttRecords})</span>
-                                  </div>
-                                ) : (
-                                  <input 
-                                    type="number"
-                                    min="0" max="100"
-                                    defaultValue={student.attendanceScore || 0}
-                                    onBlur={(e) => {
-                                      if (onUpdateState) {
-                                        onUpdateState("activeStudents", "update", { ...student, attendanceScore: parseInt(e.target.value) || 0 });
-                                      }
-                                    }}
-                                    placeholder="Manual"
+                                    placeholder="0 - 100"
                                     className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs text-center font-bold text-slate-800 focus:outline-emerald-500 focus:bg-white"
                                   />
-                                )}
+                                </div>
+      
+                                {/* NILAI ETIKA */}
+                                <div className="space-y-1">
+                                  <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Nilai Etika</label>
+                                  <input 
+                                    type="number"
+                                    min="0" max="100"
+                                    value={valEthics}
+                                    onChange={(e) => {
+                                      const raw = e.target.value;
+                                      const num = raw === "" ? "" : Number(raw);
+                                      setSikapScores(prev => ({
+                                        ...prev,
+                                        [student.id]: { ...(prev[student.id] || {}), ethics: num }
+                                      }));
+                                    }}
+                                    placeholder="0 - 100"
+                                    className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs text-center font-bold text-slate-800 focus:outline-emerald-500 focus:bg-white"
+                                  />
+                                </div>
+      
+                                {/* BAHASA JEPANG */}
+                                <div className="space-y-1">
+                                  <div className="flex items-center justify-between">
+                                    <label className="text-[10px] font-bold text-amber-700 uppercase tracking-wider">B. Jepang</label>
+                                    {hasJpnAssessments && (
+                                      <span className="text-[8.5px] font-extrabold text-amber-700 bg-amber-50 px-1 py-0.5 rounded border border-amber-200" title={`Diambil dari rata-rata ${jpnAvg.gradedCount} bab`}>
+                                        Auto ({jpnAvg.gradedCount} Bab)
+                                      </span>
+                                    )}
+                                  </div>
+                                  {hasJpnAssessments ? (
+                                    <div 
+                                      className="w-full bg-amber-50/80 border border-amber-200 rounded-lg px-2 py-1.5 text-xs text-center font-black text-amber-900 shadow-2xs"
+                                      title={`Rata-rata dari ${jpnAvg.gradedCount} bab Bahasa Jepang yang telah dinilai`}
+                                    >
+                                      {computedJpnAvg} <span className="text-[9px] font-semibold text-amber-600">/ 100</span>
+                                    </div>
+                                  ) : (
+                                    <input 
+                                      type="number"
+                                      min="0" max="100"
+                                      value={valJpn}
+                                      onChange={(e) => {
+                                        const raw = e.target.value;
+                                        const num = raw === "" ? "" : Number(raw);
+                                        setSikapScores(prev => ({
+                                          ...prev,
+                                          [student.id]: { ...(prev[student.id] || {}), jpn: num }
+                                        }));
+                                      }}
+                                      placeholder="Manual"
+                                      className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs text-center font-bold text-slate-800 focus:outline-amber-500 focus:bg-white"
+                                    />
+                                  )}
+                                </div>
+      
+                                {/* MATEMATIKA */}
+                                <div className="space-y-1">
+                                  <div className="flex items-center justify-between">
+                                    <label className="text-[10px] font-bold text-blue-700 uppercase tracking-wider">Matematika</label>
+                                    {hasMathAssessments && (
+                                      <span className="text-[8.5px] font-extrabold text-blue-700 bg-blue-50 px-1 py-0.5 rounded border border-blue-200" title={`Diambil dari rata-rata ${mathAvg.gradedCount} bab SSW`}>
+                                        Auto ({mathAvg.gradedCount} Bab)
+                                      </span>
+                                    )}
+                                  </div>
+                                  {hasMathAssessments ? (
+                                    <div 
+                                      className="w-full bg-blue-50/80 border border-blue-200 rounded-lg px-2 py-1.5 text-xs text-center font-black text-blue-900 shadow-2xs"
+                                      title={`Rata-rata dari ${mathAvg.gradedCount} bab Matematika/SSW yang telah dinilai`}
+                                    >
+                                      {computedMathAvg} <span className="text-[9px] font-semibold text-blue-600">/ 100</span>
+                                    </div>
+                                  ) : (
+                                    <input 
+                                      type="number"
+                                      min="0" max="100"
+                                      value={valMath}
+                                      onChange={(e) => {
+                                        const raw = e.target.value;
+                                        const num = raw === "" ? "" : Number(raw);
+                                        setSikapScores(prev => ({
+                                          ...prev,
+                                          [student.id]: { ...(prev[student.id] || {}), math: num }
+                                        }));
+                                      }}
+                                      placeholder="Manual"
+                                      className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs text-center font-bold text-slate-800 focus:outline-blue-500 focus:bg-white"
+                                    />
+                                  )}
+                                </div>
+      
+                                {/* KEHADIRAN (%) */}
+                                <div className="space-y-1 col-span-2 sm:col-span-1">
+                                  <div className="flex items-center justify-between">
+                                    <label className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider">Kehadiran (%)</label>
+                                    {hasAttRecords && (
+                                      <span className="text-[8.5px] font-extrabold text-emerald-700 bg-emerald-50 px-1 py-0.5 rounded border border-emerald-200" title={`Akumulasi ${presentCount} presensi hadir dari ${totalAttRecords} total presensi`}>
+                                        Auto ({presentCount}/{totalAttRecords})
+                                      </span>
+                                    )}
+                                  </div>
+                                  {hasAttRecords ? (
+                                    <div
+                                      className="w-full bg-emerald-50/80 border border-emerald-200 rounded-lg px-2 py-1.5 text-xs text-center font-black text-emerald-900 shadow-2xs"
+                                      title={`Persentase kehadiran: ${presentCount} hadir / ${totalAttRecords} total presensi (${computedAttendanceRate}%)`}
+                                    >
+                                      {computedAttendanceRate}% <span className="text-[9px] font-semibold text-emerald-600">({presentCount}/{totalAttRecords})</span>
+                                    </div>
+                                  ) : (
+                                    <input 
+                                      type="number"
+                                      min="0" max="100"
+                                      value={valAtt}
+                                      onChange={(e) => {
+                                        const raw = e.target.value;
+                                        const num = raw === "" ? "" : Number(raw);
+                                        setSikapScores(prev => ({
+                                          ...prev,
+                                          [student.id]: { ...(prev[student.id] || {}), att: num }
+                                        }));
+                                      }}
+                                      placeholder="Manual"
+                                      className="w-full bg-slate-50 border border-slate-200 rounded-lg px-2 py-1.5 text-xs text-center font-bold text-slate-800 focus:outline-emerald-500 focus:bg-white"
+                                    />
+                                  )}
+                                </div>
                               </div>
+                            </div>
+
+                            {/* Card Save Button */}
+                            <div className="pt-2 border-t border-slate-100 flex items-center justify-end">
+                              <button
+                                type="button"
+                                disabled={isSavingStudent || isReadOnlyView}
+                                onClick={async () => {
+                                  setSavingSikapMap(prev => ({ ...prev, [student.id]: true }));
+                                  try {
+                                    const payload = {
+                                      ...student,
+                                      fiveSScore: Number(valFiveS) || 0,
+                                      ethicsScore: Number(valEthics) || 0,
+                                      mathScore: (studentScores.math !== undefined && studentScores.math !== "") ? Number(studentScores.math) : (hasMathAssessments ? computedMathAvg : (Number(valMath) || 0)),
+                                      japaneseScore: (studentScores.jpn !== undefined && studentScores.jpn !== "") ? Number(studentScores.jpn) : (hasJpnAssessments ? computedJpnAvg : (Number(valJpn) || 0)),
+                                      attendanceScore: (studentScores.att !== undefined && studentScores.att !== "") ? Number(studentScores.att) : (hasAttRecords ? computedAttendanceRate : (Number(valAtt) || 0))
+                                    };
+                                    if (onUpdateState) {
+                                      const ok = await onUpdateState("activeStudents", "update", payload);
+                                      if (ok) {
+                                        setSikapScores(prev => ({
+                                          ...prev,
+                                          [student.id]: {
+                                            fiveS: payload.fiveSScore,
+                                            ethics: payload.ethicsScore,
+                                            math: payload.mathScore,
+                                            jpn: payload.japaneseScore,
+                                            att: payload.attendanceScore
+                                          }
+                                        }));
+                                        alert(`Berhasil menyimpan nilai 5S & Kelayakan untuk ${student.name}!`);
+                                      } else {
+                                        alert("Gagal menyimpan nilai.");
+                                      }
+                                    }
+                                  } catch (err) {
+                                    console.error("Error saving student 5S:", err);
+                                    alert("Gagal menyimpan nilai.");
+                                  } finally {
+                                    setSavingSikapMap(prev => ({ ...prev, [student.id]: false }));
+                                  }
+                                }}
+                                className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-[11px] rounded-lg transition flex items-center gap-1.5 cursor-pointer disabled:opacity-50 shadow-2xs active:scale-95"
+                              >
+                                {isSavingStudent ? (
+                                  <RefreshCw className="w-3 h-3 animate-spin" />
+                                ) : (
+                                  <>
+                                    <Save className="w-3 h-3" />
+                                    <span>Simpan</span>
+                                  </>
+                                )}
+                              </button>
                             </div>
                           </div>
                         );
@@ -837,6 +1109,7 @@ export default function LmsProgressSegment({ assessmentSubject, attendanceRecord
                       const allTugasLessons = (lmsLessons || [])
                         .filter(l => l.difficulty === "Tugas")
                         .filter(l => {
+                          if (l.isMandiri === true) return true;
                           if (!selectedClassFilter || selectedClassFilter === "Semua" || selectedClassFilter === "Semua Kelas") return true;
                           const tc = (l.targetClass || "Semua").trim().toLowerCase();
                           if (tc === "semua") return true;
@@ -939,20 +1212,30 @@ export default function LmsProgressSegment({ assessmentSubject, attendanceRecord
                                               <span className="text-[10px] text-indigo-400 block mt-0.5">{new Date(assessment.submissionDate || "").toLocaleString("id-ID", { dateStyle: "long", timeStyle: "short" })}</span>
                                             </div>
                                             <div className="flex flex-col sm:flex-row items-center gap-2 w-full sm:w-auto mt-3 sm:mt-0">
+                                              <button
+                                                type="button"
+                                                onClick={() => {
+                                                  if (setPdfViewerUrl) {
+                                                    setPdfViewerUrl(assessment.submissionUrl);
+                                                  } else {
+                                                    window.open(assessment.submissionUrl, "_blank", "noopener,noreferrer");
+                                                  }
+                                                }}
+                                                className="w-full sm:w-auto text-center bg-indigo-600 text-white border border-transparent px-4 py-2 rounded-lg text-[11px] font-extrabold hover:bg-indigo-700 transition shadow-sm cursor-pointer flex items-center justify-center gap-1.5"
+                                              >
+                                                <Eye className="w-3.5 h-3.5" />
+                                                <span>Lihat Berkas</span>
+                                              </button>
                                               <a
                                                 href={assessment.submissionUrl}
                                                 target="_blank"
                                                 rel="noreferrer"
-                                                className="w-full sm:w-auto text-center bg-white text-indigo-600 border border-indigo-200 px-4 py-2 rounded-lg text-[11px] font-extrabold hover:bg-indigo-50 transition shadow-sm"
+                                                download={`Tugas_${student.name || "Siswa"}_${selectedTugas.title || "Bab"}`}
+                                                className="w-full sm:w-auto text-center bg-white text-indigo-600 border border-indigo-200 px-4 py-2 rounded-lg text-[11px] font-extrabold hover:bg-indigo-50 transition shadow-sm cursor-pointer flex items-center justify-center gap-1.5"
                                               >
-                                                Unduh
+                                                <Download className="w-3.5 h-3.5" />
+                                                <span>Unduh</span>
                                               </a>
-                                              <button
-                                                onClick={() => window.open(assessment.submissionUrl, "_blank", "noopener,noreferrer")}
-                                                className="w-full sm:w-auto text-center bg-indigo-600 text-white border border-transparent px-4 py-2 rounded-lg text-[11px] font-extrabold hover:bg-indigo-700 transition shadow-sm"
-                                              >
-                                                Buka PDF
-                                              </button>
                                             </div>
                                           </div>
                                         )}

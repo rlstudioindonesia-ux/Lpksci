@@ -6,11 +6,13 @@
 import React, { useState } from "react";
 import { createPortal } from "react-dom";
 import { uploadFileToFirebase, downloadFile, getEmbeddablePdfUrl } from "../lib/storageHelper";
+import { MediaViewerModal } from "./MediaViewerModal";
 import { ConfirmForm } from "./ConfirmForm";
 import { Play, BookOpen, Calendar, HelpCircle, GraduationCap, CheckCircle, Award, 
   AlertCircle, ChevronRight, Check, X, RefreshCw, Clock, Calculator,
   Plus, Trash2, Edit3, Video, FileText, Save, Download, Info, MessageSquare, User, Users, Upload, Eye, ExternalLink,
-  Percent, Hash, Brain, Scale, Volume2, Lock, Unlock, ChevronDown, ChevronUp, RotateCcw
+  Percent, Hash, Brain, Scale, Volume2, Lock, Unlock, ChevronDown, ChevronUp, RotateCcw, Copy, CheckCircle2,
+  CheckSquare, Square
 , PanelLeftClose, Search, MapPin, Camera, SlidersHorizontal, Bell, ArrowLeft, Star } from "lucide-react";
 import { AttendanceRecord, ActiveStudent, UserAccount, LMSLesson, ChapterAssessment, JobOrder } from "../types";
 import { CHAPTERS_LIST, MATH_CHAPTERS_LIST } from "../chapters";
@@ -19,6 +21,8 @@ import LmsProgressSegment from "./lms/LmsProgressSegment";
 import LmsBabSegment from "./lms/LmsBabSegment";
 import LmsDokumenSegment from "./lms/LmsDokumenSegment";
 import LmsAbsenSegment from "./lms/LmsAbsenSegment";
+import { formatVideoEmbedUrl, getDirectVideoUrl, isYouTubeOrStreamingUrl } from "../lib/videoHelper";
+import { isMathSubject, isJapaneseSubject, isSameSubject, getCanonicalSubjectSlug } from "../lib/subjectHelper";
 
 
 
@@ -90,20 +94,48 @@ const ToastNotification = ({ message, onClose }: { message: string, onClose: () 
 };
 
 
-export const CBTTimer = ({ startTime, durationMinutes, onExpire }: { startTime: number, durationMinutes: number, onExpire: () => void }) => {
+export const CBTTimer = ({ 
+  startTime, 
+  durationMinutes, 
+  onExpire,
+  className = "",
+  compact = false
+}: { 
+  startTime: number; 
+  durationMinutes: number; 
+  onExpire: () => void;
+  className?: string;
+  compact?: boolean;
+}) => {
   const [timeLeft, setTimeLeft] = React.useState("");
+  const [isWarning, setIsWarning] = React.useState(false);
+  const [isCritical, setIsCritical] = React.useState(false);
+  const onExpireRef = React.useRef(onExpire);
+
+  React.useEffect(() => {
+    onExpireRef.current = onExpire;
+  }, [onExpire]);
   
   React.useEffect(() => {
     let expired = false;
+    const mountTime = Date.now();
+    const baseStart = startTime || mountTime;
     const updateTime = () => {
       if (expired) return;
       const now = Date.now();
-      const end = startTime + durationMinutes * 60 * 1000;
+      const end = baseStart + durationMinutes * 60 * 1000;
       const diff = end - now;
       if (diff <= 0) {
-        setTimeLeft("Waktu Habis");
-        expired = true;
-        onExpire();
+        setTimeLeft("00:00 (Waktu Habis)");
+        setIsCritical(true);
+        // Only trigger onExpire if the timer was running for at least 5 seconds after mount
+        // to avoid instant kick-out on retake initialization or render race
+        if (now - mountTime >= 5000) {
+          expired = true;
+          if (onExpireRef.current) {
+            onExpireRef.current();
+          }
+        }
       } else {
         const h = Math.floor(diff / (1000 * 60 * 60));
         const m = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
@@ -112,16 +144,45 @@ export const CBTTimer = ({ startTime, durationMinutes, onExpire }: { startTime: 
         if (h > 0) timeStr += `${h.toString().padStart(2, '0')}:`;
         timeStr += `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
         setTimeLeft(timeStr);
+        setIsWarning(diff < 5 * 60 * 1000); // < 5 menit
+        setIsCritical(diff < 2 * 60 * 1000); // < 2 menit
       }
     };
     updateTime();
     const interval = setInterval(updateTime, 1000);
     return () => clearInterval(interval);
-  }, [startTime, durationMinutes, onExpire]);
+  }, [startTime, durationMinutes]);
   
+  if (compact) {
+    return (
+      <div 
+        title="Sisa waktu pengerjaan kuis"
+        className={`inline-flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded-xl border font-mono font-black text-xs shadow-xs transition-all ${
+          isCritical
+            ? "bg-red-600 text-white border-red-700 animate-pulse ring-2 ring-red-300"
+            : isWarning
+              ? "bg-amber-500 text-white border-amber-600 animate-pulse ring-2 ring-amber-300"
+              : "bg-rose-50 text-rose-700 border-rose-300"
+        } ${className}`}
+      >
+        <span className="text-sm">⏱️</span>
+        <span>{timeLeft || "Menghitung..."}</span>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex items-center gap-2 bg-rose-50 text-rose-700 px-3 py-1.5 rounded-lg border border-rose-200 font-mono font-bold text-sm shadow-sm animate-pulse">
-      ⏳ Sisa Waktu CBT: {timeLeft || "Menghitung..."}
+    <div 
+      className={`inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl border font-mono font-black text-xs sm:text-sm shadow-xs transition-all ${
+        isCritical 
+          ? "bg-red-600 text-white border-red-700 animate-bounce ring-2 ring-red-400" 
+          : isWarning 
+            ? "bg-amber-500 text-white border-amber-600 animate-pulse ring-2 ring-amber-300" 
+            : "bg-rose-50 text-rose-700 border-rose-300"
+      } ${className}`}
+    >
+      <span className="text-base">⏳</span>
+      <span>Sisa Waktu: <strong>{timeLeft || "Menghitung..."}</strong></span>
     </div>
   );
 };
@@ -136,6 +197,26 @@ const getEmbeddableUrl = (url: string | null) => {
   }
   return url;
 };
+
+export function seededShuffle<T>(array: T[], seedStr: string): T[] {
+  let h = 1779033703 ^ seedStr.length;
+  for (let i = 0; i < seedStr.length; i++) {
+    h = Math.imul(h ^ seedStr.charCodeAt(i), 3432918353);
+    h = (h << 13) | (h >>> 19);
+  }
+  const prng = () => {
+    h = Math.imul(h ^ (h >>> 16), 2246822507);
+    h = Math.imul(h ^ (h >>> 13), 3266489909);
+    return ((h ^= h >>> 16) >>> 0) / 4294967296;
+  };
+
+  const copy = [...array];
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(prng() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy;
+}
 
 const dataURLtoBlob = (dataurl: string) => {
   try {
@@ -234,6 +315,21 @@ export default function LmsView({
   }, [pdfViewerUrl]);
 
   const [activeQuizChapterId, setActiveQuizChapterId] = React.useState<number | null>(null);
+  const [isQuizShuffleEnabled, setIsQuizShuffleEnabled] = React.useState<boolean>(true);
+  const [shuffleSalt, setShuffleSalt] = React.useState<number>(0);
+  const [retakeAttemptsMap, setRetakeAttemptsMap] = React.useState<Record<string, number>>(() => {
+    try {
+      const userKey = currentUser?.studentId || currentUser?.id || currentUser?.username || 'user';
+      const stored = localStorage.getItem(`cbtRetakeMap_${userKey}`);
+      return stored ? JSON.parse(stored) : {};
+    } catch (e) {
+      return {};
+    }
+  });
+  const [showAdminAnswerKeys, setShowAdminAnswerKeys] = React.useState<boolean>(false);
+  const [simulatedSubmission, setSimulatedSubmission] = React.useState<boolean>(false);
+  const [batchShuffleQuestions, setBatchShuffleQuestions] = React.useState<boolean>(true);
+  const [isSavingQuizBatch, setIsSavingQuizBatch] = React.useState<boolean>(false);
 
   React.useEffect(() => {
   if (pdfViewerUrl) {
@@ -277,7 +373,7 @@ export default function LmsView({
     if (!lmsLessons || !currentUser || currentUser.role !== "Siswa") return;
     const activeAssignments = lmsLessons.filter(l => 
       l.difficulty === "Tugas" && 
-      (l.targetClass === "Semua" || l.targetClass === currentUser.assignedClass) &&
+      (l.isMandiri || l.targetClass === "Semua" || l.targetClass === currentUser.assignedClass) &&
       (!l.deadline || new Date(l.deadline).getTime() > Date.now())
     );
     activeAssignments.forEach(assignment => {
@@ -337,13 +433,31 @@ export default function LmsView({
     questionType: "pilihan_ganda",
     question: "",
     options: ["", "", "", ""],
-    correctAnswerIndex: 0
+    correctAnswerIndex: 0,
+    correctAnswerEssay: ""
   });
   const [quizBatch, setQuizBatch] = React.useState<any[]>([]);
   const [selectedBatchIndex, setSelectedBatchIndex] = React.useState<number>(0);
   const [batchDeadline, setBatchDeadline] = React.useState<string>("");
   const [batchDurationMinutes, setBatchDurationMinutes] = React.useState<number | "">("");
   const [batchTargetClass, setBatchTargetClass] = React.useState<string>("Semua");
+  const [selectedBabNumber, setSelectedBabNumber] = React.useState<number>(1);
+  const [batchChapterNumber, setBatchChapterNumber] = React.useState<number>(1);
+  const [batchSubject, setBatchSubject] = React.useState<string>("Bahasa Jepang");
+  const [batchSubTitle, setBatchSubTitle] = React.useState<string>("");
+  const [batchLessonId, setBatchLessonId] = React.useState<string>("");
+  const [activeQuizSubTitle, setActiveQuizSubTitle] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (activeQuizChapterId !== null) {
+      const subKey = activeQuizSubTitle ? `_${encodeURIComponent(activeQuizSubTitle)}` : "";
+      const key = `kuis_ch_${activeQuizChapterId}${subKey}`;
+      if (!cbtStartTimes[key]) {
+        handleStartCbt(key);
+      }
+    }
+  }, [activeQuizChapterId, activeQuizSubTitle]);
+  const [detectedDraft, setDetectedDraft] = React.useState<{ key: string; draft: any; count: number; chapterNumber: number; savedAt: number } | null>(null);
   const [selectedPracticePacket, setSelectedPracticePacket] = React.useState("N4_Paket1");
   const [practiceAnswers, setPracticeAnswers] = React.useState<any>({});
   const [studentQuizAnswers, _setStudentQuizAnswers] = React.useState<Record<string, number>>({});
@@ -351,32 +465,384 @@ export default function LmsView({
   const [submittedQuizIds, _setSubmittedQuizIds] = React.useState<string[]>([]);
   
   React.useEffect(() => {
+    if (isQuizFormOpen) {
+      if (quizBatch[0]?.chapterNumber) {
+        setBatchChapterNumber(Number(quizBatch[0].chapterNumber));
+      } else if (selectedBabNumber) {
+        setBatchChapterNumber(Number(selectedBabNumber));
+      }
+      if (quizBatch[0]?.subject) {
+        setBatchSubject(quizBatch[0].subject);
+      } else if (assessmentSubject) {
+        setBatchSubject(assessmentSubject);
+      }
+    }
+  }, [isQuizFormOpen]);
+
+  // Auto-save draft of quizzes while editing so Sensei never loses their work
+  React.useEffect(() => {
+    if (isQuizFormOpen && quizBatch.length > 0) {
+      const hasContent = quizBatch.some(q => (q.question && q.question.trim().length > 0) || q.imageUrl || q.audioUrl);
+      if (hasContent && typeof window !== "undefined") {
+        try {
+          const draftKey = `lms_quiz_draft_${batchSubject || "Bahasa Jepang"}_ch${batchChapterNumber || 1}`;
+          localStorage.setItem(draftKey, JSON.stringify({
+            savedAt: Date.now(),
+            chapterNumber: batchChapterNumber,
+            subject: batchSubject,
+            targetClass: batchTargetClass,
+            durationMinutes: batchDurationMinutes,
+            deadline: batchDeadline,
+            shuffleQuestions: batchShuffleQuestions,
+            quizzes: quizBatch
+          }));
+        } catch (e) {}
+      }
+    }
+  }, [quizBatch, isQuizFormOpen, batchChapterNumber, batchSubject, batchTargetClass, batchDurationMinutes, batchDeadline, batchShuffleQuestions]);
+
+  // Check for restorable draft when quiz form opens (Non-blocking, banner UI)
+  React.useEffect(() => {
+    if (isQuizFormOpen && typeof window !== "undefined") {
+      const targetCh = batchChapterNumber || selectedBabNumber || 1;
+      const targetSubj = batchSubject || assessmentSubject || "Bahasa Jepang";
+      const draftKey = `lms_quiz_draft_${targetSubj}_ch${targetCh}`;
+      try {
+        const savedDraftRaw = localStorage.getItem(draftKey);
+        if (savedDraftRaw) {
+          const draft = JSON.parse(savedDraftRaw);
+          if (Array.isArray(draft.quizzes) && draft.quizzes.length > 0) {
+            const currentFilledCount = quizBatch.filter(q => q.question?.trim() || q.imageUrl || q.audioUrl).length;
+            const draftFilledCount = draft.quizzes.filter((q: any) => q.question?.trim() || q.imageUrl || q.audioUrl).length;
+            if (draftFilledCount > currentFilledCount) {
+              setDetectedDraft({
+                key: draftKey,
+                draft,
+                count: draftFilledCount,
+                chapterNumber: targetCh,
+                savedAt: draft.savedAt || Date.now()
+              });
+            }
+          }
+        }
+      } catch (e) {}
+    } else {
+      setDetectedDraft(null);
+    }
+  }, [isQuizFormOpen]);
+
+  const handleRestoreDraft = () => {
+    if (!detectedDraft) return;
+    const draft = detectedDraft.draft;
+    if (Array.isArray(draft.quizzes) && draft.quizzes.length > 0) {
+      setQuizBatch(draft.quizzes);
+      if (draft.deadline) setBatchDeadline(draft.deadline);
+      if (draft.durationMinutes !== undefined) setBatchDurationMinutes(draft.durationMinutes);
+      if (draft.targetClass) setBatchTargetClass(draft.targetClass);
+      if (draft.subject) setBatchSubject(draft.subject);
+      if (draft.chapterNumber) {
+        setBatchChapterNumber(Number(draft.chapterNumber));
+        setSelectedBabNumber(Number(draft.chapterNumber));
+      }
+    }
+    setDetectedDraft(null);
+  };
+
+  const handleDismissDraft = () => {
+    if (detectedDraft && typeof window !== "undefined") {
+      try {
+        localStorage.removeItem(detectedDraft.key);
+      } catch (e) {}
+    }
+    setDetectedDraft(null);
+  };
+
+  // Robust, zero-loss atomic batch saver for chapter quizzes
+  const handleSaveAllQuizzes = async () => {
+    const validQuizzes = quizBatch.filter(q => {
+      const hasText = typeof q.question === "string" && q.question.trim().length > 0;
+      const hasMedia = !!(q.imageUrl || q.audioUrl || q.videoUrl);
+      const hasOptions = Array.isArray(q.options) && q.options.some((opt: any) => typeof opt === "string" && opt.trim().length > 0);
+      const hasAnswer = (typeof q.correctAnswerEssay === "string" && q.correctAnswerEssay.trim().length > 0) || (typeof q.correctAnswerText === "string" && q.correctAnswerText.trim().length > 0);
+      return hasText || hasMedia || hasOptions || hasAnswer;
+    });
+
+    if (validQuizzes.length === 0) {
+      alert("Harap isi pertanyaan atau pilihan jawaban kuis sebelum menyimpan.");
+      return;
+    }
+
+    setIsSavingQuizBatch(true);
     try {
-      const p1 = localStorage.getItem('cbtAnswers');
+      if (onUpdateState) {
+        const targetChapter = Number(batchChapterNumber || selectedBabNumber || 1);
+        setSelectedBabNumber(targetChapter);
+        const seenIds = new Set<string>();
+        const preparedQuizzes = validQuizzes.map((q, idx) => {
+          let id = q.id && typeof q.id === "string" && !q.id.startsWith("TEMP_") ? q.id : "";
+          if (!id || seenIds.has(id)) {
+            id = `QZ-${targetChapter}_${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 8)}_${Math.floor(Math.random() * 100000)}`;
+          }
+          seenIds.add(id);
+
+          const cIndices = Array.isArray(q.correctAnswerIndices) && q.correctAnswerIndices.length > 0
+            ? q.correctAnswerIndices.map(Number)
+            : (q.correctAnswerIndex !== undefined ? [Number(q.correctAnswerIndex)] : [0]);
+          const isMulti = !!q.allowMultipleAnswers || q.questionType === "pilihan_ganda_kompleks" || cIndices.length > 1;
+
+          return {
+            ...q,
+            id,
+            chapterNumber: targetChapter,
+            chapterId: targetChapter,
+            questionType: isMulti ? "pilihan_ganda_kompleks" : (q.questionType || "pilihan_ganda"),
+            allowMultipleAnswers: isMulti,
+            correctAnswerIndices: cIndices,
+            correctAnswerIndex: cIndices[0] !== undefined ? cIndices[0] : 0,
+            subTitle: (q.subTitle !== undefined && q.subTitle !== "") ? q.subTitle : (batchSubTitle || ""),
+            lessonId: (q.lessonId !== undefined && q.lessonId !== "") ? q.lessonId : (batchLessonId || ""),
+            targetClass: batchTargetClass || "Semua",
+            subject: batchSubject || "Bahasa Jepang",
+            deadline: batchDeadline || "",
+            durationMinutes: batchDurationMinutes !== "" && batchDurationMinutes !== undefined ? Number(batchDurationMinutes) : undefined,
+            shuffleQuestions: batchShuffleQuestions !== false,
+            points: q.points !== undefined && q.points !== "" ? Number(q.points) : 10,
+            required: q.required !== undefined ? !!q.required : true,
+            explanation: q.explanation || ""
+          };
+        });
+
+        const batchPayload = {
+          chapterNumber: targetChapter,
+          chapterId: targetChapter,
+          subTitle: batchSubTitle || "",
+          lessonId: batchLessonId || "",
+          targetClass: batchTargetClass || "Semua",
+          subject: batchSubject || "Bahasa Jepang",
+          deadline: batchDeadline || "",
+          durationMinutes: batchDurationMinutes !== "" && batchDurationMinutes !== undefined ? Number(batchDurationMinutes) : undefined,
+          shuffleQuestions: batchShuffleQuestions !== false,
+          quizzes: preparedQuizzes
+        };
+
+        const success = await onUpdateState('lmsQuizzes', 'batch_upsert', batchPayload);
+        if (success) {
+          alert(`✅ Berhasil menyimpan seluruh ${preparedQuizzes.length} soal kuis ${batchSubTitle ? `(${batchSubTitle})` : ""} untuk Bab ${targetChapter}! Data tersimpan aktif dan aman di Firestore.`);
+          if (typeof window !== "undefined") {
+            try {
+              localStorage.removeItem(`lms_quiz_draft_${batchSubject || "Bahasa Jepang"}_ch${targetChapter}`);
+            } catch (e) {}
+          }
+          setDetectedDraft(null);
+          setIsQuizFormOpen(false);
+          return;
+        } else {
+          alert("Terjadi kendala saat menyimpan kuis ke database. Silakan coba lagi.");
+        }
+      }
+    } catch (err) {
+      console.error("Gagal menyimpan kuis batch ke Firestore:", err);
+      alert("Terjadi kendala koneksi saat menyimpan kuis. Pastikan internet aktif dan coba lagi.");
+    } finally {
+      setIsSavingQuizBatch(false);
+    }
+  };
+
+  React.useEffect(() => {
+    try {
+      const userKey = currentUser?.studentId || currentUser?.id || currentUser?.username || 'user';
+      const p1 = localStorage.getItem(`cbtAnswers_${userKey}`);
       if (p1) _setStudentQuizAnswers(JSON.parse(p1));
-      const p2 = localStorage.getItem('cbtEssayAnswers');
+      else _setStudentQuizAnswers({});
+
+      const p2 = localStorage.getItem(`cbtEssayAnswers_${userKey}`);
       if (p2) _setStudentQuizEssayAnswers(JSON.parse(p2));
-      const p3 = localStorage.getItem('cbtSubmittedIds');
+      else _setStudentQuizEssayAnswers({});
+
+      const p3 = localStorage.getItem(`cbtSubmittedIds_${userKey}`);
       if (p3) _setSubmittedQuizIds(JSON.parse(p3));
+      else _setSubmittedQuizIds([]);
     } catch(e){}
-  }, []);
+  }, [currentUser?.studentId, currentUser?.id, currentUser?.username]);
+
+  const [retakingQuizIds, setRetakingQuizIds] = React.useState<string[]>([]);
+
+  // Rehydrate answers and submission status from Firestore chapterAssessments when available
+  React.useEffect(() => {
+    if (!currentUser) return;
+    const targetStudentId = (matchingStudent?.id || currentUser?.studentId || currentUser?.id || "").trim().toLowerCase();
+    const targetStudentName = (matchingStudent?.name || currentUser?.name || "").trim().toLowerCase();
+    const targetEmail = (currentUser?.email || matchingStudent?.email || "").trim().toLowerCase();
+    const allAssess = systemState?.chapterAssessments || chapterAssessments || [];
+    
+    const myAssessments = allAssess.filter((a: any) => {
+      const aId = (a.studentId || "").trim().toLowerCase();
+      const aName = (a.studentName || "").trim().toLowerCase();
+      const aEmail = (a.studentEmail || "").trim().toLowerCase();
+      return (targetStudentId && aId === targetStudentId) ||
+             (targetEmail && (aId === targetEmail || aEmail === targetEmail)) ||
+             (targetStudentId && (a.id || "").toLowerCase().includes(targetStudentId)) ||
+             (targetStudentName && aName && (aName === targetStudentName || targetStudentName.includes(aName) || aName.includes(targetStudentName)));
+    });
+
+    if (myAssessments.length > 0) {
+      const dbSubmittedIds: string[] = [];
+      const dbAnswers: Record<string, any> = {};
+      const dbEssayAnswers: Record<string, string> = {};
+
+      myAssessments.forEach((a: any) => {
+        const details = a.details?.quizDetails || a.quizDetails || [];
+        details.forEach((d: any) => {
+          if (d.quizId && !dbSubmittedIds.includes(d.quizId)) {
+            dbSubmittedIds.push(d.quizId);
+          }
+        });
+        const ans = a.details?.studentQuizAnswers || a.studentAnswers || {};
+        Object.assign(dbAnswers, ans);
+        const essayAns = a.details?.studentQuizEssayAnswers || a.essayAnswers || {};
+        Object.assign(dbEssayAnswers, essayAns);
+        Object.keys(ans).forEach(id => {
+          if (!dbSubmittedIds.includes(id)) dbSubmittedIds.push(id);
+        });
+        Object.keys(essayAns).forEach(id => {
+          if (!dbSubmittedIds.includes(id)) dbSubmittedIds.push(id);
+        });
+      });
+
+      if (dbSubmittedIds.length > 0) {
+        _setSubmittedQuizIds((prev: string[]) => {
+          const filteredDb = dbSubmittedIds.filter(id => !retakingQuizIds.includes(id));
+          const currentFiltered = prev.filter(id => !retakingQuizIds.includes(id));
+          const merged = [...new Set([...currentFiltered, ...filteredDb])];
+          try {
+            const userKey = currentUser?.studentId || currentUser?.id || currentUser?.username || 'user';
+            localStorage.setItem(`cbtSubmittedIds_${userKey}`, JSON.stringify(merged));
+          } catch(e){}
+          return merged;
+        });
+      }
+
+      if (Object.keys(dbAnswers).length > 0) {
+        const cleanAnswers = { ...dbAnswers };
+        retakingQuizIds.forEach(id => delete cleanAnswers[id]);
+        _setStudentQuizAnswers((prev: any) => ({ ...cleanAnswers, ...prev }));
+      }
+      if (Object.keys(dbEssayAnswers).length > 0) {
+        const cleanEssayAnswers = { ...dbEssayAnswers };
+        retakingQuizIds.forEach(id => delete cleanEssayAnswers[id]);
+        _setStudentQuizEssayAnswers((prev: any) => ({ ...cleanEssayAnswers, ...prev }));
+      }
+    }
+  }, [currentUser, matchingStudent, systemState?.chapterAssessments, chapterAssessments, retakingQuizIds]);
 
   const setStudentQuizAnswers = (val: any) => {
     const updated = typeof val === 'function' ? val(studentQuizAnswers) : val;
     _setStudentQuizAnswers(updated);
-    localStorage.setItem('cbtAnswers', JSON.stringify(updated));
+    try {
+      const userKey = currentUser?.studentId || currentUser?.id || currentUser?.username || 'user';
+      localStorage.setItem(`cbtAnswers_${userKey}`, JSON.stringify(updated));
+    } catch(e){}
   };
   
   const setStudentQuizEssayAnswers = (val: any) => {
     const updated = typeof val === 'function' ? val(studentQuizEssayAnswers) : val;
     _setStudentQuizEssayAnswers(updated);
-    localStorage.setItem('cbtEssayAnswers', JSON.stringify(updated));
+    try {
+      const userKey = currentUser?.studentId || currentUser?.id || currentUser?.username || 'user';
+      localStorage.setItem(`cbtEssayAnswers_${userKey}`, JSON.stringify(updated));
+    } catch(e){}
   };
   
   const setSubmittedQuizIds = (val: any) => {
     const updated = typeof val === 'function' ? val(submittedQuizIds) : val;
     _setSubmittedQuizIds(updated);
-    localStorage.setItem('cbtSubmittedIds', JSON.stringify(updated));
+    try {
+      const userKey = currentUser?.studentId || currentUser?.id || currentUser?.username || 'user';
+      localStorage.setItem(`cbtSubmittedIds_${userKey}`, JSON.stringify(updated));
+    } catch(e){}
+  };
+
+  const handleRetakeQuiz = (chapterNum: number, quizIds: string[], subTitle?: string | null) => {
+    // 1. Mark quiz IDs as active retake so they aren't re-marked as submitted by DB rehydration
+    setRetakingQuizIds((prev: string[]) => [...new Set([...prev, ...quizIds])]);
+
+    // 2. Remove from submitted quizzes state
+    setSubmittedQuizIds((prev: string[]) => prev.filter(id => !quizIds.includes(id)));
+
+    // 3. Reset student answers for retaken quizzes
+    setStudentQuizAnswers((prev: any) => {
+      const next = { ...prev };
+      quizIds.forEach(id => delete next[id]);
+      return next;
+    });
+    setStudentQuizEssayAnswers((prev: any) => {
+      const next = { ...prev };
+      quizIds.forEach(id => delete next[id]);
+      return next;
+    });
+
+    // 4. Reset CBT Start Times to fresh Date.now() for full duration
+    const now = Date.now();
+    const effectiveSubTitle = subTitle !== undefined ? subTitle : activeQuizSubTitle;
+    const subKey = effectiveSubTitle ? `_${encodeURIComponent(effectiveSubTitle)}` : "";
+    const timerKey = `kuis_ch_${chapterNum}${subKey}`;
+    setCbtStartTimes((prev: any) => {
+      const next = { ...prev };
+      Object.keys(next).forEach(k => {
+        if (k.startsWith(`kuis_ch_${chapterNum}`)) {
+          delete next[k];
+        }
+      });
+      next[timerKey] = now;
+      next[`kuis_ch_${chapterNum}`] = now;
+      try {
+        localStorage.setItem('cbtStartTimes', JSON.stringify(next));
+      } catch (e) {}
+      return next;
+    });
+
+    // 5. Clean up localStorage for user
+    try {
+      const userKey = currentUser?.studentId || matchingStudent?.id || currentUser?.id || currentUser?.username || 'user';
+      const rawSubmitted = localStorage.getItem(`cbtSubmittedIds_${userKey}`);
+      if (rawSubmitted) {
+        const parsed = JSON.parse(rawSubmitted);
+        const filtered = parsed.filter((id: string) => !quizIds.includes(id));
+        localStorage.setItem(`cbtSubmittedIds_${userKey}`, JSON.stringify(filtered));
+      }
+      const rawAns = localStorage.getItem(`cbtAnswers_${userKey}`);
+      if (rawAns) {
+        const parsed = JSON.parse(rawAns);
+        quizIds.forEach(id => delete parsed[id]);
+        localStorage.setItem(`cbtAnswers_${userKey}`, JSON.stringify(parsed));
+      }
+      const rawEssay = localStorage.getItem(`cbtEssayAnswers_${userKey}`);
+      if (rawEssay) {
+        const parsed = JSON.parse(rawEssay);
+        quizIds.forEach(id => delete parsed[id]);
+        localStorage.setItem(`cbtEssayAnswers_${userKey}`, JSON.stringify(parsed));
+      }
+    } catch (e) {}
+
+    // 6. Increment shuffle salt & retake attempt count so questions are shuffled into a fresh new order
+    setShuffleSalt(prev => prev + 1);
+    const userKey = currentUser?.studentId || matchingStudent?.id || currentUser?.id || currentUser?.username || 'user';
+    const retakeKey = `${userKey}_ch${chapterNum}`;
+    setRetakeAttemptsMap((prev: Record<string, number>) => {
+      const nextCount = (prev[retakeKey] || 0) + 1;
+      const updated = { ...prev, [retakeKey]: nextCount };
+      try {
+        localStorage.setItem(`cbtRetakeMap_${userKey}`, JSON.stringify(updated));
+      } catch (e) {}
+      return updated;
+    });
+
+    // 7. Reset simulated submission & ensure quiz view is active
+    setSimulatedSubmission(false);
+    setActiveQuizChapterId(chapterNum);
+    if (subTitle !== undefined) {
+      setActiveQuizSubTitle(subTitle);
+    }
   };
   const [practiceShowExplanations, setPracticeShowExplanations] = React.useState<any>({});
   const [selectedClassFilter, setSelectedClassFilter] = React.useState("Semua");
@@ -459,23 +925,58 @@ export default function LmsView({
     const entry = lmsClassesMap.get(targetCls);
     
     let chapters: any[] = [];
-    if (sub === "SSW") {
+    if (isMathSubject(sub)) {
       chapters = entry?.mathChapters || [];
       if (chapters.length === 0) {
-        chapters = MATH_CHAPTERS_LIST.map(ch => ({ ...ch, isActive: ch.number === 1, activeDate: "" }));
+        chapters = MATH_CHAPTERS_LIST.map(ch => ({ ...ch, isActive: true, activeDate: "" }));
       }
     } else {
       chapters = entry?.chapters || [];
       if (chapters.length === 0) {
-        chapters = CHAPTERS_LIST.map(ch => ({ ...ch, isActive: ch.number === 1, activeDate: "" }));
+        chapters = CHAPTERS_LIST.map(ch => ({ ...ch, isActive: true, activeDate: "" }));
       }
     }
     
+    // Dynamic Mandiri Cross-Class Sync: Collect all Mandiri chapters across ALL classes in systemState / lmsClassesMap
+    const seenNums = new Set(chapters.map((ch: any) => Number(ch.number)));
+    const mandiriExtra: any[] = [];
+    
+    lmsClassesMap.forEach((classEntry: any) => {
+      const classChapters = isMathSubject(sub) ? (classEntry?.mathChapters || []) : (classEntry?.chapters || []);
+      (classChapters || []).forEach((ch: any) => {
+        const isMandiri = ch?.isMandiri === true || (isMathSubject(sub) ? Number(ch?.number) > 25 : Number(ch?.number) > 35);
+        if (isMandiri && ch && ch.number && !seenNums.has(Number(ch.number))) {
+          seenNums.add(Number(ch.number));
+          mandiriExtra.push({ ...ch, isMandiri: true, isActive: true });
+        }
+      });
+    });
+
+    (systemState?.lmsLessons || []).forEach((l: any) => {
+      const chNum = Number(l?.chapterNumber);
+      if (!chNum) return;
+      const isSubMatch = isMathSubject(sub) ? isMathSubject(l?.subject) : !isMathSubject(l?.subject);
+      const isMandiri = l?.isMandiri === true || (isMathSubject(sub) ? chNum > 25 : chNum > 35);
+      if (isSubMatch && isMandiri && !seenNums.has(chNum)) {
+        seenNums.add(chNum);
+        mandiriExtra.push({
+          number: chNum,
+          title: l.title || (isMathSubject(sub) ? `Bab ${chNum} Mandiri SSW` : `Bab ${chNum} Mandiri`),
+          isMandiri: true,
+          isActive: true
+        });
+      }
+    });
+
+    if (mandiriExtra.length > 0) {
+      chapters = [...chapters, ...mandiriExtra].sort((a: any, b: any) => Number(a.number) - Number(b.number));
+    }
+
     if (!showAll) {
       return chapters.filter((c: any) => c.isActive !== false);
     }
     return chapters;
-  }, [lmsClassesMap]);
+  }, [lmsClassesMap, systemState?.lmsLessons]);
 
   const getResolvedChapterNum = React.useCallback((clsName: string, rawVal: any, sub: string): number => {
     if (!rawVal) return 0;
@@ -567,7 +1068,6 @@ export default function LmsView({
   const [selectedLessonToEdit, setSelectedLessonToEdit] = React.useState<any>(null);
   const [lessonError, setLessonError] = React.useState("");
   const [lessonSubject, setLessonSubject] = React.useState("Bahasa Jepang");
-  const [selectedBabNumber, setSelectedBabNumber] = React.useState<number>(1);
   const [lessonDifficulty, setLessonDifficulty] = React.useState("Umum");
   const [lessonTitle, setLessonTitle] = React.useState("");
   const [lessonJapaneseTitle, setLessonJapaneseTitle] = React.useState("");
@@ -584,26 +1084,85 @@ export default function LmsView({
   const [lessonDurationMinutes, setLessonDurationMinutes] = React.useState<number | "">("");
   const [isSubmittingLesson, setIsSubmittingLesson] = React.useState(false);
   const [isFileUploading, setIsFileUploading] = React.useState(false);
+  const [uploadProgressText, setUploadProgressText] = React.useState<string>("");
 
-  const startRecording = () => {};
-  const stopRecording = () => {};
-  const handleFileUpload = async (e: any, setter: any) => {
+  const mediaRecorderRef = React.useRef<MediaRecorder | null>(null);
+  const audioChunksRef = React.useRef<Blob[]>([]);
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mimeType = (window as any).MediaRecorder?.isTypeSupported?.('audio/webm') 
+        ? 'audio/webm' 
+        : ((window as any).MediaRecorder?.isTypeSupported?.('audio/mp4') ? 'audio/mp4' : '');
+      const options = mimeType ? { mimeType } : undefined;
+      const mediaRecorder = new MediaRecorder(stream, options);
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: mimeType || "audio/mp3" });
+        const reader = new FileReader();
+        reader.readAsDataURL(audioBlob);
+        reader.onloadend = () => {
+          setLessonAudioData(reader.result as string);
+        };
+        stream.getTracks().forEach(track => track.stop());
+      };
+
+      mediaRecorder.start();
+      setIsRecordingAudio(true);
+    } catch (err) {
+      console.error("Error accessing microphone:", err);
+      alert("Gagal mengakses mikrofon. Pastikan Anda telah memberikan izin.");
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+      mediaRecorderRef.current.stop();
+      setIsRecordingAudio(false);
+    }
+  };
+  const handleFileUpload = async (e: any, setter: any, typeName = "berkas") => {
     const file = e.target.files?.[0];
     if (!file) return;
     setIsFileUploading(true);
     setLessonError("");
+    setUploadProgressText(`⚡ Mengompres & mengunggah ${file.name}...`);
     try {
-      const url = await uploadFileToFirebase(file, "lms_materials");
+      const url = await uploadFileToFirebase(file, "lms_materials", (status) => {
+        setUploadProgressText(status);
+      });
       setter(url);
-    } catch (err) {
-      console.error(err);
-      alert("Gagal upload berkas");
+      setUploadProgressText(`✓ ${file.name} berhasil diunggah ke Firebase Storage`);
+    } catch (err: any) {
+      console.error("File upload failed:", err);
+      setLessonError(err?.message || `Gagal mengunggah ${typeName}. Pastikan ukuran berkas wajar dan format didukung.`);
+      setUploadProgressText("");
     } finally {
       setIsFileUploading(false);
     }
   };
-  const handleGradeSubmit = async (statusOverride?: string | Event) => {
-    if (typeof statusOverride === "object" && statusOverride.preventDefault) {
+  const handleGradeSubmit = async (
+    statusOverride?: string | Event,
+    targetStudentId?: string,
+    targetChapterNumber?: number,
+    customScores?: {
+      scoreKotoba?: number | string;
+      scoreBumpo?: number | string;
+      scoreKaiwa?: number | string;
+      scoreKanji?: number | string;
+      notes?: string;
+    }
+  ) => {
+    if (typeof statusOverride === "object" && statusOverride && 'preventDefault' in statusOverride) {
       statusOverride.preventDefault();
     }
     if (isReadOnlyView) return;
@@ -620,10 +1179,23 @@ export default function LmsView({
     setIsGradingSubmitting(true);
 
     try {
-      const finalKotoba = Number(scoreKotoba) || 0;
-      const finalBumpo = Number(scoreBumpo) || 0;
-      const finalKaiwa = Number(scoreKaiwa) || 0;
-      const finalKanji = Number(scoreKanji) || 0;
+      const effStudentId = targetStudentId || viewStudentId;
+      const targetStudent = (activeStudents || []).find((s: any) => s.id === effStudentId) || (filteredActiveStudents || []).find((s: any) => s.id === effStudentId);
+
+      const effChapterNumber = targetChapterNumber !== undefined
+        ? Number(targetChapterNumber)
+        : (activeSubTab === "progress" && evalSelectedBabId !== "" ? Number(evalSelectedBabId) : Number(selectedBabNumber || 1));
+
+      const rawKotoba = customScores?.scoreKotoba !== undefined ? customScores.scoreKotoba : scoreKotoba;
+      const rawBumpo = customScores?.scoreBumpo !== undefined ? customScores.scoreBumpo : scoreBumpo;
+      const rawKaiwa = customScores?.scoreKaiwa !== undefined ? customScores.scoreKaiwa : scoreKaiwa;
+      const rawKanji = customScores?.scoreKanji !== undefined ? customScores.scoreKanji : scoreKanji;
+      const effNotes = customScores?.notes !== undefined ? customScores.notes : gradingNotes;
+
+      const finalKotoba = Number(rawKotoba) || 0;
+      const finalBumpo = Number(rawBumpo) || 0;
+      const finalKaiwa = Number(rawKaiwa) || 0;
+      const finalKanji = Number(rawKanji) || 0;
       const computedAverage = Math.round(((finalKotoba + finalBumpo + finalKaiwa + finalKanji) / 4) * 10) / 10;
 
       let letterGrade = "E";
@@ -632,28 +1204,38 @@ export default function LmsView({
       else if (computedAverage >= 70) letterGrade = "C";
       else if (computedAverage >= 60) letterGrade = "D";
 
+      // Canonical assessment doc ID
+      const subjSlug = getCanonicalSubjectSlug(assessmentSubject);
+      const canonicalDocId = `asses-${effStudentId}-${subjSlug}-ch${effChapterNumber}`;
+
       const payload: any = {
-        id: `asses-${viewStudentId}-${selectedBabNumber}-${Date.now()}`,
-        studentId: viewStudentId,
-        chapterId: `ch-${selectedBabNumber}`,
-        chapterNumber: Number(selectedBabNumber),
-        subject: assessmentSubject,
-        status: submitStatus,
+        id: canonicalDocId,
+        studentId: effStudentId,
+        studentName: targetStudent?.name || "Siswa",
+        chapterId: `ch-${effChapterNumber}`,
+        chapterNumber: Number(effChapterNumber),
+        title: `Bab ${effChapterNumber}`,
+        subject: assessmentSubject || (subjSlug === "matematika" ? "Matematika" : "Bahasa Jepang"),
+        status: "Telah Dinilai",
         score: computedAverage,
+        scoreKotoba: finalKotoba,
+        scoreBumpo: finalBumpo,
+        scoreKaiwa: finalKaiwa,
+        scoreKanji: finalKanji,
         grade: letterGrade,
-        notes: gradingNotes,
-        details: {
-          kotoba: finalKotoba,
-          bumpo: finalBumpo,
-          kaiwa: finalKaiwa,
-          kanji: finalKanji
-        },
-        assessedBy: currentUser?.name || "System",
-        assessedDate: new Date().toLocaleDateString("id-ID")
+        notes: effNotes || "",
+        assessedBy: currentUser?.name || "Sensei Utama",
+        assessedDate: new Date().toISOString().split("T")[0],
+        timestamp: Date.now()
       };
 
       if (onUpdateState) {
-        await onUpdateState("chapterAssessments", "UPDATE", payload);
+        const ok = await onUpdateState("chapterAssessments", "UPDATE", payload);
+        if (ok) {
+          alert(`Nilai Bab ${effChapterNumber} untuk ${targetStudent?.name || "Siswa"} (Grade ${letterGrade} - ${computedAverage}) berhasil disimpan!`);
+        } else {
+          alert("Gagal menyimpan nilai ke database.");
+        }
       }
     } catch (err) {
       console.error("Error submitting grade:", err);
@@ -675,6 +1257,12 @@ export default function LmsView({
     setIsSubmittingLesson(true);
     setLessonError("");
     
+    const isMathSub = isMathSubject(lessonSubject);
+    const isChapterNumMandiri = isMathSub ? Number(selectedBabNumber) > 25 : Number(selectedBabNumber) > 35;
+    const currentClassChapters = getClassChaptersList(selectedClassFilter || "Semua", lessonSubject, true);
+    const currChapter = currentClassChapters.find((ch: any) => Number(ch.number) === Number(selectedBabNumber));
+    const isMandiriLesson = currChapter?.isMandiri === true || isChapterNumMandiri || selectedLessonToEdit?.isMandiri === true;
+
     const payload: any = {
       subject: lessonSubject,
       chapterNumber: Number(selectedBabNumber),
@@ -683,13 +1271,14 @@ export default function LmsView({
       japaneseTitle: lessonJapaneseTitle,
       contentType: lessonContentType,
       uploadMethod: lessonUploadMethod,
-      videoUrl: lessonVideoUrl,
+      videoUrl: lessonContentType === "video" ? (formatVideoEmbedUrl(lessonVideoUrl) || lessonVideoUrl) : lessonVideoUrl,
       slidesUrl: lessonSlidesUrl,
       bookUrl: lessonBookUrl,
       audioData: lessonAudioData || "",
       content: lessonContent,
       isLocked: lessonIsLocked,
-      targetClass: lessonTargetClass,
+      isMandiri: isMandiriLesson,
+      targetClass: isMandiriLesson ? "Semua" : lessonTargetClass,
       deadline: lessonDeadline,
       durationMinutes: lessonDurationMinutes ? Number(lessonDurationMinutes) : undefined
     };
@@ -805,151 +1394,55 @@ export default function LmsView({
 
   const handleActivateChapterInLms = async (cls: string, chapterNum: number) => {
     if (!onUpdateState) return;
-    const lmsClasses = allClasses;
-    const classObj = lmsClasses.find((c: any) => (c.name || "").trim().toLowerCase() === (cls || "").trim().toLowerCase());
-    if (!classObj) return;
-
-    const isMath = assessmentSubject === "SSW";
-    const activeChapterNumKey = isMath ? "activeMathChapterNum" : "activeChapterNum";
-    const rawClassActiveChapter = classObj[activeChapterNumKey];
-    
-    const classActiveChapter = getResolvedChapterNum(cls, rawClassActiveChapter, assessmentSubject);
-
-    const trulyActiveChapters = getClassChaptersList(cls, assessmentSubject, false);
-    if (trulyActiveChapters.length === 0) {
-      alert("Gagal: Tidak ada bab aktif dalam kurikulum kelas ini.");
+    const targetCls = (cls || activeStudentClass || selectedClassFilter || allClasses[0]?.name || "").trim();
+    if (!targetCls) {
+      alert("Harap pilih kelas terlebih dahulu.");
       return;
     }
 
-    // Find target chapter position
-    const targetIndex = trulyActiveChapters.findIndex((ch: any) => ch.number === chapterNum);
-    if (targetIndex === -1) {
-      alert("Gagal: Bab ini tidak termasuk dalam kurikulum aktif kelas ini.");
-      return;
-    }
-
-    // Sequential Check:
-    if (classActiveChapter === 0) {
-      const firstCh = trulyActiveChapters[0];
-      if (chapterNum !== firstCh.number) {
-        alert(`Gagal: Pengaktifan bab harus berurutan. Silakan aktifkan Bab ${firstCh.number} terlebih dahulu.`);
-        return;
-      }
-    } else {
-      const activeIndex = trulyActiveChapters.findIndex((ch: any) => ch.number === classActiveChapter);
-      if (activeIndex !== -1) {
-        const nextCh = trulyActiveChapters[activeIndex + 1];
-        if (!nextCh) {
-          alert("Gagal: Semua bab dalam kurikulum kelas sudah diaktifkan.");
-          return;
-        }
-        if (chapterNum !== nextCh.number) {
-          alert(`Gagal: Pengaktifan bab harus berurutan. Silakan aktifkan Bab ${nextCh.number} terlebih dahulu.`);
-          return;
-        }
-      }
-    }
-
-    // Determine what exact value to store for activeChapterNum
-    let dbValueToSet = chapterNum;
-
-    await handleSetClassActiveChapter(cls, dbValueToSet);
-    alert(`Akses Bab ${chapterNum} berhasil diaktifkan! Status pembelajaran aktif.`);
+    await handleSetClassActiveChapter(targetCls, chapterNum, true);
+    setToastMessage(`Akses Bab ${chapterNum} berhasil dibuka untuk kelas ${targetCls}!`);
   };
 
   const handleDeactivateChapterInLms = async (cls: string, chapterNum: number) => {
     if (!onUpdateState) return;
-    const lmsClasses = allClasses;
-    const classObj = lmsClasses.find((c: any) => (c.name || "").trim().toLowerCase() === (cls || "").trim().toLowerCase());
-    if (!classObj) return;
-
-    const isMath = assessmentSubject === "SSW";
-    const activeChapterNumKey = isMath ? "activeMathChapterNum" : "activeChapterNum";
-    const rawClassActiveChapter = classObj[activeChapterNumKey];
-    
-    const classActiveChapter = getResolvedChapterNum(cls, rawClassActiveChapter, assessmentSubject);
-
-    if (chapterNum !== classActiveChapter) {
-      alert("Gagal: Hanya bab aktif terakhir yang dapat dinonaktifkan.");
+    const targetCls = (cls || activeStudentClass || selectedClassFilter || allClasses[0]?.name || "").trim();
+    if (!targetCls) {
+      alert("Harap pilih kelas terlebih dahulu.");
       return;
     }
 
-    const trulyActiveChapters = getClassChaptersList(cls, assessmentSubject, false);
-    const activeIndex = trulyActiveChapters.findIndex((ch: any) => ch.number === classActiveChapter);
-    
-    let prevChapterNum = 0;
-    if (activeIndex > 0) {
-      prevChapterNum = trulyActiveChapters[activeIndex - 1].number;
-    }
+    const norm = (s: string) => (s || "").trim().toLowerCase().replace(/^kelas[:\s]*/i, "");
+    const classObj = allClasses.find((c: any) => (c.name || "").trim().toLowerCase() === targetCls.toLowerCase() || norm(c.name) === norm(targetCls));
+    const isMath = assessmentSubject === "SSW";
+    const activeChapterNumKey = isMath ? "activeMathChapterNum" : "activeChapterNum";
+    const currentActive = classObj ? Number(classObj[activeChapterNumKey] || 1) : 1;
 
-    let dbValueToSet = prevChapterNum;
-
-    await handleSetClassActiveChapter(cls, dbValueToSet);
-    alert(`Akses Bab ${chapterNum} berhasil dinonaktifkan.`);
+    const newActiveNum = chapterNum >= currentActive ? Math.max(0, chapterNum - 1) : currentActive;
+    await handleSetClassActiveChapter(targetCls, newActiveNum, false, chapterNum);
+    setToastMessage(`Akses Bab ${chapterNum} berhasil ditutup untuk kelas ${targetCls}.`);
   };
 
   const handleToggleChapterActive = async (cls: string, chapterNum: number, currentActive: boolean) => {
     if (!onUpdateState) return;
-    const lmsClasses = allClasses;
-    const isMath = assessmentSubject === "SSW";
-    const chaptersKey = isMath ? "mathChapters" : "chapters";
+    const targetCls = (cls || activeStudentClass || selectedClassFilter || allClasses[0]?.name || "").trim();
+    if (!targetCls) return;
 
-    const updatedLmsClasses = lmsClasses.map((c: any) => {
-      const classId = c.id || c.name || "KLS-" + Math.random().toString(36).substr(2, 9);
-      if ((c.name || "").trim().toLowerCase() === (cls || "").trim().toLowerCase()) {
-        const activeNumKey = isMath ? "activeMathChapterNum" : "activeChapterNum";
-        let chapters = c[chaptersKey] || [];
-        if (chapters.length === 0) {
-          const baseTemplate = isMath ? MATH_CHAPTERS_LIST : CHAPTERS_LIST;
-          chapters = baseTemplate.map((ch: any) => ({
-            ...ch,
-            isActive: true,
-            activeDate: ""
-          }));
-        }
-        const updatedChapters = chapters.map((ch: any) => {
-          if (ch.number === chapterNum) {
-            return {
-              ...ch,
-              isActive: !currentActive
-            };
-          }
-          return ch;
-        });
-
-        const willBeActive = !currentActive;
-        const additionalUpdate: any = {};
-        if (willBeActive) {
-          additionalUpdate[activeNumKey] = chapterNum;
-        } else {
-          additionalUpdate[activeNumKey] = Math.max(1, chapterNum - 1);
-        }
-
-        return {
-          ...c,
-          id: classId,
-          [chaptersKey]: updatedChapters,
-          ...additionalUpdate
-        };
-      }
-      return {
-        ...c,
-        id: classId
-      };
-    });
-
-    await onUpdateState("customization", "update", {
-      ...systemState?.customization,
-      lmsClasses: updatedLmsClasses
-    });
+    if (currentActive) {
+      await handleDeactivateChapterInLms(targetCls, chapterNum);
+    } else {
+      await handleActivateChapterInLms(targetCls, chapterNum);
+    }
   };
 
   const handleUnlockAllChapters = async (cls: string) => {
     if (!onUpdateState) return;
+    const targetCls = (cls || activeStudentClass || selectedClassFilter || allClasses[0]?.name || "").trim();
     const lmsClasses = allClasses;
+    const norm = (s: string) => (s || "").trim().toLowerCase().replace(/^kelas[:\s]*/i, "");
     const updatedLmsClasses = lmsClasses.map((c: any) => {
       const classId = c.id || c.name || "KLS-" + Math.random().toString(36).substr(2, 9);
-      if ((c.name || "").trim().toLowerCase() === (cls || "").trim().toLowerCase()) {
+      if ((c.name || "").trim().toLowerCase() === targetCls.toLowerCase() || norm(c.name) === norm(targetCls)) {
         const isMath = assessmentSubject === "SSW";
         const chaptersKey = isMath ? "mathChapters" : "chapters";
         let chapters = c[chaptersKey] || [];
@@ -963,6 +1456,7 @@ export default function LmsView({
         }
         const updatedChapters = chapters.map((ch: any) => ({
           ...ch,
+          isActive: true,
           activeDate: ""
         }));
         return {
@@ -981,16 +1475,23 @@ export default function LmsView({
       ...systemState?.customization,
       lmsClasses: updatedLmsClasses
     });
+    onUpdateState("lmsClasses", "update", updatedLmsClasses).catch(() => {});
   };
 
-  const handleSetClassActiveChapter = async (cls: string, chapterNum: number) => {
+  const handleSetClassActiveChapter = async (cls: string, chapterNum: number, setActiveFlag: boolean = true, targetChapterToToggle?: number) => {
     if (!onUpdateState) return;
+    const targetCls = (cls || activeStudentClass || selectedClassFilter || allClasses[0]?.name || "").trim();
     const lmsClasses = allClasses;
+    const norm = (s: string) => (s || "").trim().toLowerCase().replace(/^kelas[:\s]*/i, "");
+    const normTarget = targetCls.toLowerCase();
+
     const updatedLmsClasses = lmsClasses.map((c: any) => {
       const classId = c.id || c.name || "KLS-" + Math.random().toString(36).substr(2, 9);
-      if ((c.name || "").trim().toLowerCase() === (cls || "").trim().toLowerCase()) {
+      if ((c.name || "").trim().toLowerCase() === normTarget || norm(c.name) === norm(targetCls)) {
         const isMath = assessmentSubject === "SSW";
         const chaptersKey = isMath ? "mathChapters" : "chapters";
+        const activeChapterNumKey = isMath ? "activeMathChapterNum" : "activeChapterNum";
+
         let chapters = c[chaptersKey] || [];
         if (chapters.length === 0) {
           const baseTemplate = isMath ? MATH_CHAPTERS_LIST : CHAPTERS_LIST;
@@ -1000,16 +1501,26 @@ export default function LmsView({
             activeDate: ""
           }));
         }
+
+        const chToSet = targetChapterToToggle !== undefined ? targetChapterToToggle : chapterNum;
+
         const updatedChapters = chapters.map((ch: any) => {
-          if (ch.number === chapterNum) {
+          if (ch.number === chToSet) {
             return {
               ...ch,
-              activeDate: ""
+              isActive: setActiveFlag,
+              activeDate: setActiveFlag ? (ch.activeDate || new Date().toISOString().split("T")[0]) : ""
+            };
+          }
+          if (setActiveFlag && ch.number <= chapterNum) {
+            return {
+              ...ch,
+              isActive: true
             };
           }
           return ch;
         });
-        const activeChapterNumKey = isMath ? "activeMathChapterNum" : "activeChapterNum";
+
         return {
           ...c,
           id: classId,
@@ -1027,6 +1538,258 @@ export default function LmsView({
       ...systemState?.customization,
       lmsClasses: updatedLmsClasses
     });
+    onUpdateState("lmsClasses", "update", updatedLmsClasses).catch(() => {});
+  };
+
+  const handleAddMandiriChapter = async (
+    cls: string,
+    customData?: { title?: string; japaneseTitle?: string; description?: string; number?: number; applyToAll?: boolean }
+  ): Promise<boolean> => {
+    if (!onUpdateState) return false;
+    const rawTargetClsName = (cls || activeStudentClass || selectedClassFilter || allClasses[0]?.name || "").trim();
+    if (!rawTargetClsName) {
+      setToastMessage("Harap pilih kelas terlebih dahulu untuk menambahkan Bab Mandiri.");
+      return false;
+    }
+    const isApplyToAll = customData?.applyToAll !== false; // Mandiri materials apply to ALL classes by default
+    const lmsClasses = allClasses.length > 0 ? allClasses : [{ name: rawTargetClsName, type: "regular", isActive: true }];
+    let newChapterNum = customData?.number || 1;
+
+    const isMath = assessmentSubject === "SSW";
+    const chaptersKey = isMath ? "mathChapters" : "chapters";
+    const baseTemplate = isMath ? MATH_CHAPTERS_LIST : CHAPTERS_LIST;
+
+    if (!customData?.number) {
+      let maxNum = baseTemplate.length;
+      lmsClasses.forEach((c: any) => {
+        const chs = c[chaptersKey] || [];
+        chs.forEach((ch: any) => {
+          if (Number(ch.number) > maxNum) maxNum = Number(ch.number);
+        });
+      });
+      newChapterNum = maxNum + 1;
+    } else {
+      newChapterNum = Number(customData.number);
+    }
+
+    const newChapter = {
+      number: newChapterNum,
+      title: (customData?.title || "").trim() || `Bab Mandiri ${newChapterNum}`,
+      japaneseTitle: (customData?.japaneseTitle || "").trim() || "Bab Mandiri",
+      description: (customData?.description || "").trim() || "Bab pembelajaran mandiri yang ditambahkan langsung oleh pengajar.",
+      isActive: true,
+      isMandiri: true,
+      activeDate: new Date().toISOString()
+    };
+
+    const norm = (s: string) => (s || "").trim().toLowerCase().replace(/^kelas[:\s]*/i, "");
+    let foundTarget = false;
+
+    const updatedLmsClasses = lmsClasses.map((c: any) => {
+      const classId = c.id || c.name || "KLS-" + Math.random().toString(36).substr(2, 9);
+      const isMatch = isApplyToAll || (c.name || "").trim().toLowerCase() === rawTargetClsName.toLowerCase() || norm(c.name) === norm(rawTargetClsName);
+
+      if (isMatch) {
+        foundTarget = true;
+        let chapters = c[chaptersKey] || [];
+        if (chapters.length === 0) {
+          chapters = baseTemplate.map((ch: any) => ({
+            ...ch,
+            isActive: true,
+            activeDate: ""
+          }));
+        }
+
+        const cleanChapters = chapters.filter((ch: any) => Number(ch.number) !== Number(newChapterNum));
+        const mergedChapters = [...cleanChapters, newChapter].sort((a: any, b: any) => Number(a.number) - Number(b.number));
+
+        return {
+          ...c,
+          id: classId,
+          [chaptersKey]: mergedChapters
+        };
+      }
+      return {
+        ...c,
+        id: classId
+      };
+    });
+
+    if (!foundTarget) {
+      const initialChapters = baseTemplate.map((ch: any) => ({
+        ...ch,
+        isActive: true,
+        activeDate: ""
+      }));
+      const cleanInitial = initialChapters.filter((ch: any) => Number(ch.number) !== Number(newChapterNum));
+      const mergedChapters = [...cleanInitial, newChapter].sort((a: any, b: any) => Number(a.number) - Number(b.number));
+      updatedLmsClasses.push({
+        id: "KLS-" + Math.random().toString(36).substr(2, 9),
+        name: rawTargetClsName,
+        type: "regular",
+        isActive: true,
+        [chaptersKey]: mergedChapters
+      });
+    }
+    
+    const ok = await onUpdateState("customization", "update", {
+      ...systemState?.customization,
+      lmsClasses: updatedLmsClasses
+    });
+    // Double-sync directly to lmsClasses collection for guaranteed persistence
+    onUpdateState("lmsClasses", "update", updatedLmsClasses).catch(() => {});
+    if (ok) {
+      setSelectedBabNumber(newChapterNum);
+      const titleToShow = (customData?.title || "").trim() || `Bab Mandiri ${newChapterNum}`;
+      setToastMessage(`✓ ${titleToShow} (Bab ${newChapterNum}) untuk SEMUA KELAS berhasil ditambahkan!`);
+      return true;
+    } else {
+      setToastMessage("Gagal menambahkan Bab Mandiri.");
+      return false;
+    }
+  };
+
+  const handleEditMandiriChapter = async (
+    cls: string,
+    chapterNum: number,
+    updatedData: { title?: string; japaneseTitle?: string; description?: string; number?: number; applyToAll?: boolean }
+  ): Promise<boolean> => {
+    if (!onUpdateState) return false;
+    const rawTargetClsName = (cls || activeStudentClass || selectedClassFilter || allClasses[0]?.name || "").trim();
+    if (!rawTargetClsName) {
+      setToastMessage("Harap pilih kelas terlebih dahulu.");
+      return false;
+    }
+    const isApplyToAll = updatedData?.applyToAll !== false; // Mandiri edits apply across all classes by default
+
+    const lmsClasses = allClasses.length > 0 ? allClasses : [{ name: rawTargetClsName, type: "regular", isActive: true }];
+    const isMath = assessmentSubject === "SSW";
+    const chaptersKey = isMath ? "mathChapters" : "chapters";
+    const newNum = updatedData.number !== undefined ? Number(updatedData.number) : chapterNum;
+    const norm = (s: string) => (s || "").trim().toLowerCase().replace(/^kelas[:\s]*/i, "");
+
+    const updatedLmsClasses = lmsClasses.map((c: any) => {
+      const classId = c.id || c.name || "KLS-" + Math.random().toString(36).substr(2, 9);
+      const isMatch = isApplyToAll || (c.name || "").trim().toLowerCase() === rawTargetClsName.toLowerCase() || norm(c.name) === norm(rawTargetClsName);
+
+      if (isMatch) {
+        let chapters = c[chaptersKey] || [];
+        if (chapters.length === 0) {
+          const baseTemplate = isMath ? MATH_CHAPTERS_LIST : CHAPTERS_LIST;
+          chapters = baseTemplate.map((ch: any) => ({
+            ...ch,
+            isActive: true,
+            activeDate: ""
+          }));
+        }
+
+        const updatedChapters = chapters.map((ch: any) => {
+          if (Number(ch.number) === Number(chapterNum)) {
+            return {
+              ...ch,
+              number: newNum,
+              title: updatedData.title !== undefined ? updatedData.title.trim() : ch.title,
+              japaneseTitle: updatedData.japaneseTitle !== undefined ? updatedData.japaneseTitle.trim() : ch.japaneseTitle,
+              description: updatedData.description !== undefined ? updatedData.description.trim() : ch.description,
+              isMandiri: true,
+              updatedAt: new Date().toISOString()
+            };
+          }
+          return ch;
+        });
+
+        return {
+          ...c,
+          id: classId,
+          [chaptersKey]: updatedChapters
+        };
+      }
+      return {
+        ...c,
+        id: classId
+      };
+    });
+
+    const ok = await onUpdateState("customization", "update", {
+      ...systemState?.customization,
+      lmsClasses: updatedLmsClasses
+    });
+    onUpdateState("lmsClasses", "update", updatedLmsClasses).catch(() => {});
+
+    if (ok) {
+      setSelectedBabNumber(newNum);
+      setToastMessage(`✓ Perubahan Bab ${newNum} ${isApplyToAll ? "untuk SEMUA KELAS" : ""} berhasil disimpan.`);
+      return true;
+    } else {
+      setToastMessage("Gagal menyimpan perubahan Bab Mandiri.");
+      return false;
+    }
+  };
+
+  const handleDeleteMandiriChapter = async (
+    cls: string,
+    chapterNum: number
+  ): Promise<boolean> => {
+    if (!onUpdateState) return false;
+    const targetClsName = (cls || activeStudentClass || selectedClassFilter || allClasses[0]?.name || "").trim();
+    const isMath = assessmentSubject === "SSW";
+    const chaptersKey = isMath ? "mathChapters" : "chapters";
+    let fallbackChapterNum = 1;
+    const norm = (s: string) => (s || "").trim().toLowerCase().replace(/^kelas[:\s]*/i, "");
+    const isTargetAll = !targetClsName || targetClsName.toLowerCase() === "semua" || targetClsName.toLowerCase() === "semua kelas";
+
+    const lmsClasses = allClasses.length > 0 ? allClasses : [{ name: targetClsName || "Kelas Utama", type: "regular", isActive: true }];
+    let hasDeletedAny = false;
+
+    const isStandard = isMath ? Number(chapterNum) <= 25 : Number(chapterNum) <= 35;
+    const updatedLmsClasses = lmsClasses.map((c: any) => {
+      const classId = c.id || c.name || "KLS-" + Math.random().toString(36).substr(2, 9);
+      let chapters = c[chaptersKey] || [];
+      if (chapters.length === 0) {
+        const baseTemplate = isMath ? MATH_CHAPTERS_LIST : CHAPTERS_LIST;
+        chapters = baseTemplate.map((ch: any) => ({
+          ...ch,
+          isActive: true,
+          activeDate: ""
+        }));
+      }
+
+      const targetChapter = chapters.find((ch: any) => Number(ch.number) === Number(chapterNum));
+      if (targetChapter && (targetChapter.isMandiri || !isStandard)) {
+        hasDeletedAny = true;
+        const remainingChapters = chapters.filter((ch: any) => Number(ch.number) !== Number(chapterNum));
+        if (remainingChapters.length > 0) {
+          const prevChapters = remainingChapters.filter((ch: any) => Number(ch.number) < Number(chapterNum));
+          fallbackChapterNum = prevChapters.length > 0 ? prevChapters[prevChapters.length - 1].number : remainingChapters[0].number;
+        }
+        return {
+          ...c,
+          id: classId,
+          [chaptersKey]: remainingChapters
+        };
+      }
+      return {
+        ...c,
+        id: classId
+      };
+    });
+
+    const ok = await onUpdateState("customization", "update", {
+      ...systemState?.customization,
+      lmsClasses: updatedLmsClasses
+    });
+    onUpdateState("lmsClasses", "update", updatedLmsClasses).catch(() => {});
+
+    if (ok) {
+      if (Number(selectedBabNumber) === Number(chapterNum)) {
+        setSelectedBabNumber(fallbackChapterNum);
+      }
+      setToastMessage(`✓ Bab Mandiri ${chapterNum} berhasil dihapus dari kurikulum kelas.`);
+      return true;
+    } else {
+      setToastMessage("Gagal menghapus Bab Mandiri.");
+      return false;
+    }
   };
 
   const getClassChaptersCount = (cls: string, sub: string, showAll: boolean = false) => {
@@ -1039,8 +1802,9 @@ export default function LmsView({
     // Merge classes from customization and top-level lmsClasses and deduplicate by trimmed name
     const rawList = [...(systemState?.customization?.lmsClasses || []), ...(systemState?.lmsClasses || [])];
     
-    // Also extract any classes from activeStudents that aren't in rawList
-    const studentClasses = (activeStudents || []).map(s => (s.class || "").trim()).filter(Boolean);
+    // Also extract any classes from activeStudents and users that aren't in rawList
+    const userClasses = (systemState?.users || []).map(u => (u.assignedClass || "").trim()).filter(Boolean);
+    const studentClasses = [...(activeStudents || []).map(s => (s.class || (s as any).assignedClass || "").trim()), ...userClasses].filter(Boolean);
     const seenClasses = new Set(rawList.map(c => (c.name || "").trim().toLowerCase()));
     
     studentClasses.forEach(scName => {
@@ -1065,7 +1829,7 @@ export default function LmsView({
       seen.add(nameKey);
       return true;
     });
-  }, [systemState?.lmsClasses, systemState?.customization?.lmsClasses, activeStudents]);
+  }, [systemState?.lmsClasses, systemState?.customization?.lmsClasses, systemState?.users, activeStudents]);
 
   const vvipPlottedStudents = React.useMemo(() => {
     let list = activeStudents || [];
@@ -1223,7 +1987,7 @@ export default function LmsView({
     }
   }, [filteredActiveStudents, selectedStudentId, currentUser]);
 
-  const viewStudentId = selectedStudentId || (currentUser?.studentId || "SIS-001");
+  const viewStudentId = (isSiswaOrAlumni ? (matchingStudent?.id || currentUser?.studentId) : selectedStudentId) || (currentUser?.studentId || "SIS-001");
   const viewStudent = (filteredActiveStudents || []).find((s: any) => s.id === viewStudentId) || (filteredActiveStudents || [])[0];
 
   
@@ -1231,10 +1995,15 @@ export default function LmsView({
     if (currentUser?.role === "Pengajar" && (!currentUser?.assignedClass || currentUser?.assignedClass === "Belum Diplot" || currentUser?.assignedClass === "Belum ada kelas")) {
       return null;
     }
-    if (isSiswaOrAlumni && matchingStudent?.class) return matchingStudent.class;
-    if (viewStudent && !isSiswaOrAlumni) return viewStudent.class;
+    if (isSiswaOrAlumni && (matchingStudent?.class || (matchingStudent as any)?.assignedClass)) {
+      return matchingStudent.class || (matchingStudent as any)?.assignedClass;
+    }
+    if (isSiswaOrAlumni && currentUser?.assignedClass && currentUser.assignedClass !== "Belum Diplot" && currentUser.assignedClass !== "Belum ada kelas") {
+      return currentUser.assignedClass;
+    }
+    if (viewStudent && !isSiswaOrAlumni) return viewStudent.class || (viewStudent as any)?.assignedClass;
     if (selectedClassForLms) return selectedClassForLms;
-    if (currentUser?.assignedClass) return currentUser?.assignedClass;
+    if (currentUser?.assignedClass && currentUser.assignedClass !== "Belum Diplot" && currentUser.assignedClass !== "Belum ada kelas") return currentUser.assignedClass;
     return null;
   }, [viewStudent, selectedClassForLms, isSiswaOrAlumni, currentUser, matchingStudent]);
 
@@ -1308,16 +2077,22 @@ export default function LmsView({
     return map;
   }, [chapterAssessments]);
   React.useEffect(() => {
-    if (viewStudentId && selectedBabNumber) {
+    if (viewStudentId) {
+      const targetChapter = (activeSubTab === "progress" && evalSelectedBabId !== "")
+        ? Number(evalSelectedBabId)
+        : Number(selectedBabNumber || 1);
+
       const assessment = (chapterAssessments || []).find(
-        (a: any) => a.studentId === viewStudentId && a.chapterNumber === Number(selectedBabNumber) && (a.subject || "Bahasa Jepang") === assessmentSubject
+        (a: any) => (a.studentId || "").trim() === (viewStudentId || "").trim() &&
+                    Number(a.chapterNumber) === Number(targetChapter) &&
+                    isSameSubject(a.subject, assessmentSubject)
       );
       if (assessment) {
         setGradingStatus(assessment.status || "Belum Belajar");
-        setScoreKotoba(assessment.details?.kotoba ?? assessment.details?.aritmatika ?? "");
-        setScoreBumpo(assessment.details?.bumpo ?? assessment.details?.rasio ?? "");
-        setScoreKaiwa(assessment.details?.kaiwa ?? assessment.details?.spasial ?? "");
-        setScoreKanji(assessment.details?.kanji ?? assessment.details?.logika ?? "");
+        setScoreKotoba(assessment.scoreKotoba ?? assessment.details?.kotoba ?? assessment.details?.aritmatika ?? "");
+        setScoreBumpo(assessment.scoreBumpo ?? assessment.details?.bumpo ?? assessment.details?.rasio ?? "");
+        setScoreKaiwa(assessment.scoreKaiwa ?? assessment.details?.kaiwa ?? assessment.details?.spasial ?? "");
+        setScoreKanji(assessment.scoreKanji ?? assessment.details?.kanji ?? assessment.details?.logika ?? "");
         setGradingNotes(assessment.notes || "");
       } else {
         setGradingStatus("Belum Belajar");
@@ -1328,18 +2103,22 @@ export default function LmsView({
         setGradingNotes("");
       }
     }
-  }, [viewStudentId, selectedBabNumber, assessmentSubject, chapterAssessments]);
+  }, [viewStudentId, selectedBabNumber, evalSelectedBabId, activeSubTab, assessmentSubject, chapterAssessments]);
 
   const hasInitializedBabRef = React.useRef({ studentId: "", subject: "" });
 
   React.useEffect(() => {
+    // CRITICAL: Only auto-jump selectedBabNumber for students viewing their own portal (isSiswaOrAlumni)!
+    // Sensei/Admin/Pengajar inspecting or grading students must NEVER have their active chapter hijacked!
+    if (!isSiswaOrAlumni) return;
+
     if (viewStudentId) {
       if (hasInitializedBabRef.current.studentId === viewStudentId && hasInitializedBabRef.current.subject === assessmentSubject) {
         return;
       }
       const targetStudent = activeStudents.find(s => s.id === viewStudentId);
       if (targetStudent) {
-        const studentAsss = (studentAssessmentsMap.get(viewStudentId) || []).filter((c: any) => (c.subject || "Bahasa Jepang") === assessmentSubject);
+        const studentAsss = (studentAssessmentsMap.get(viewStudentId) || []).filter((c: any) => isSameSubject(c.subject, assessmentSubject));
         const classObj = allClasses.find(c => (c.name || "").trim().toLowerCase() === (targetStudent.class || "").trim().toLowerCase());
         const activeChapterNumKey = assessmentSubject === "SSW" ? "activeMathChapterNum" : "activeChapterNum";
         const trulyActiveChapters = getClassChaptersList(targetStudent.class || "", assessmentSubject, false);
@@ -1369,7 +2148,7 @@ export default function LmsView({
         hasInitializedBabRef.current = { studentId: viewStudentId, subject: assessmentSubject };
       }
     }
-  }, [viewStudentId, assessmentSubject, activeStudents, studentAssessmentsMap, allClasses, getClassChaptersList]);
+  }, [viewStudentId, isSiswaOrAlumni, assessmentSubject, activeStudents, studentAssessmentsMap, allClasses, getClassChaptersList]);
 
 
   const studentAttendanceMap = React.useMemo(() => {
@@ -1407,6 +2186,62 @@ export default function LmsView({
   const realQuizzes = systemState?.lmsQuizzes || [];
   const quizQuestions = realQuizzes.filter(q => q.subject === "Bahasa Jepang" || q.subject === "SSW");
   
+  const checkEssayAnswer = (studentAns?: string, correctKey?: string): boolean => {
+    if (!studentAns || typeof studentAns !== "string" || !studentAns.trim()) return false;
+    if (!correctKey || typeof correctKey !== "string" || !correctKey.trim()) return true;
+
+    const cleanPunctuation = (s: string) =>
+      s.trim().toLowerCase().replace(/[.,!?:;'"~`\s。、？！「」]/g, "");
+
+    const cleanStudent = cleanPunctuation(studentAns);
+    const cleanKey = cleanPunctuation(correctKey);
+
+    if (!cleanStudent) return false;
+    if (cleanStudent === cleanKey) return true;
+
+    const keyVariants = correctKey
+      .trim()
+      .toLowerCase()
+      .split(/[,;\n\/|]+/)
+      .map(k => k.trim())
+      .filter(Boolean);
+
+    for (const variant of keyVariants) {
+      const cleanVariant = cleanPunctuation(variant);
+      if (!cleanVariant) continue;
+
+      // 1. Exact match (ignoring whitespace & punctuation)
+      if (cleanStudent === cleanVariant) return true;
+
+      // 2. Student answer contains the key variant (e.g. sentence containing the target word)
+      // Only valid if target key has length >= 2 and student answer is longer than key
+      if (cleanVariant.length >= 2 && cleanStudent.length > cleanVariant.length && cleanStudent.includes(cleanVariant)) {
+        return true;
+      }
+
+      // 3. Typo tolerance: strictly for long words (>= 5 chars) with at most 1 character typo
+      if (cleanVariant.length >= 5 && Math.abs(cleanStudent.length - cleanVariant.length) <= 1) {
+        let diff = 0;
+        let i = 0, j = 0;
+        while (i < cleanStudent.length && j < cleanVariant.length) {
+          if (cleanStudent[i] !== cleanVariant[j]) {
+            diff++;
+            if (diff > 1) break;
+            if (cleanStudent.length > cleanVariant.length) i++;
+            else if (cleanStudent.length < cleanVariant.length) j++;
+            else { i++; j++; }
+          } else {
+            i++;
+            j++;
+          }
+        }
+        if (diff <= 1) return true;
+      }
+    }
+
+    return false;
+  };
+
   // Group into practice packets (10 per packet)
   const practicePackets = [];
   for (let i = 0; i < realQuizzes.length; i += 10) {
@@ -1415,7 +2250,10 @@ export default function LmsView({
       q: q.question,
       options: q.options || [],
       correct: q.correctAnswerIndex || 0,
-      desc: "Jawaban yang benar adalah opsi ke-" + ((q.correctAnswerIndex || 0) + 1),
+      correctAnswerEssay: q.correctAnswerEssay || q.correctAnswerText || "",
+      desc: q.questionType === "essay" 
+        ? (q.correctAnswerEssay ? `Kunci jawaban: ${q.correctAnswerEssay}` : "Soal essay untuk latihan mandiri.")
+        : ("Jawaban yang benar adalah opsi ke-" + ((q.correctAnswerIndex || 0) + 1)),
       type: q.questionType || "pilihan_ganda"
     }));
     practicePackets.push({
@@ -1436,9 +2274,10 @@ export default function LmsView({
     if (currentQ?.questionType === "essay") {
       if (!essayAnswer.trim()) return;
       setIsQuizSubmitted(true);
-      // For essay, we assume correct or maybe no score impact for now, 
-      // but let's give partial/full point just for completing it.
-      setQuizScore(prev => prev + Math.round(100 / (quizQuestions.length || 1)));
+      const isCorrect = checkEssayAnswer(essayAnswer, currentQ?.correctAnswerEssay || currentQ?.correctAnswerText);
+      if (isCorrect) {
+        setQuizScore(prev => prev + Math.round(100 / (quizQuestions.length || 1)));
+      }
     } else {
       if (selectedOption === null) return;
       setIsQuizSubmitted(true);
@@ -1570,106 +2409,648 @@ export default function LmsView({
   }
 
     if (activeQuizChapterId !== null) {
-    const targetClassForQuiz = activeStudentClass || currentUser?.assignedClass || "";
+    const targetClassForQuiz = (activeStudentClass || currentUser?.assignedClass || selectedClassFilter || "").trim().toLowerCase();
     const activeChaptersListForQuiz = getClassChaptersList(targetClassForQuiz, assessmentSubject, true);
-    const chapter = activeChaptersListForQuiz.find(c => c.number === activeQuizChapterId);
-    if (!chapter) {
-      setActiveQuizChapterId(null);
-      return null;
-    }
+    const chapter = activeChaptersListForQuiz.find(c => c.number === activeQuizChapterId) || {
+      number: activeQuizChapterId,
+      title: `Bab ${activeQuizChapterId}`
+    };
+
     const lmsQuizzes = systemState?.lmsQuizzes || [];
-    const filteredQuizzes = lmsQuizzes.filter((q: any) => String(q.chapterId) === String(chapter.number) || Number(q.chapterId) === chapter.number);
+    const isStaff = ["Admin", "Admin Super", "Admin Biasa", "VVIP", "Pengajar", "Sensei"].includes(currentUser?.role || "");
+
+    // 1. Match quizzes by chapterNumber or chapterId (supporting number or string format)
+    const allChapterQuizzes = lmsQuizzes.filter((q: any) => {
+      const chNum = q.chapterNumber !== undefined ? Number(q.chapterNumber) : (q.chapterId !== undefined ? Number(q.chapterId) : NaN);
+      return chNum === chapter.number || String(q.chapterNumber) === String(chapter.number) || String(q.chapterId) === String(chapter.number);
+    });
+
+    let filteredQuizzes = allChapterQuizzes.filter((q: any) => {
+      const qClass = (q.targetClass || "Semua").trim().toLowerCase();
+      const isMandiriQuiz = q.isMandiri === true || (assessmentSubject === "SSW" ? Number(chapter.number) > 25 : Number(chapter.number) > 35);
+      const matchClass = (isStaff && (targetClassForQuiz === "" || targetClassForQuiz === "semua" || targetClassForQuiz === "semua kelas"))
+        ? true
+        : (isMandiriQuiz || qClass === "semua" || qClass === "semua kelas" || targetClassForQuiz === "" || qClass === targetClassForQuiz);
+      if (!matchClass) return false;
+
+      if (q.subject && assessmentSubject && !isSameSubject(q.subject, assessmentSubject)) {
+        return false;
+      }
+      return true;
+    });
+
+    // Fallback: If filteredQuizzes is empty because of class/subject string mismatch, use all chapter quizzes
+    if (filteredQuizzes.length === 0 && allChapterQuizzes.length > 0) {
+      filteredQuizzes = allChapterQuizzes;
+    }
+
+    if (activeQuizSubTitle) {
+      const targetSub = String(activeQuizSubTitle).trim().toLowerCase();
+      const subFiltered = filteredQuizzes.filter((q: any) => {
+        const qSub = (q.subTitle || "").trim().toLowerCase();
+        return qSub === targetSub ||
+          (targetSub === `kuis utama bab ${chapter.number}` && !qSub);
+      });
+      if (subFiltered.length > 0) {
+        filteredQuizzes = subFiltered;
+      }
+    }
+
+    if (filteredQuizzes.length === 0) {
+      return (
+        <div className="fixed inset-0 bg-slate-50 z-[9999] flex flex-col h-[100dvh] w-screen overflow-y-auto">
+          <div className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 shrink-0 shadow-sm sticky top-0 z-50">
+            <button onClick={() => { setActiveQuizChapterId(null); setActiveQuizSubTitle(null); }} className="flex items-center gap-2 p-2 hover:bg-slate-100 text-slate-700 rounded-lg transition cursor-pointer">
+              <ArrowLeft className="w-5 h-5" />
+              <span className="font-bold text-sm">Kembali</span>
+            </button>
+            <div className="flex-1 text-center font-bold text-sm px-4 truncate text-slate-800">
+              Kuis Bab {chapter.number}: {chapter.title} {activeQuizSubTitle ? `• ${activeQuizSubTitle}` : ""}
+            </div>
+            <div className="w-24"></div>
+          </div>
+          <div className="flex-1 max-w-xl w-full mx-auto p-6 flex items-center justify-center">
+            <div className="bg-white border border-slate-200 rounded-3xl p-8 text-center shadow-sm space-y-4 w-full">
+              <div className="w-16 h-16 bg-amber-50 text-amber-600 rounded-full flex items-center justify-center mx-auto text-2xl font-bold">
+                📝
+              </div>
+              <h3 className="font-bold text-slate-800 text-lg">Belum Ada Soal Kuis</h3>
+              <p className="text-xs text-slate-500 leading-relaxed">
+                Belum ada soal kuis yang terdaftar untuk Bab {chapter.number}{activeQuizSubTitle ? ` (${activeQuizSubTitle})` : ""}. Silakan buat soal kuis terlebih dahulu melalui menu materi.
+              </p>
+              <div className="pt-2 flex flex-col sm:flex-row items-center justify-center gap-2">
+                <button
+                  onClick={() => { setActiveQuizChapterId(null); setActiveQuizSubTitle(null); }}
+                  className="w-full sm:w-auto px-6 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition cursor-pointer"
+                >
+                  Kembali ke Materi
+                </button>
+                {isStaff && (
+                  <button
+                    onClick={() => {
+                      setActiveQuizChapterId(null);
+                      const existingForBab = (systemState?.lmsQuizzes || []).filter((q: any) => {
+                        const chNum = q.chapterNumber !== undefined ? Number(q.chapterNumber) : (q.chapterId !== undefined ? Number(q.chapterId) : NaN);
+                        return (chNum === chapter.number || String(q.chapterNumber) === String(chapter.number) || String(q.chapterId) === String(chapter.number)) &&
+                          (!q.subject || isSameSubject(q.subject, assessmentSubject));
+                      });
+
+                      const newBlank = {
+                        id: "QZ-" + Date.now() + "_" + Math.random().toString(36).substring(2, 9),
+                        subject: assessmentSubject || "Bahasa Jepang",
+                        chapterNumber: chapter.number,
+                        chapterId: chapter.number,
+                        questionType: "pilihan_ganda",
+                        question: "",
+                        options: ["", "", "", ""],
+                        correctAnswerIndex: 0,
+                        correctAnswerIndices: [0],
+                        allowMultipleAnswers: false,
+                        correctAnswerEssay: "",
+                        correctAnswerText: "",
+                        imageUrl: "",
+                        videoUrl: "",
+                        audioUrl: ""
+                      };
+
+                      if (existingForBab.length > 0) {
+                        const loaded = existingForBab.map((q: any) => {
+                          const cIndices = Array.isArray(q.correctAnswerIndices) && q.correctAnswerIndices.length > 0
+                            ? q.correctAnswerIndices.map(Number)
+                            : (q.correctAnswerIndex !== undefined ? [Number(q.correctAnswerIndex)] : [0]);
+                          return {
+                            ...q,
+                            chapterNumber: chapter.number,
+                            options: Array.isArray(q.options) && q.options.length > 0 ? q.options : ["", "", "", ""],
+                            correctAnswerIndex: cIndices[0] !== undefined ? cIndices[0] : 0,
+                            correctAnswerIndices: cIndices,
+                            allowMultipleAnswers: !!q.allowMultipleAnswers || q.questionType === "pilihan_ganda_kompleks" || cIndices.length > 1,
+                          };
+                        });
+                        setQuizBatch([...loaded, newBlank]);
+                        setSelectedBatchIndex(loaded.length);
+                      } else {
+                        setQuizBatch([newBlank]);
+                        setSelectedBatchIndex(0);
+                      }
+                      setSelectedBabNumber(chapter.number);
+                      setBatchChapterNumber(chapter.number);
+                      setBatchSubject(assessmentSubject || "Bahasa Jepang");
+                      setIsQuizFormOpen(true);
+                    }}
+                    className="w-full sm:w-auto px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl transition cursor-pointer"
+                  >
+                    + Buat Soal Kuis Sekarang
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    // Question randomization (Google Form style shuffle)
+    const isShuffleConfigured = filteredQuizzes[0]?.shuffleQuestions !== false;
+    const isShuffleActive = isQuizShuffleEnabled && isShuffleConfigured;
+
+    const displayQuizzes = (() => {
+      if (!isShuffleActive || filteredQuizzes.length <= 1) {
+        return filteredQuizzes;
+      }
+      const userKey = currentUser?.studentId || matchingStudent?.id || currentUser?.id || currentUser?.username || 'student';
+      const retakeKey = `${userKey}_ch${chapter.number}`;
+      const studentAttempt = retakeAttemptsMap[retakeKey] || 0;
+      const seedKey = isStaff
+        ? `${currentUser?.id || 'staff'}_ch${chapter.number}_salt${shuffleSalt}`
+        : `${userKey}_ch${chapter.number}${studentAttempt > 0 ? `_attempt_${studentAttempt}` : ''}_salt${shuffleSalt}`;
+      return seededShuffle(filteredQuizzes, seedKey);
+    })();
+
+    const isRetakeActiveForChapter = filteredQuizzes.some(q => retakingQuizIds.includes(q.id));
     const cbtStarted = !!cbtStartTimes[`kuis_ch_${chapter.number}`];
-    const isSubmitted = filteredQuizzes.every(q => submittedQuizIds.includes(q.id));
+    const hasStudentSubmitted = !isRetakeActiveForChapter && filteredQuizzes.length > 0 && filteredQuizzes.every(q => submittedQuizIds.includes(q.id));
+    const isSubmitted = hasStudentSubmitted || simulatedSubmission;
     const isQuizDeadlinePassed = filteredQuizzes[0]?.deadline ? new Date() > new Date(filteredQuizzes[0].deadline) : false;
-    const mcqQuizzes = filteredQuizzes.filter(q => q.questionType !== "essay");
-    const correctMcqs = mcqQuizzes.filter(q => studentQuizAnswers[q.id] === q.correctAnswerIndex);
-    const score = mcqQuizzes.length > 0 ? Math.round((correctMcqs.length / mcqQuizzes.length) * 100) : 0;
+    
+    // Auto-grading calculations for both MCQ & Essay
+    const isQuizItemCorrect = (q: any) => {
+      if (q.questionType === "essay") {
+        const studentAns = studentQuizEssayAnswers[q.id];
+        const key = q.correctAnswerEssay || q.correctAnswerText;
+        return checkEssayAnswer(studentAns, key);
+      }
+      const rawAns = studentQuizAnswers[q.id];
+      if (rawAns === undefined || rawAns === null) return false;
+      const studentKeys: number[] = Array.isArray(rawAns) ? rawAns.map(Number) : [Number(rawAns)];
+      const correctKeys: number[] = Array.isArray(q.correctAnswerIndices) && q.correctAnswerIndices.length > 0
+        ? q.correctAnswerIndices.map(Number)
+        : [q.correctAnswerIndex !== undefined ? Number(q.correctAnswerIndex) : 0];
+
+      if (studentKeys.length !== correctKeys.length) return false;
+      const sortedStudent = [...studentKeys].sort((a, b) => a - b);
+      const sortedCorrect = [...correctKeys].sort((a, b) => a - b);
+      return sortedStudent.every((val, idx) => val === sortedCorrect[idx]);
+    };
+
+    const correctQuizzesList = filteredQuizzes.filter(isQuizItemCorrect);
+    const totalScore = filteredQuizzes.length > 0 ? Math.round((correctQuizzesList.length / filteredQuizzes.length) * 100) : 0;
+    const hasEssayQuizzes = filteredQuizzes.some(q => q.questionType === "essay");
+    const hasMcqQuizzes = filteredQuizzes.some(q => q.questionType !== "essay");
+
+    const quizDurationMinutes = (() => {
+      const found = filteredQuizzes.find((q: any) => q.durationMinutes !== undefined && q.durationMinutes !== null && q.durationMinutes !== "" && Number(q.durationMinutes) > 0);
+      if (found) return Number(found.durationMinutes);
+      if (filteredQuizzes[0]?.durationMinutes && Number(filteredQuizzes[0].durationMinutes) > 0) return Number(filteredQuizzes[0].durationMinutes);
+      return null;
+    })();
+
+    const cbtTimerKey = `kuis_ch_${chapter.number}${activeQuizSubTitle ? `_${encodeURIComponent(activeQuizSubTitle)}` : ""}`;
+    const cbtEffectiveStartTime = (() => {
+      if (isRetakeActiveForChapter) {
+        return cbtStartTimes[cbtTimerKey] || Date.now();
+      }
+      const recorded = cbtStartTimes[cbtTimerKey] || cbtStartTimes[`kuis_ch_${chapter.number}`];
+      return recorded || Date.now();
+    })();
+
+    const submitStudentAssessment = async (isAutoExpire = false) => {
+      const allQuizIds = filteredQuizzes.map(q => q.id);
+      const newSubmitted = [...submittedQuizIds];
+      allQuizIds.forEach(id => {
+        if (!newSubmitted.includes(id)) newSubmitted.push(id);
+      });
+      setSubmittedQuizIds(newSubmitted);
+      setRetakingQuizIds(prev => prev.filter(id => !allQuizIds.includes(id)));
+      try {
+        const userKey = currentUser?.studentId || matchingStudent?.id || currentUser?.id || currentUser?.username || 'user';
+        localStorage.setItem(`cbtSubmittedIds_${userKey}`, JSON.stringify(newSubmitted));
+      } catch(e){}
+
+      const resolvedStudent = matchingStudent || (activeStudents || []).find((s: any) => {
+        const cId = (currentUser?.studentId || currentUser?.id || "").trim().toLowerCase();
+        const cEmail = (currentUser?.email || "").trim().toLowerCase();
+        const cUsername = (currentUser?.username || "").trim().toLowerCase();
+        const cName = (currentUser?.name || "").trim().toLowerCase();
+        const sId = (s.id || "").trim().toLowerCase();
+        const sEmail = (s.email || "").trim().toLowerCase();
+        const sName = (s.name || "").trim().toLowerCase();
+        return (cId && sId === cId) ||
+               (cEmail && (sEmail === cEmail || sId === cEmail)) ||
+               (cUsername && (sEmail === cUsername || sId === cUsername)) ||
+               (cName && sName === cName);
+      });
+
+      const sId = resolvedStudent?.id || currentUser?.studentId || currentUser?.id || "SIS-001";
+      const sName = resolvedStudent?.name || currentUser?.name || "Siswa";
+
+      const submissionDetails = filteredQuizzes.map(q => {
+        const rawChoice = studentQuizAnswers[q.id];
+        const studentChoice = Array.isArray(rawChoice)
+          ? rawChoice.map(Number)
+          : (rawChoice !== undefined && rawChoice !== null ? Number(rawChoice) : undefined);
+        const studentEssay = (studentQuizEssayAnswers[q.id] || "").trim();
+        const isEssay = q.questionType === "essay";
+        const isCorrect = isQuizItemCorrect(q);
+        const cIndices = Array.isArray(q.correctAnswerIndices) && q.correctAnswerIndices.length > 0
+          ? q.correctAnswerIndices.map(Number)
+          : [q.correctAnswerIndex !== undefined ? Number(q.correctAnswerIndex) : 0];
+
+        return {
+          quizId: q.id,
+          question: q.question,
+          questionType: q.questionType || (isEssay ? "essay" : (cIndices.length > 1 ? "pilihan_ganda_kompleks" : "pilihan_ganda")),
+          options: q.options || [],
+          correctAnswerIndex: cIndices[0] !== undefined ? cIndices[0] : (q.correctAnswerIndex || 0),
+          correctAnswerIndices: cIndices,
+          allowMultipleAnswers: !!q.allowMultipleAnswers || q.questionType === "pilihan_ganda_kompleks" || cIndices.length > 1,
+          correctAnswerEssay: q.correctAnswerEssay || q.correctAnswerText || "",
+          studentChoice,
+          studentEssay,
+          isCorrect,
+          points: q.points || 10,
+          explanation: q.explanation || ""
+        };
+      });
+
+      const assessPayload = {
+        studentId: sId,
+        studentName: sName,
+        studentEmail: currentUser?.email || resolvedStudent?.email || "",
+        chapterNumber: chapter.number,
+        title: chapter.title || `Bab ${chapter.number}`,
+        subTitle: activeQuizSubTitle || filteredQuizzes[0]?.subTitle || "",
+        lessonId: filteredQuizzes[0]?.lessonId || "",
+        targetClass: filteredQuizzes[0]?.targetClass || currentUser?.assignedClass || resolvedStudent?.class || "",
+        status: totalScore >= 75 ? "Telah Dinilai" : "Selesai Belajar",
+        score: totalScore,
+        subject: assessmentSubject || "Bahasa Jepang",
+        assessedBy: "Sistem CBT (Otomatis)",
+        notes: `Kuis Bab ${chapter.number}${activeQuizSubTitle ? ` (${activeQuizSubTitle})` : ""}: ${correctQuizzesList.length}/${filteredQuizzes.length} benar (Akurasi: ${totalScore}%)${isAutoExpire ? " [Waktu Habis Auto-Submit]" : ""}`,
+        studentAnswers: studentQuizAnswers,
+        essayAnswers: studentQuizEssayAnswers,
+        submittedAt: new Date().toISOString(),
+        details: {
+          quizDetails: submissionDetails,
+          studentQuizAnswers: studentQuizAnswers,
+          studentQuizEssayAnswers: studentQuizEssayAnswers,
+          submittedAt: new Date().toISOString()
+        }
+      };
+
+      if (onUpdateState) {
+        await onUpdateState("chapterAssessments", "update", assessPayload);
+      } else {
+        try {
+          await fetch("/api/state/update", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              dataType: "chapterAssessments",
+              action: "update",
+              payload: assessPayload
+            })
+          });
+        } catch (e) {
+          console.error("Direct fetch error:", e);
+        }
+      }
+    };
+
+    const handleTimerExpire = () => {
+      if (!isSubmitted) {
+        if (isStaff) {
+          setSimulatedSubmission(true);
+        } else {
+          submitStudentAssessment(true);
+        }
+      }
+    };
+
+    const answeredQuizzesCount = filteredQuizzes.filter(q => {
+      if (q.questionType === "essay") {
+        return !!(studentQuizEssayAnswers[q.id]?.trim());
+      }
+      const ans = studentQuizAnswers[q.id];
+      if (ans === undefined || ans === null) return false;
+      if (Array.isArray(ans)) return ans.length > 0;
+      return true;
+    }).length;
 
     return (
       <div className="fixed inset-0 bg-slate-50 z-[9999] flex flex-col h-[100dvh] w-screen overflow-y-auto">
-        <div className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 shrink-0 shadow-sm sticky top-0 z-50">
-           <button onClick={() => setActiveQuizChapterId(null)} className="flex items-center gap-2 p-2 hover:bg-slate-100 text-slate-700 rounded-lg transition">
+        {/* Sticky Header with Timer on top */}
+        <div className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-3 sm:px-6 shrink-0 shadow-sm sticky top-0 z-50">
+           <button onClick={() => { setActiveQuizChapterId(null); setActiveQuizSubTitle(null); setSimulatedSubmission(false); }} className="flex items-center gap-1.5 sm:gap-2 p-2 hover:bg-slate-100 text-slate-700 rounded-xl transition cursor-pointer shrink-0">
              <ArrowLeft className="w-5 h-5" />
-             <span className="font-bold text-sm">Kembali</span>
+             <span className="font-bold text-xs sm:text-sm">Kembali</span>
            </button>
-           <div className="flex-1 text-center font-bold text-sm px-4 truncate text-slate-800">
-             Kuis Bab {chapter.number}: {chapter.title}
+
+           <div className="flex-1 text-center font-bold text-xs sm:text-sm px-2 sm:px-4 truncate text-slate-800">
+             Kuis Bab {chapter.number}: {chapter.title} {activeQuizSubTitle ? `• ${activeQuizSubTitle}` : ""}
            </div>
-           <div className="w-24"></div>
+
+           <div className="flex items-center gap-2 shrink-0">
+             {/* Timer Compact in Top Header */}
+             {quizDurationMinutes && !isSubmitted && (
+               <CBTTimer 
+                 key={`header_${cbtEffectiveStartTime}`}
+                 startTime={cbtEffectiveStartTime} 
+                 durationMinutes={quizDurationMinutes} 
+                 onExpire={handleTimerExpire}
+                 compact={true}
+               />
+             )}
+             <span className="text-xs bg-slate-100 text-slate-700 font-bold px-2.5 sm:px-3 py-1 rounded-full border border-slate-200">
+               {filteredQuizzes.length} Soal
+             </span>
+           </div>
         </div>
+
+        {/* Staff Toolbar (Preview / Simulasi / Acak Soal) */}
+        {isStaff && (
+          <div className="bg-indigo-900 text-white px-4 py-2.5 shadow-sm text-xs flex flex-wrap items-center justify-between gap-3 sticky top-16 z-40">
+            <div className="flex items-center gap-2 font-medium">
+              <span className="bg-indigo-700 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide text-indigo-100">
+                Mode Pratinjau Pengajar
+              </span>
+              <span className="text-indigo-200 hidden sm:inline">•</span>
+              <span className="text-indigo-100 text-[11px] hidden sm:inline">
+                Kelas: <strong>{filteredQuizzes[0]?.targetClass || "Semua"}</strong>
+              </span>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <button
+                type="button"
+                onClick={() => setShowAdminAnswerKeys(!showAdminAnswerKeys)}
+                className={`px-3 py-1 rounded-lg text-[11px] font-bold transition flex items-center gap-1 cursor-pointer ${
+                  showAdminAnswerKeys ? "bg-amber-400 text-amber-950 shadow-sm" : "bg-indigo-800/80 hover:bg-indigo-800 text-indigo-100"
+                }`}
+              >
+                <span>{showAdminAnswerKeys ? "👁️ Sembunyikan Kunci" : "👁️ Tampilkan Kunci"}</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsQuizShuffleEnabled(!isQuizShuffleEnabled)}
+                className={`px-3 py-1 rounded-lg text-[11px] font-bold transition flex items-center gap-1 cursor-pointer ${
+                  isQuizShuffleEnabled ? "bg-emerald-500 text-white shadow-sm" : "bg-indigo-800/80 hover:bg-indigo-800 text-indigo-200"
+                }`}
+                title="Aktifkan/nonaktifkan fitur acak urutan soal seperti Google Form"
+              >
+                <span>🔀 Acak Soal: {isQuizShuffleEnabled ? "Aktif" : "Nonaktif"}</span>
+              </button>
+
+              {isQuizShuffleEnabled && (
+                <button
+                  type="button"
+                  onClick={() => setShuffleSalt(s => s + 1)}
+                  className="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-indigo-800 hover:bg-indigo-700 text-indigo-100 transition cursor-pointer flex items-center gap-1"
+                  title="Kocok ulang urutan soal untuk melihat variasi tampilan soal"
+                >
+                  <RotateCcw className="w-3 h-3" />
+                  <span>Kocok Urutan</span>
+                </button>
+              )}
+
+              {isSubmitted ? (
+                <button
+                  type="button"
+                  onClick={() => setSimulatedSubmission(false)}
+                  className="px-3 py-1 rounded-lg text-[11px] font-bold bg-white text-indigo-900 hover:bg-indigo-50 transition cursor-pointer"
+                >
+                  🔄 Ulangi Simulasi
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setSimulatedSubmission(true)}
+                  className="px-3 py-1 rounded-lg text-[11px] font-bold bg-emerald-500 hover:bg-emerald-400 text-white transition cursor-pointer shadow-xs"
+                >
+                  🧪 Uji Nilai Otomatis
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* WAKTU PENGERJAAN KUIS DILETAKKAN DI ATAS SAAT MENGERJAKAN */}
+        {!isSubmitted && (
+          <div className={`bg-gradient-to-r from-rose-50/95 via-purple-50/95 to-indigo-50/95 backdrop-blur-md border-b border-rose-200/90 px-3 sm:px-6 py-2.5 sticky ${isStaff ? "top-[6.5rem]" : "top-16"} z-30 shadow-xs transition-all`}>
+            <div className="max-w-4xl w-full mx-auto flex flex-col sm:flex-row items-center justify-between gap-2.5">
+              <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-start">
+                <div className="flex items-center gap-2">
+                  <span className="text-base sm:text-lg animate-pulse">⏱️</span>
+                  <div>
+                    <span className="text-[10px] font-black uppercase tracking-wider text-rose-900 block leading-tight">
+                      Waktu Pengerjaan Kuis
+                    </span>
+                    <span className="text-[11px] text-slate-500 font-medium">
+                      {quizDurationMinutes ? `Batas waktu: ${quizDurationMinutes} menit` : "Kuis tanpa batasan durasi"}
+                    </span>
+                  </div>
+                </div>
+
+                {quizDurationMinutes ? (
+                  <CBTTimer 
+                    key={`banner_${cbtEffectiveStartTime}`}
+                    startTime={cbtEffectiveStartTime} 
+                    durationMinutes={quizDurationMinutes} 
+                    onExpire={handleTimerExpire}
+                  />
+                ) : (
+                  <span className="bg-emerald-100 text-emerald-800 font-bold text-xs px-3 py-1 rounded-xl border border-emerald-300 flex items-center gap-1 font-mono">
+                    <span>✓ Bebas Waktu</span>
+                  </span>
+                )}
+              </div>
+
+              {/* Progress counter & progress bar */}
+              <div className="flex items-center gap-3 text-xs font-semibold text-slate-700 w-full sm:w-auto justify-between sm:justify-end border-t sm:border-t-0 pt-2 sm:pt-0 border-rose-200/60">
+                <span className="text-[11px] sm:text-xs">
+                  Progres: <strong className="text-purple-700 font-black">{answeredQuizzesCount}</strong> / {filteredQuizzes.length} Soal
+                </span>
+                <div className="w-24 sm:w-36 bg-slate-200 rounded-full h-2.5 overflow-hidden border border-slate-300/50">
+                  <div 
+                    className="bg-purple-600 h-full rounded-full transition-all duration-300"
+                    style={{ width: `${filteredQuizzes.length > 0 ? Math.round((answeredQuizzesCount / filteredQuizzes.length) * 100) : 0}%` }}
+                  />
+                </div>
+                <span className="text-[10px] font-mono font-bold text-purple-700">
+                  {filteredQuizzes.length > 0 ? Math.round((answeredQuizzesCount / filteredQuizzes.length) * 100) : 0}%
+                </span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Student Banner when shuffle is active */}
+        {!isStaff && isShuffleActive && (
+          <div className="bg-indigo-50/80 border-b border-indigo-100 px-4 py-2 text-center text-xs text-indigo-800 font-medium flex items-center justify-center gap-2">
+            <span>🔀</span>
+            <span>Urutan soal diacak otomatis untuk setiap siswa seperti Google Form.</span>
+          </div>
+        )}
         
         <div className="flex-1 max-w-4xl w-full mx-auto p-4 sm:p-6 pb-24">
            {isSubmitted ? (
-             <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-6 mb-8 text-center shadow-sm">
-                <h3 className="text-emerald-800 font-extrabold text-xl mb-2">🎉 Kuis Selesai</h3>
-                <p className="text-emerald-700 text-sm mb-4">Anda telah menyelesaikan kuis ini.</p>
-                {mcqQuizzes.length > 0 && (
-                  <div className="inline-block bg-white border border-emerald-200 rounded-xl px-6 py-4 shadow-sm mb-4">
-                     <p className="text-xs font-bold text-emerald-600 uppercase tracking-widest mb-1">Nilai Pilihan Ganda</p>
-                     <p className="text-4xl font-black text-slate-800">{score}</p>
+             <div className="bg-emerald-50 border border-emerald-200 rounded-3xl p-6 sm:p-8 mb-8 text-center shadow-sm space-y-5">
+                <div className="inline-flex items-center justify-center w-14 h-14 bg-emerald-100 text-emerald-700 rounded-full text-2xl font-bold">
+                  🎉
+                </div>
+                <div>
+                  <h3 className="text-emerald-900 font-extrabold text-2xl">Kuis Selesai</h3>
+                  <p className="text-emerald-700 text-sm mt-1">
+                    {simulatedSubmission 
+                      ? "Hasil uji coba penilaian simulasi kuis telah dihitung secara otomatis." 
+                      : "Anda telah menyelesaikan kuis ini. Hasil penilaian otomatis telah dihitung."}
+                  </p>
+                </div>
+                
+                <div className="inline-block bg-white border border-emerald-200 rounded-3xl px-10 py-6 shadow-sm">
+                   <p className="text-xs font-black text-emerald-600 uppercase tracking-widest mb-1.5">Total Nilai Kuis (Otomatis)</p>
+                   <p className="text-5xl font-black text-slate-800">{totalScore} <span className="text-lg font-bold text-slate-400">/ 100</span></p>
+                   <div className="flex items-center justify-center gap-3 mt-3 pt-3 border-t border-slate-100 text-xs font-semibold text-slate-600">
+                     <span>Benar: <strong className="text-emerald-600">{correctQuizzesList.length}</strong> / {filteredQuizzes.length} Soal</span>
+                     <span>•</span>
+                     <span>Akurasi: <strong>{totalScore}%</strong></span>
+                   </div>
+                </div>
+
+                {hasEssayQuizzes && (
+                  <div>
+                    <p className="text-xs text-emerald-800 bg-emerald-100/70 p-3 rounded-2xl inline-block font-medium border border-emerald-200 max-w-xl mx-auto">
+                      💡 Soal essay telah dinilai secara otomatis sesuai dengan kunci jawaban yang ditentukan.
+                    </p>
                   </div>
                 )}
-                {filteredQuizzes.some(q => q.questionType === "essay") && (
-                  <p className="text-xs text-emerald-600 bg-emerald-100/50 p-3 rounded-xl inline-block font-medium">
-                    ✏️ Jawaban essay Anda telah tersimpan dan akan dinilai secara manual oleh Sensei.
-                  </p>
-                )}
+
+                <div className="pt-2 flex flex-wrap items-center justify-center gap-3">
+                  <button
+                    onClick={() => { setActiveQuizChapterId(null); setSimulatedSubmission(false); }}
+                    className="px-6 py-2.5 bg-slate-800 hover:bg-slate-900 text-white font-bold text-xs rounded-xl transition cursor-pointer"
+                  >
+                    Kembali ke Materi
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (isStaff) {
+                        setSimulatedSubmission(false);
+                      } else {
+                        handleRetakeQuiz(chapter.number, filteredQuizzes.map(q => q.id), activeQuizSubTitle);
+                      }
+                    }}
+                    className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl transition cursor-pointer flex items-center gap-1.5 shadow-sm"
+                  >
+                    <span>🔄 {isStaff ? "Ulangi Uji Coba Kuis" : "Kerjakan Ulang Kuis (Buka Soal)"}</span>
+                  </button>
+                </div>
              </div>
            ) : (
              <div className="bg-white border border-slate-200 rounded-2xl p-4 sm:p-6 mb-6 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
                <div>
-                  <h3 className="font-bold text-slate-800">Informasi Kuis</h3>
-                  <p className="text-xs text-slate-500 mt-1">Jawablah semua pertanyaan di bawah ini dengan tepat.</p>
+                  <h3 className="font-bold text-slate-800 text-base">Informasi Pengerjaan Kuis</h3>
+                  <div className="flex items-center gap-2 mt-1 text-xs text-slate-500">
+                    <span>Jumlah: <strong className="text-slate-700">{filteredQuizzes.length} Soal</strong></span>
+                    <span>•</span>
+                    <span>Format: <strong className="text-slate-700">{hasMcqQuizzes && hasEssayQuizzes ? "Pilihan Ganda & Essay" : hasEssayQuizzes ? "Essay" : "Pilihan Ganda"}</strong></span>
+                    {isShuffleActive && (
+                      <>
+                        <span>•</span>
+                        <span className="text-indigo-600 font-semibold">🔀 Soal Diacak</span>
+                      </>
+                    )}
+                  </div>
                </div>
-               {filteredQuizzes[0]?.durationMinutes && (
-                 <div className="bg-slate-50 border border-slate-200 p-3 rounded-xl flex items-center gap-3">
-                   <span className="text-xs font-bold text-slate-600">Sisa Waktu:</span>
-                   {cbtStarted ? (
-                     <CBTTimer 
-                       startTime={cbtStartTimes[`kuis_ch_${chapter.number}`]} 
-                       durationMinutes={filteredQuizzes[0].durationMinutes} 
-                       onExpire={() => {
-                         const allQuizIds = filteredQuizzes.map(q => q.id);
-                         const newSubmitted = [...submittedQuizIds];
-                         allQuizIds.forEach(id => {
-                           if (!newSubmitted.includes(id)) newSubmitted.push(id);
-                         });
-                         setSubmittedQuizIds(newSubmitted);
-                         setCbtStartTimes(prev => ({...prev}));
-                       }} 
-                     />
-                   ) : (
-                     <span className="text-sm font-black text-slate-800">{filteredQuizzes[0].durationMinutes}:00</span>
-                   )}
+               {quizDurationMinutes ? (
+                 <div className="bg-rose-50/80 border border-rose-200 p-3 rounded-2xl flex items-center gap-3">
+                   <span className="text-xs font-bold text-rose-800">⏱️ Batas Durasi:</span>
+                   <span className="text-xs font-black text-rose-900 bg-white px-2.5 py-1 rounded-xl border border-rose-200 shadow-2xs font-mono">
+                     {quizDurationMinutes} Menit
+                   </span>
+                   <span className="text-[11px] text-rose-700 font-medium hidden sm:inline">
+                     (Timer waktu aktif disematkan di bagian atas layar)
+                   </span>
+                 </div>
+               ) : (
+                 <div className="bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl text-xs text-slate-600 font-medium flex items-center gap-1.5">
+                   <span>⏱️</span>
+                   <span>Tanpa Batas Waktu</span>
                  </div>
                )}
              </div>
            )}
 
-           {(!filteredQuizzes[0]?.durationMinutes || cbtStarted || isSubmitted || currentUser?.role !== "Siswa") ? (
-             <div className="space-y-6">
-                {filteredQuizzes.map((quiz, idx) => {
-                  const isQSubmitted = submittedQuizIds.includes(quiz.id);
+           {/* Header Pembahasan & Tinjauan Soal saat Kuis Selesai */}
+           {isSubmitted && (
+             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4 px-1 bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs">
+               <div>
+                 <h4 className="font-bold text-slate-800 text-sm flex items-center gap-2">
+                   <span>📝 Pembahasan & Tinjauan Soal</span>
+                   <span className="text-xs font-semibold text-indigo-700 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded-md">
+                     {displayQuizzes.length} Soal
+                   </span>
+                 </h4>
+                 <p className="text-xs text-slate-500 mt-0.5">
+                   Periksa jawaban yang telah dikerjakan beserta kunci pembahasan di bawah ini.
+                 </p>
+               </div>
+               {!isStaff && (
+                 <button
+                   type="button"
+                   onClick={() => handleRetakeQuiz(chapter.number, filteredQuizzes.map(q => q.id), activeQuizSubTitle)}
+                   className="text-xs font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-1 cursor-pointer underline self-start sm:self-auto"
+                 >
+                   <span>Ingin mengulang kuis? Klik Kerjakan Ulang</span>
+                 </button>
+               )}
+             </div>
+           )}
+
+           <div className="space-y-6">
+              {displayQuizzes.map((quiz, idx) => {
+                  const isQSubmitted = submittedQuizIds.includes(quiz.id) || simulatedSubmission;
                   const selectedAns = studentQuizAnswers[quiz.id];
                   const essayAns = studentQuizEssayAnswers[quiz.id] || "";
-                  const isCorrect = selectedAns === quiz.correctAnswerIndex;
+                  const isCorrect = isQuizItemCorrect(quiz);
+                  const keyEssay = quiz.correctAnswerEssay || quiz.correctAnswerText || "";
+
+                  const correctKeys: number[] = Array.isArray(quiz.correctAnswerIndices) && quiz.correctAnswerIndices.length > 0
+                    ? quiz.correctAnswerIndices.map(Number)
+                    : [quiz.correctAnswerIndex !== undefined ? Number(quiz.correctAnswerIndex) : 0];
+                  const isMultiChoice = correctKeys.length > 1 || !!quiz.allowMultipleAnswers || quiz.questionType === "pilihan_ganda_kompleks";
+                  const studentChoices: number[] = Array.isArray(selectedAns)
+                    ? selectedAns.map(Number)
+                    : (selectedAns !== undefined && selectedAns !== null ? [Number(selectedAns)] : []);
+
                   return (
-                    <div key={quiz.id} className="bg-white border border-slate-200 rounded-2xl p-5 sm:p-6 flex flex-col gap-4 shadow-sm relative">
-                      <div className="flex items-center gap-2">
-                        <span className="text-xs font-bold bg-slate-100 text-slate-600 px-2.5 py-1 rounded-lg">Soal {idx + 1}</span>
-                        <span className="text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-100 px-2 py-0.5 rounded-md uppercase">
-                          {quiz.questionType === "essay" ? "Essay" : "Pilihan Ganda"}
-                        </span>
+                    <div key={quiz.id} className="bg-white border border-slate-200 rounded-3xl p-5 sm:p-6 flex flex-col gap-4 shadow-sm relative">
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-xs font-bold bg-slate-100 text-slate-700 px-3 py-1 rounded-xl">
+                            Soal {idx + 1} <span className="text-slate-400 font-normal">dari {displayQuizzes.length}</span>
+                          </span>
+                          <span className="text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-100 px-2.5 py-0.5 rounded-md uppercase">
+                            {quiz.questionType === "essay" ? "Essay" : isMultiChoice ? "☑️ Pilihan Ganda Kompleks (Bisa >1 Jawaban)" : "🔘 Pilihan Ganda"}
+                          </span>
+                        </div>
+                        {isStaff && showAdminAnswerKeys && (
+                          <span className="text-[11px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-lg">
+                            {quiz.questionType === "essay" 
+                              ? `🔑 Kunci: ${keyEssay || "(Belum ada)"}` 
+                              : `🔑 Kunci: Opsi ${correctKeys.map(k => String.fromCharCode(65 + k)).join(", ")}`}
+                          </span>
+                        )}
                       </div>
                       
                       {quiz.imageUrl && (
-                        <div className="relative w-full max-w-sm rounded-xl overflow-hidden border border-slate-200 bg-slate-50">
-                          <img src={quiz.imageUrl} alt="Gambar Soal Kuis" className="w-full h-auto object-contain" />
+                        <div className="relative w-full max-w-md rounded-2xl overflow-hidden border border-slate-200 bg-slate-50">
+                          <img src={quiz.imageUrl} alt="Gambar Soal Kuis" className="w-full h-auto max-h-72 object-contain" />
                         </div>
                       )}
                       
-                      <div className="text-sm font-medium text-slate-800 leading-relaxed whitespace-pre-wrap">
+                      <div className="text-base font-semibold text-slate-800 leading-relaxed whitespace-pre-wrap">
                         {quiz.question}
                       </div>
 
@@ -1681,87 +3062,182 @@ export default function LmsView({
                             placeholder={isQuizDeadlinePassed && !isQSubmitted ? "Batas waktu pengerjaan telah berakhir." : "Ketik jawaban Anda di sini..."}
                             value={essayAns}
                             onChange={(e) => setStudentQuizEssayAnswers({...studentQuizEssayAnswers, [quiz.id]: e.target.value})}
-                            className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 text-sm text-slate-700 focus:outline-indigo-500 focus:bg-white transition disabled:opacity-60"
+                            className="w-full bg-slate-50 border border-slate-200 rounded-2xl p-4 text-sm text-slate-700 focus:outline-indigo-500 focus:bg-white transition disabled:opacity-75"
                           />
+                          
+                          {/* Essay Feedback when Submitted */}
+                          {isQSubmitted && (
+                            <div className={`mt-3 p-4 rounded-2xl text-xs space-y-2 border ${
+                              isCorrect ? "bg-emerald-50 text-emerald-800 border-emerald-200" : "bg-rose-50 text-rose-800 border-rose-200"
+                            }`}>
+                              <div className="flex items-center justify-between font-bold">
+                                <span>{isCorrect ? "🎉 Jawaban Essay Benar!" : "❌ Jawaban Essay Kurang Tepat"}</span>
+                                <span className={`text-[10px] px-2.5 py-0.5 rounded-full font-bold uppercase ${
+                                  isCorrect ? "bg-emerald-200 text-emerald-900" : "bg-rose-200 text-rose-900"
+                                }`}>
+                                  {isCorrect ? "Poin Penuh (100%)" : "Poin 0%"}
+                                </span>
+                              </div>
+                              <div className="space-y-1.5 bg-white/90 p-3.5 rounded-xl border border-black/5 text-slate-700">
+                                <div>
+                                  <span className="font-bold text-[10px] text-slate-400 uppercase tracking-wider">Jawaban Anda:</span>
+                                  <p className="font-semibold text-xs text-slate-800 mt-0.5">{essayAns || "(Kosong / Tidak diisi)"}</p>
+                                </div>
+                                {keyEssay ? (
+                                  <div className="pt-2 border-t border-slate-100">
+                                    <span className="font-bold text-[10px] text-emerald-700 uppercase tracking-wider">Kunci Jawaban yang Benar:</span>
+                                    <p className="font-bold text-xs text-emerald-900 mt-0.5">{keyEssay}</p>
+                                  </div>
+                                ) : (
+                                  <p className="text-[10px] text-slate-400 italic pt-1 border-t border-slate-100">
+                                    (Tidak ada kunci jawaban spesifik yang ditentukan).
+                                  </p>
+                                )}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       ) : (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
-                          {(quiz.options || []).map((opt, oIdx) => {
-                            const isSelected = selectedAns === oIdx;
-                            const isCorrectOpt = oIdx === quiz.correctAnswerIndex;
-                            let btnStyle = "bg-white border border-slate-200 text-slate-700 hover:bg-slate-50";
-                            if (isQSubmitted) {
-                              if (isCorrectOpt) {
-                                btnStyle = "bg-emerald-50 border-emerald-300 text-emerald-800 font-bold";
+                        <div className="space-y-2 mt-2">
+                          {isMultiChoice && !isQSubmitted && (
+                            <span className="text-[11px] font-bold text-purple-700 bg-purple-50 border border-purple-200 px-3 py-1 rounded-xl flex items-center gap-1.5 self-start">
+                              <CheckSquare className="w-3.5 h-3.5" />
+                              <span>Pilihan Ganda Kompleks: Anda dapat memilih lebih dari 1 jawaban yang benar (centang semua yang sesuai).</span>
+                            </span>
+                          )}
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            {(quiz.options || []).map((opt: string, oIdx: number) => {
+                              const isSelected = isMultiChoice ? studentChoices.includes(oIdx) : selectedAns === oIdx;
+                              const isCorrectOpt = correctKeys.includes(oIdx);
+                              let btnStyle = "bg-white border border-slate-200 text-slate-700 hover:bg-slate-50";
+                              if (isQSubmitted) {
+                                if (isCorrectOpt) {
+                                  btnStyle = "bg-emerald-50 border-emerald-300 text-emerald-800 font-bold";
+                                } else if (isSelected) {
+                                  btnStyle = "bg-rose-50 border-rose-300 text-rose-800 font-medium";
+                                } else {
+                                  btnStyle = "bg-slate-50 border-slate-200 text-slate-400 opacity-60";
+                                }
                               } else if (isSelected) {
-                                btnStyle = "bg-rose-50 border-rose-300 text-rose-800";
-                              } else {
-                                btnStyle = "bg-slate-50 border-slate-200 text-slate-400 opacity-60";
+                                btnStyle = "bg-indigo-50 border-indigo-400 text-indigo-700 font-bold shadow-xs ring-1 ring-indigo-300";
                               }
-                            } else if (isSelected) {
-                              btnStyle = "bg-indigo-50 border-indigo-400 text-indigo-700 font-bold";
-                            }
-                            return (
-                              <button
-                                key={oIdx}
-                                disabled={isQSubmitted || isQuizDeadlinePassed}
-                                onClick={() => setStudentQuizAnswers({...studentQuizAnswers, [quiz.id]: oIdx})}
-                                className={`px-4 py-3 rounded-xl text-left text-sm transition flex items-start gap-3 cursor-pointer ${btnStyle}`}
-                              >
-                                <span className="font-black bg-white/50 border border-black/5 text-slate-600 text-[10px] px-2 py-0.5 rounded-md uppercase shrink-0 mt-0.5">
-                                  {String.fromCharCode(65 + oIdx)}
-                                </span>
-                                <span className="leading-snug">{opt}</span>
-                              </button>
-                            );
-                          })}
+
+                              const handleClickOption = () => {
+                                if (isQSubmitted || isQuizDeadlinePassed) return;
+                                if (isMultiChoice) {
+                                  let nextChoices: number[];
+                                  if (studentChoices.includes(oIdx)) {
+                                    nextChoices = studentChoices.filter(i => i !== oIdx);
+                                  } else {
+                                    nextChoices = [...studentChoices, oIdx].sort((a, b) => a - b);
+                                  }
+                                  setStudentQuizAnswers({ ...studentQuizAnswers, [quiz.id]: nextChoices });
+                                } else {
+                                  setStudentQuizAnswers({ ...studentQuizAnswers, [quiz.id]: oIdx });
+                                }
+                              };
+
+                              return (
+                                <button
+                                  key={oIdx}
+                                  type="button"
+                                  disabled={isQSubmitted || isQuizDeadlinePassed}
+                                  onClick={handleClickOption}
+                                  className={`px-4 py-3.5 rounded-2xl text-left text-sm transition flex items-start gap-3 cursor-pointer ${btnStyle}`}
+                                >
+                                  <span className={`font-black text-[10px] px-2.5 py-1 rounded-lg uppercase shrink-0 mt-0.5 border flex items-center justify-center ${
+                                    isSelected 
+                                      ? "bg-indigo-600 text-white border-indigo-600 shadow-2xs" 
+                                      : "bg-slate-100 border-slate-200 text-slate-600"
+                                  }`}>
+                                    {isMultiChoice ? (isSelected ? "✓ " : " ") : ""}{String.fromCharCode(65 + oIdx)}
+                                  </span>
+                                  <span className="leading-snug pt-0.5 flex-1">{opt}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
                         </div>
                       )}
                       
-                      {isQSubmitted && quiz.questionType !== "essay" && (
-                        <div className={`mt-4 p-4 rounded-xl text-xs font-bold flex items-center gap-2 ${
-                          isCorrect ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"
-                        }`}>
-                          <span>{isCorrect ? "🎉 Jawaban Benar!" : `❌ Kurang Tepat. Jawaban yang benar adalah Opsi ${String.fromCharCode(65 + quiz.correctAnswerIndex)}.`}</span>
+                      {isQSubmitted && (
+                        <div className="space-y-2 mt-2">
+                          {quiz.questionType !== "essay" && (
+                            <div className={`p-3.5 rounded-xl text-xs font-bold flex items-center gap-2 ${
+                              isCorrect ? "bg-emerald-50 text-emerald-700 border border-emerald-200" : "bg-rose-50 text-rose-700 border border-rose-200"
+                            }`}>
+                              <span>
+                                {isCorrect 
+                                  ? "🎉 Jawaban Benar!" 
+                                  : `❌ Kurang Tepat. Jawaban yang benar adalah Opsi ${correctKeys.map(k => String.fromCharCode(65 + k)).join(", ")}.`}
+                              </span>
+                            </div>
+                          )}
+
+                          {quiz.explanation ? (
+                            <div className="p-4 bg-amber-50/90 border border-amber-200/90 rounded-2xl text-xs space-y-1.5 shadow-2xs text-left">
+                              <div className="flex items-center gap-2 font-black text-amber-900">
+                                <span className="text-base">💡</span>
+                                <span className="uppercase tracking-wider text-[11px]">Pembahasan & Penjelasan Jawaban:</span>
+                              </div>
+                              <p className="text-slate-800 leading-relaxed font-medium whitespace-pre-wrap pl-6 text-xs sm:text-sm">
+                                {quiz.explanation}
+                              </p>
+                            </div>
+                          ) : null}
                         </div>
                       )}
                     </div>
                   );
                 })}
 
-                {!isSubmitted && currentUser?.role === "Siswa" && (
-                  <div className="flex justify-end pt-4 pb-12">
-                    <button
-                      onClick={() => {
-                        const allQuizIds = filteredQuizzes.map(q => q.id);
-                        const newSubmitted = [...submittedQuizIds];
-                        allQuizIds.forEach(id => {
-                          if (!newSubmitted.includes(id)) newSubmitted.push(id);
-                        });
-                        setSubmittedQuizIds(newSubmitted);
-                      }}
-                      className="px-8 py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-sm rounded-xl shadow-md cursor-pointer transition active:scale-95"
-                    >
-                      Finish Attempt (Submit)
-                    </button>
+                {!isSubmitted && (
+                  <div className="flex flex-col sm:flex-row items-center justify-between gap-4 pt-4 pb-12">
+                    <div className="text-xs text-slate-500 font-medium">
+                      {isStaff ? (
+                        <span>💡 Mode Simulasi Pengajar: Anda dapat menguji penilaian otomatis atau melihat tampilan soal layaknya siswa.</span>
+                      ) : (
+                        <span>Pastikan semua pertanyaan telah dijawab sebelum mengirimkan kuis.</span>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-3">
+                      {isStaff && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const allQuizIds = filteredQuizzes.map(q => q.id);
+                            const updatedAnswers = { ...studentQuizAnswers };
+                            const updatedEssayAnswers = { ...studentQuizEssayAnswers };
+                            allQuizIds.forEach(id => {
+                              delete updatedAnswers[id];
+                              delete updatedEssayAnswers[id];
+                            });
+                            setStudentQuizAnswers(updatedAnswers);
+                            setStudentQuizEssayAnswers(updatedEssayAnswers);
+                            setSimulatedSubmission(false);
+                          }}
+                          className="px-5 py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition cursor-pointer"
+                        >
+                          Reset Jawaban
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (isStaff) {
+                            setSimulatedSubmission(true);
+                          } else {
+                            submitStudentAssessment(false);
+                          }
+                        }}
+                        className="px-8 py-3.5 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-sm rounded-2xl shadow-md cursor-pointer transition active:scale-95"
+                      >
+                        {isStaff ? "🧪 Uji Coba Penilaian (Simulasi Kirim)" : "Finish Attempt (Kirim Jawaban)"}
+                      </button>
+                    </div>
                   </div>
                 )}
              </div>
-           ) : (
-             <div className="flex flex-col items-center justify-center bg-white border border-slate-200 rounded-2xl p-12 text-center shadow-sm">
-                <div className="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mb-4">
-                  <Play className="w-8 h-8 ml-1" />
-                </div>
-                <h3 className="text-lg font-bold text-slate-800 mb-2">Siap untuk memulai?</h3>
-                <p className="text-sm text-slate-500 mb-6 max-w-sm">Waktu Anda akan dihitung mundur setelah Anda menekan tombol di bawah ini. Pastikan Anda memiliki koneksi internet yang stabil.</p>
-                <button 
-                  onClick={() => handleStartCbt(`kuis_ch_${chapter.number}`)} 
-                  className="px-8 py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-sm rounded-xl shadow-md cursor-pointer transition active:scale-95"
-                >
-                  Start Attempt
-                </button>
-             </div>
-           )}
         </div>
       </div>
     );
@@ -2130,494 +3606,1309 @@ export default function LmsView({
         {activeSubTab === "absen" && <LmsAbsenSegment activeStudentClass={activeStudentClass} activeStudents={activeStudents} allClasses={allClasses} assessmentSubject={assessmentSubject} attendanceRecords={attendanceRecords} currentUser={currentUser} matchingStudent={matchingStudent} onAddAttendance={onAddAttendance} onUpdateState={onUpdateState} selectedBabNumber={selectedBabNumber} setActiveSubTab={setActiveSubTab} setViewingAttendancePhoto={setViewingAttendancePhoto} />}
 
         {/* SUBTAB 4: HARIAN BAB */}
-        {activeSubTab === "bab" && (!isSiswaOrAlumni || isClassActive) && <LmsBabSegment activeStudentClass={activeStudentClass} activeStudents={activeStudents} allClasses={allClasses} assessmentSubject={assessmentSubject} cbtStartTimes={cbtStartTimes} chapterAssessments={chapterAssessments} currentUser={currentUser} expandedLessons={expandedLessons} filteredActiveStudents={filteredActiveStudents} getClassChaptersCount={getClassChaptersCount} getClassChaptersList={getClassChaptersList} getResolvedChapterNum={getResolvedChapterNum} handleActivateChapterInLms={handleActivateChapterInLms} handleDeactivateChapterInLms={handleDeactivateChapterInLms} handleLessonDelete={handleLessonDelete} handleOpenEditLesson={handleOpenEditLesson} handleStartCbt={handleStartCbt} isAlumniClass={isAlumniClass} isSidebarCollapsed={isSidebarCollapsed} isSiswaOrAlumni={isSiswaOrAlumni} lmsLessons={lmsLessons} onUpdateState={onUpdateState} selectedBabNumber={selectedBabNumber} selectedClassFilter={selectedClassFilter} selectedStudentId={selectedStudentId} setActiveQuizChapterId={setActiveQuizChapterId} setActiveSubTab={setActiveSubTab} setBatchDeadline={setBatchDeadline} setBatchDurationMinutes={setBatchDurationMinutes} setBatchTargetClass={setBatchTargetClass} setCbtStartTimes={setCbtStartTimes} setEvalSelectedLessonId={setEvalSelectedLessonId} setIsLessonFormOpen={setIsLessonFormOpen} setIsQuizFormOpen={setIsQuizFormOpen} setIsSidebarCollapsed={setIsSidebarCollapsed} setLessonBookUrl={setLessonBookUrl} setLessonContent={setLessonContent} setLessonContentType={setLessonContentType} setLessonDeadline={setLessonDeadline} setLessonDifficulty={setLessonDifficulty} setLessonDurationMinutes={setLessonDurationMinutes} setLessonError={setLessonError} setLessonIsLocked={setLessonIsLocked} setLessonJapaneseTitle={setLessonJapaneseTitle} setLessonSlidesUrl={setLessonSlidesUrl} setLessonSubject={setLessonSubject} setLessonTargetClass={setLessonTargetClass} setLessonTitle={setLessonTitle} setLessonVideoUrl={setLessonVideoUrl} setNewQuiz={setNewQuiz} setPdfViewerUrl={setPdfViewerUrl} setProgressTabMode={setProgressTabMode} setQuizBatch={setQuizBatch} setSelectedBabNumber={setSelectedBabNumber} setSelectedBatchIndex={setSelectedBatchIndex} setSelectedLessonToEdit={setSelectedLessonToEdit} setSelectedStudentId={setSelectedStudentId} setShowAllChapters={setShowAllChapters} setSubmittingLessons={setSubmittingLessons} showAllChapters={showAllChapters} studentAssessmentsMap={studentAssessmentsMap} submittedQuizIds={submittedQuizIds} submittingLessons={submittingLessons} systemState={systemState} toggleLessonExpanded={toggleLessonExpanded} />}
+        {activeSubTab === "bab" && (!isSiswaOrAlumni || isClassActive) && <LmsBabSegment activeStudentClass={activeStudentClass} activeStudents={activeStudents} allClasses={allClasses} assessmentSubject={assessmentSubject} batchChapterNumber={batchChapterNumber} setBatchChapterNumber={setBatchChapterNumber} batchSubject={batchSubject} setBatchSubject={setBatchSubject} batchSubTitle={batchSubTitle} setBatchSubTitle={setBatchSubTitle} batchLessonId={batchLessonId} setBatchLessonId={setBatchLessonId} activeQuizSubTitle={activeQuizSubTitle} setActiveQuizSubTitle={setActiveQuizSubTitle} cbtStartTimes={cbtStartTimes} chapterAssessments={chapterAssessments} currentUser={currentUser} expandedLessons={expandedLessons} filteredActiveStudents={filteredActiveStudents} getClassChaptersCount={getClassChaptersCount} getClassChaptersList={getClassChaptersList} getResolvedChapterNum={getResolvedChapterNum} handleActivateChapterInLms={handleActivateChapterInLms} handleDeactivateChapterInLms={handleDeactivateChapterInLms} handleAddMandiriChapter={handleAddMandiriChapter} handleEditMandiriChapter={handleEditMandiriChapter} handleDeleteMandiriChapter={handleDeleteMandiriChapter} handleLessonDelete={handleLessonDelete} handleOpenEditLesson={handleOpenEditLesson} handleStartCbt={handleStartCbt} handleRetakeQuiz={handleRetakeQuiz} isAlumniClass={isAlumniClass} isSidebarCollapsed={isSidebarCollapsed} isSiswaOrAlumni={isSiswaOrAlumni} lmsLessons={lmsLessons} onUpdateState={onUpdateState} selectedBabNumber={selectedBabNumber} selectedClassFilter={selectedClassFilter} selectedStudentId={selectedStudentId} setActiveQuizChapterId={setActiveQuizChapterId} setActiveSubTab={setActiveSubTab} setBatchDeadline={setBatchDeadline} setBatchDurationMinutes={setBatchDurationMinutes} setBatchTargetClass={setBatchTargetClass} setCbtStartTimes={setCbtStartTimes} setEvalSelectedLessonId={setEvalSelectedLessonId} setIsLessonFormOpen={setIsLessonFormOpen} setIsQuizFormOpen={setIsQuizFormOpen} setIsSidebarCollapsed={setIsSidebarCollapsed} setLessonBookUrl={setLessonBookUrl} setLessonContent={setLessonContent} setLessonContentType={setLessonContentType} setLessonDeadline={setLessonDeadline} setLessonDifficulty={setLessonDifficulty} setLessonDurationMinutes={setLessonDurationMinutes} setLessonError={setLessonError} setLessonIsLocked={setLessonIsLocked} setLessonJapaneseTitle={setLessonJapaneseTitle} setLessonSlidesUrl={setLessonSlidesUrl} setLessonSubject={setLessonSubject} setLessonTargetClass={setLessonTargetClass} setLessonTitle={setLessonTitle} setLessonVideoUrl={setLessonVideoUrl} setNewQuiz={setNewQuiz} setPdfViewerUrl={setPdfViewerUrl} setProgressTabMode={setProgressTabMode} setQuizBatch={setQuizBatch} setSelectedBabNumber={setSelectedBabNumber} setSelectedBatchIndex={setSelectedBatchIndex} setSelectedLessonToEdit={setSelectedLessonToEdit} setSelectedStudentId={setSelectedStudentId} setShowAllChapters={setShowAllChapters} setSubmittingLessons={setSubmittingLessons} showAllChapters={showAllChapters} studentAssessmentsMap={studentAssessmentsMap} submittedQuizIds={submittedQuizIds} submittingLessons={submittingLessons} systemState={systemState} toggleLessonExpanded={toggleLessonExpanded} />}
         {/* SUBTAB DOKUMEN: 17 Dokumen Persyaratan & Akademik */}
         {activeSubTab === "dokumen" && <LmsDokumenSegment currentUser={currentUser} onUpdateState={onUpdateState} setViewingDoc={setViewingDoc} systemState={systemState} />}
 
         {/* SUBTAB PROGRESS: Khusus Staf Sensei */}
-        {activeSubTab === "progress" && (currentUser?.role === "Pengajar" || currentUser?.role === "Admin" || currentUser?.role === "Admin Super" || currentUser?.role === "Admin Biasa" || currentUser?.role === "VVIP") && <LmsProgressSegment assessmentSubject={assessmentSubject} attendanceRecords={attendanceRecords} babCurrentPage={babCurrentPage} chapterAssessments={chapterAssessments} currentUser={currentUser} evalSelectedBabId={evalSelectedBabId} evalSelectedLessonId={evalSelectedLessonId} filteredActiveStudents={filteredActiveStudents} getClassChaptersCount={getClassChaptersCount} gradingNotes={gradingNotes} handleGradeSubmit={handleGradeSubmit} isAlumniClass={isAlumniClass} isGradingSubmitting={isGradingSubmitting} isReadOnlyView={isReadOnlyView} isVvipOrAdmin={isVvipOrAdmin} itemsPerPage={itemsPerPage} lmsLessons={lmsLessons} onUpdateState={onUpdateState} paginatedBabStudents={paginatedBabStudents} paginatedTugasStudents={paginatedTugasStudents} progressTabMode={progressTabMode} scoreBumpo={scoreBumpo} scoreKaiwa={scoreKaiwa} scoreKanji={scoreKanji} scoreKotoba={scoreKotoba} selectedClassFilter={selectedClassFilter} selectedStudentId={selectedStudentId} setAssessmentSubject={setAssessmentSubject} setBabCurrentPage={setBabCurrentPage} setEvalSelectedBabId={setEvalSelectedBabId} setEvalSelectedLessonId={setEvalSelectedLessonId} setGradingNotes={setGradingNotes} setPdfViewerUrl={setPdfViewerUrl} setProgressTabMode={setProgressTabMode} setScoreBumpo={setScoreBumpo} setScoreKaiwa={setScoreKaiwa} setScoreKanji={setScoreKanji} setScoreKotoba={setScoreKotoba} setSelectedStudentId={setSelectedStudentId} setTugasCurrentPage={setTugasCurrentPage} setTugasGrades={setTugasGrades} setTugasGradingSubmitting={setTugasGradingSubmitting} setTugasNotes={setTugasNotes} setTugasScores={setTugasScores} studentAttendanceMap={studentAttendanceMap} systemState={systemState} totalBabPages={totalBabPages} totalTugasPages={totalTugasPages} tugasCurrentPage={tugasCurrentPage} tugasGradingSubmitting={tugasGradingSubmitting} tugasNotes={tugasNotes} tugasScores={tugasScores} />}
+        {activeSubTab === "progress" && (currentUser?.role === "Pengajar" || currentUser?.role === "Admin" || currentUser?.role === "Admin Super" || currentUser?.role === "Admin Biasa" || currentUser?.role === "VVIP") && <LmsProgressSegment activeStudentClass={activeStudentClass} assessmentSubject={assessmentSubject} attendanceRecords={attendanceRecords} babCurrentPage={babCurrentPage} chapterAssessments={chapterAssessments} currentUser={currentUser} evalSelectedBabId={evalSelectedBabId} evalSelectedLessonId={evalSelectedLessonId} filteredActiveStudents={filteredActiveStudents} getClassChaptersCount={getClassChaptersCount} getClassChaptersList={getClassChaptersList} gradingNotes={gradingNotes} handleGradeSubmit={handleGradeSubmit} isAlumniClass={isAlumniClass} isGradingSubmitting={isGradingSubmitting} isReadOnlyView={isReadOnlyView} isVvipOrAdmin={isVvipOrAdmin} itemsPerPage={itemsPerPage} lmsLessons={lmsLessons} onUpdateState={onUpdateState} paginatedBabStudents={paginatedBabStudents} paginatedTugasStudents={paginatedTugasStudents} progressTabMode={progressTabMode} scoreBumpo={scoreBumpo} scoreKaiwa={scoreKaiwa} scoreKanji={scoreKanji} scoreKotoba={scoreKotoba} selectedClassFilter={selectedClassFilter} selectedStudentId={selectedStudentId} setAssessmentSubject={setAssessmentSubject} setBabCurrentPage={setBabCurrentPage} setEvalSelectedBabId={setEvalSelectedBabId} setEvalSelectedLessonId={setEvalSelectedLessonId} setGradingNotes={setGradingNotes} setPdfViewerUrl={setPdfViewerUrl} setProgressTabMode={setProgressTabMode} setScoreBumpo={setScoreBumpo} setScoreKaiwa={setScoreKaiwa} setScoreKanji={setScoreKanji} setScoreKotoba={setScoreKotoba} setSelectedStudentId={setSelectedStudentId} setTugasCurrentPage={setTugasCurrentPage} setTugasGrades={setTugasGrades} setTugasGradingSubmitting={setTugasGradingSubmitting} setTugasNotes={setTugasNotes} setTugasScores={setTugasScores} studentAttendanceMap={studentAttendanceMap} systemState={systemState} totalBabPages={totalBabPages} totalTugasPages={totalTugasPages} tugasCurrentPage={tugasCurrentPage} tugasGradingSubmitting={tugasGradingSubmitting} tugasNotes={tugasNotes} tugasScores={tugasScores} />}
       </div>
 
-      {/* SENSEI ACCORDION FORM DIALOG MODAL (ADD / EDIT LESSON) */}
-      {isQuizFormOpen && (() => {
-        const currentQuiz = quizBatch[selectedBatchIndex] || {
-          subject: "Bahasa Jepang",
-          questionType: "pilihan_ganda",
-          question: "",
-          options: ["", "", "", ""],
-          correctAnswerIndex: 0,
-          chapterNumber: undefined,
-          deadline: "",
-          durationMinutes: "",
-          imageUrl: "",
-          videoUrl: "",
-          audioUrl: ""
-        };
+      {/* GOOGLE FORM STYLE QUIZ BUILDER MODAL */}
+      {isQuizFormOpen && createPortal(
+        <div className="fixed inset-0 z-[999999] bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 md:p-6 overflow-hidden animate-fade-in text-slate-900">
+          <div className="bg-slate-100 rounded-3xl border border-slate-300 shadow-2xl max-w-4xl w-full overflow-hidden flex flex-col h-[96vh] max-h-[96vh]">
+            {/* Google Forms Characteristic Top Accent Banner */}
+            <div className="h-3.5 bg-gradient-to-r from-purple-700 via-indigo-600 to-emerald-500 w-full shrink-0" />
 
-        return (
-          <div className="fixed inset-0 z-[10000] bg-slate-950/65 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 overflow-y-auto animate-fade-in">
-            <div className="bg-white rounded-3xl border border-slate-200 shadow-2xl max-w-3xl w-full overflow-hidden flex flex-col max-h-[95vh] sm:max-h-[90vh]">
-              <div className="bg-slate-50 border-b border-slate-100 p-4 sm:p-6 flex items-center justify-between shrink-0">
-                <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 bg-emerald-100 text-emerald-600 rounded-xl flex items-center justify-center">
-                    <BookOpen className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <h3 className="font-display font-black text-lg text-slate-900">Tambah Banyak Soal Kuis (Batch)</h3>
-                    <p className="text-[10px] text-slate-500 font-mono mt-0.5">Buat beberapa soal sekaligus dalam satu pop-up</p>
-                  </div>
+            {/* Modal Header */}
+            <div className="bg-white border-b border-slate-200 px-4 sm:px-6 py-4 flex items-center justify-between shrink-0 shadow-2xs">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 bg-purple-100 text-purple-700 rounded-2xl flex items-center justify-center shadow-2xs shrink-0">
+                  <FileText className="h-5 w-5" />
                 </div>
-                <button
-                  onClick={() => setIsQuizFormOpen(false)}
-                  className="h-8 w-8 rounded-full bg-slate-100 text-slate-500 flex items-center justify-center hover:bg-slate-200 transition"
-                >
-                  <X className="h-4 w-4" />
-                </button>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="font-display font-black text-base sm:text-lg text-slate-900 leading-tight">
+                      Pembuat Kuis LMS (Google Form)
+                    </h3>
+                    <span className="bg-purple-100 text-purple-800 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full border border-purple-200 hidden sm:inline-block">
+                      Bab {batchChapterNumber} ({batchSubject || "Bahasa Jepang"})
+                    </span>
+                    <span className="bg-emerald-50 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-md border border-emerald-200 hidden sm:flex items-center gap-1">
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                      <span>Firestore &amp; Storage Aktif</span>
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 font-medium mt-0.5">
+                    Model formulir bersusun ke bawah. Tentukan kunci jawaban langsung di bawah tiap opsi pilihan.
+                  </p>
+                </div>
               </div>
 
-              {/* Horizontal Question Navigation Tabs */}
-              <div className="bg-slate-50/50 border-b border-slate-150 px-4 sm:px-6 py-2.5 overflow-x-auto flex items-center gap-2 shrink-0 scrollbar-none">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 font-mono select-none mr-1 shrink-0">Daftar Soal ({quizBatch.length}):</span>
-                {quizBatch.map((q, idx) => {
-                  const isActive = idx === selectedBatchIndex;
-                  const isQEmpty = !q.question?.trim();
-                  return (
-                    <div key={idx} className="flex items-center gap-1 shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => setSelectedBatchIndex(idx)}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 border ${
-                          isActive
-                            ? "bg-emerald-600 text-white shadow-sm border-transparent"
-                            : "bg-white border-slate-200 text-slate-700 hover:bg-slate-100"
-                        }`}
-                      >
-                        <span className={`h-2 w-2 rounded-full ${isQEmpty ? "bg-amber-400 animate-pulse" : "bg-emerald-400"}`} />
-                        <span>Soal {idx + 1}</span>
-                      </button>
-                      {quizBatch.length > 1 && (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            const updatedBatch = quizBatch.filter((_, i) => i !== idx);
-                            setQuizBatch(updatedBatch);
-                            setSelectedBatchIndex(prev => {
-                              if (prev >= updatedBatch.length) {
-                                return updatedBatch.length - 1;
-                              }
-                              return prev;
-                            });
-                          }}
-                          className="h-7 w-7 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 flex items-center justify-center transition shrink-0 cursor-pointer"
-                          title="Hapus soal ini"
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </button>
-                      )}
-                    </div>
-                  );
-                })}
+              <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => {
-                    const template = {
-                      subject: currentQuiz.subject || "Bahasa Jepang",
-                      questionType: "pilihan_ganda",
-                      question: "",
-                      options: ["", "", "", ""],
-                      correctAnswerIndex: 0,
-                      chapterNumber: currentQuiz.chapterNumber,
-                      deadline: currentQuiz.deadline || "",
-                      durationMinutes: currentQuiz.durationMinutes || "",
-                      imageUrl: "",
-                      videoUrl: "",
-                      audioUrl: ""
-                    };
-                    setQuizBatch(prev => [...prev, template]);
-                    setSelectedBatchIndex(quizBatch.length);
-                  }}
-                  className="px-3 py-1.5 rounded-xl text-xs font-bold bg-slate-200 text-slate-700 hover:bg-slate-300 transition flex items-center gap-1 shrink-0 cursor-pointer"
+                  onClick={handleSaveAllQuizzes}
+                  disabled={isFileUploading || isSavingQuizBatch || quizBatch.filter(q => q.question?.trim() || q.imageUrl || q.audioUrl).length === 0}
+                  className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-xs px-4 py-2 rounded-xl transition cursor-pointer flex items-center gap-1.5 shadow-sm active:scale-95"
+                  title="Simpan kuis langsung ke Firestore"
                 >
-                  <Plus className="h-3.5 w-3.5" />
-                  <span>Tambah Soal</span>
+                  {isSavingQuizBatch ? (
+                    <>
+                      <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                      <span>Menyimpan...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Save className="h-3.5 w-3.5" />
+                      <span className="hidden sm:inline">Simpan Kuis</span>
+                    </>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setIsQuizFormOpen(false)}
+                  className="h-9 w-9 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-800 flex items-center justify-center transition cursor-pointer"
+                  title="Tutup formulir"
+                >
+                  <X className="h-5 w-5" />
                 </button>
               </div>
-              
-              <div className="p-4 sm:p-6 overflow-y-auto space-y-4 text-left flex-1">
-                {/* Pengaturan Kuis Keseluruhan (Global Settings) */}
-                <div className="bg-slate-50 border border-slate-200 rounded-2xl p-4 space-y-3.5 shadow-2xs">
-                  <div className="flex items-center gap-2 pb-2 border-b border-slate-200/60">
-                    <span className="text-base">⏳</span>
+            </div>
+
+            {/* Quick Question Jump Bar */}
+            <div className="bg-slate-50 border-b border-slate-200/80 px-4 sm:px-6 py-2 overflow-x-auto flex items-center gap-2 shrink-0 scrollbar-none">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 font-mono select-none shrink-0 mr-1">
+                Lompat ke Soal:
+              </span>
+              {quizBatch.map((q, idx) => {
+                const isFilled = !!q.question?.trim();
+                return (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => {
+                      const el = document.getElementById(`google-form-question-${idx}`);
+                      if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+                      setSelectedBatchIndex(idx);
+                    }}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1.5 border cursor-pointer ${
+                      idx === selectedBatchIndex
+                        ? "bg-purple-700 text-white shadow-xs border-purple-800 ring-2 ring-purple-300"
+                        : "bg-white border-slate-200 text-slate-700 hover:bg-slate-100"
+                    }`}
+                  >
+                    <span className={`h-2 w-2 rounded-full ${isFilled ? "bg-emerald-500" : "bg-amber-400"}`} />
+                    <span>#{idx + 1}</span>
+                  </button>
+                );
+              })}
+
+              <button
+                type="button"
+                onClick={() => {
+                  const template = {
+                    id: "QZ-" + Date.now() + "_" + Math.floor(Math.random() * 1000),
+                    subject: batchSubject || "Bahasa Jepang",
+                    questionType: "pilihan_ganda",
+                    question: "",
+                    options: ["", "", "", ""],
+                    correctAnswerIndex: 0,
+                    correctAnswerIndices: [0],
+                    allowMultipleAnswers: false,
+                    correctAnswerEssay: "",
+                    correctAnswerText: "",
+                    chapterNumber: batchChapterNumber,
+                    deadline: batchDeadline || "",
+                    durationMinutes: batchDurationMinutes || "",
+                    imageUrl: "",
+                    videoUrl: "",
+                    audioUrl: ""
+                  };
+                  setQuizBatch(prev => [...prev, template]);
+                  setTimeout(() => {
+                    const nextIdx = quizBatch.length;
+                    const el = document.getElementById(`google-form-question-${nextIdx}`);
+                    if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+                  }, 100);
+                }}
+                className="px-3 py-1 rounded-lg text-xs font-bold bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200 transition flex items-center gap-1 shrink-0 cursor-pointer"
+              >
+                <Plus className="h-3 w-3" />
+                <span>Tambah Soal</span>
+              </button>
+            </div>
+
+            {/* Scrollable Form Body */}
+            <div className="p-3 sm:p-6 overflow-y-auto space-y-5 text-left flex-1 bg-slate-100/70">
+              {/* Draft Recovery Notification Banner */}
+              {detectedDraft && (
+                <div className="bg-amber-50 border-2 border-amber-300 rounded-2xl p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-amber-900 shadow-sm animate-fade-in">
+                  <div className="flex items-center gap-3">
+                    <div className="h-9 w-9 rounded-xl bg-amber-200/80 flex items-center justify-center text-amber-800 shrink-0">
+                      <FileText className="w-5 h-5" />
+                    </div>
                     <div>
-                      <h4 className="text-xs font-bold text-slate-800">Tenggang Waktu &amp; Durasi Kuis (Global)</h4>
-                      <p className="text-[10px] text-slate-500">Waktu penyelesaian ini berlaku untuk keseluruhan soal kuis dalam sesi ini</p>
+                      <p className="text-xs font-black">
+                        Ditemukan Draf Tersimpan ({detectedDraft.count} Soal untuk Bab {detectedDraft.chapterNumber})
+                      </p>
+                      <p className="text-[11px] text-amber-700 font-medium">
+                        Draf tersimpan otomatis di perangkat Anda pada {new Date(detectedDraft.savedAt).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" })}. Klik pulihkan untuk melanjutkan.
+                      </p>
                     </div>
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-slate-700">Tenggang Waktu (Deadline)</label>
-                      <input
-                        type="datetime-local"
-                        value={batchDeadline || ""}
-                        onChange={(e) => setBatchDeadline(e.target.value)}
-                        className="w-full bg-white border border-slate-200 px-3 py-2 rounded-xl text-xs focus:border-emerald-500 outline-none"
-                      />
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-slate-700">Durasi Kuis (Menit)</label>
-                      <select
-                        value={batchDurationMinutes || ""}
-                        onChange={(e) => setBatchDurationMinutes(e.target.value === "" ? "" : Number(e.target.value))}
-                        className="w-full bg-white border border-slate-200 px-3 py-2 rounded-xl text-xs focus:border-emerald-500 outline-none cursor-pointer text-slate-800 font-medium"
-                      >
-                        <option value="">Tanpa Batas Durasi</option>
-                        <option value="5">5 Menit</option>
-                        <option value="10">10 Menit</option>
-                        <option value="15">15 Menit</option>
-                        <option value="20">20 Menit</option>
-                        <option value="30">30 Menit</option>
-                        <option value="45">45 Menit</option>
-                        <option value="60">60 Menit (1 Jam)</option>
-                        <option value="90">90 Menit (1.5 Jam)</option>
-                        <option value="120">120 Menit (2 Jam)</option>
-                        <option value="180">180 Menit (3 Jam)</option>
-                      </select>
-                    </div>
-                    <div className="space-y-1.5">
-                      <label className="text-xs font-bold text-slate-700">Kelas Sasaran (Target)</label>
-                      <select
-                        value={batchTargetClass}
-                        onChange={(e) => setBatchTargetClass(e.target.value)}
-                        className="w-full bg-white border border-slate-200 px-3 py-2 rounded-xl text-xs focus:border-emerald-500 outline-none cursor-pointer text-slate-800 font-semibold"
-                      >
-                        <option value="Semua">Semua Kelas</option>
-                        {officialClasses.map((c: any) => (
-                          <option key={c.id || c.name} value={c.name}>{c.name}</option>
-                        ))}
-                      </select>
-                    </div>
+                  <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+                    <button
+                      type="button"
+                      onClick={handleRestoreDraft}
+                      className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 active:scale-95 text-white font-bold text-xs rounded-xl shadow-xs transition cursor-pointer"
+                    >
+                      Pulihkan Draf
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleDismissDraft}
+                      className="p-1.5 text-amber-600 hover:text-amber-800 hover:bg-amber-100 rounded-lg transition cursor-pointer"
+                      title="Abaikan draf"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
                   </div>
                 </div>
+              )}
 
-                <div className="bg-emerald-50/50 rounded-2xl border border-emerald-100 p-3 mb-2 flex items-center justify-between">
-                  <span className="text-xs font-semibold text-emerald-800">✍️ Mengedit: <strong className="font-bold">Soal #{selectedBatchIndex + 1}</strong></span>
-                  <span className="text-[10px] text-slate-500 font-mono">Lampiran Media tersimpan otomatis di Firebase Storage</span>
-                </div>
-
-                {/* Lampiran Media (Opsional) - Pindah ke Atas */}
-                <div className="space-y-3 p-4 bg-slate-50/60 border border-slate-200 rounded-2xl">
-                  <label className="text-xs font-bold text-slate-700 block flex items-center gap-1.5">
-                    <span>📎 Lampiran Media Soal #{selectedBatchIndex + 1} (Opsional)</span>
-                    <span className="text-[10px] text-slate-400 font-normal">(Pratinjau langsung di bawah ini)</span>
-                  </label>
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    {/* Upload Gambar */}
-                    <div className="bg-white border border-slate-200 rounded-xl p-3 flex flex-col justify-between gap-2 text-left shadow-2xs">
-                      <div>
-                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">🖼️ Gambar</span>
-                        {currentQuiz.imageUrl ? (
-                          <div className="relative rounded-lg overflow-hidden border border-slate-200 bg-white aspect-video flex items-center justify-center">
-                            <img src={currentQuiz.imageUrl} alt="Quiz Attachment" className="max-h-full max-w-full object-contain" referrerPolicy="no-referrer" />
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setQuizBatch(prev => {
-                                  const copy = [...prev];
-                                  copy[selectedBatchIndex] = { ...copy[selectedBatchIndex], imageUrl: "" };
-                                  return copy;
-                                });
-                              }}
-                              className="absolute top-1 right-1 bg-red-600 hover:bg-red-700 text-white rounded-full p-1 shadow-md transition cursor-pointer"
-                            >
-                              <X className="h-3 w-3" />
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="text-[10px] text-slate-400 italic">Belum ada gambar yang dilampirkan</div>
-                        )}
-                      </div>
-                      {!currentQuiz.imageUrl && (
-                        <input
-                          type="file"
-                          accept="image/*"
-                          disabled={isFileUploading}
-                          onChange={async (e) => {
-                            const file = e.target.files?.[0];
-                            if (!file) return;
-                            setIsFileUploading(true);
-                            try {
-                              const url = await uploadFileToFirebase(file, "lms_quizzes");
-                              setQuizBatch(prev => {
-                                const copy = [...prev];
-                                copy[selectedBatchIndex] = { ...copy[selectedBatchIndex], imageUrl: url };
-                                return copy;
-                              });
-                            } catch (err) {
-                              console.error(err);
-                              alert("Gagal upload gambar");
-                            } finally {
-                              setIsFileUploading(false);
-                            }
-                          }}
-                          className="w-full text-[10px] text-slate-500 file:mr-2 file:py-1 file:px-2 file:rounded-md file:border-0 file:text-[10px] file:font-bold file:bg-slate-200 file:text-slate-700 hover:file:bg-slate-300 disabled:opacity-50 cursor-pointer"
-                        />
-                      )}
-                    </div>
-
-                    {/* Upload Video */}
-                    <div className="bg-white border border-slate-200 rounded-xl p-3 flex flex-col justify-between gap-2 text-left shadow-2xs">
-                      <div>
-                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">🎬 Video</span>
-                        {currentQuiz.videoUrl ? (
-                          <div className="relative rounded-lg overflow-hidden border border-slate-200 bg-white aspect-video flex items-center justify-center">
-                            <video src={currentQuiz.videoUrl} controls className="max-h-full max-w-full" />
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setQuizBatch(prev => {
-                                  const copy = [...prev];
-                                  copy[selectedBatchIndex] = { ...copy[selectedBatchIndex], videoUrl: "" };
-                                  return copy;
-                                });
-                              }}
-                              className="absolute top-1 right-1 bg-red-600 hover:bg-red-700 text-white rounded-full p-1 shadow-md transition cursor-pointer"
-                            >
-                              <X className="h-3 w-3" />
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="text-[10px] text-slate-400 italic">Belum ada video yang dilampirkan</div>
-                        )}
-                      </div>
-                      {!currentQuiz.videoUrl && (
-                        <input
-                          type="file"
-                          accept="video/*"
-                          disabled={isFileUploading}
-                          onChange={async (e) => {
-                            const file = e.target.files?.[0];
-                            if (!file) return;
-                            setIsFileUploading(true);
-                            try {
-                              const url = await uploadFileToFirebase(file, "lms_quizzes");
-                              setQuizBatch(prev => {
-                                const copy = [...prev];
-                                copy[selectedBatchIndex] = { ...copy[selectedBatchIndex], videoUrl: url };
-                                return copy;
-                              });
-                            } catch (err) {
-                              console.error(err);
-                              alert("Gagal upload video");
-                            } finally {
-                              setIsFileUploading(false);
-                            }
-                          }}
-                          className="w-full text-[10px] text-slate-500 file:mr-2 file:py-1 file:px-2 file:rounded-md file:border-0 file:text-[10px] file:font-bold file:bg-slate-200 file:text-slate-700 hover:file:bg-slate-300 disabled:opacity-50 cursor-pointer"
-                        />
-                      )}
-                    </div>
-
-                    {/* Upload Suara */}
-                    <div className="bg-white border border-slate-200 rounded-xl p-3 flex flex-col justify-between gap-2 text-left shadow-2xs">
-                      <div>
-                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">🎙️ Suara (Audio)</span>
-                        {currentQuiz.audioUrl ? (
-                          <div className="relative rounded-lg p-2 border border-slate-200 bg-white flex flex-col items-center gap-1">
-                            <audio src={currentQuiz.audioUrl} controls className="w-full h-8" />
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setQuizBatch(prev => {
-                                  const copy = [...prev];
-                                  copy[selectedBatchIndex] = { ...copy[selectedBatchIndex], audioUrl: "" };
-                                  return copy;
-                                });
-                              }}
-                              className="absolute -top-1 -right-1 bg-red-600 hover:bg-red-700 text-white rounded-full p-1 shadow-md transition cursor-pointer"
-                            >
-                              <X className="h-2.5 w-2.5" />
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="text-[10px] text-slate-400 italic">Belum ada rekaman suara yang dilampirkan</div>
-                        )}
-                      </div>
-                      {!currentQuiz.audioUrl && (
-                        <input
-                          type="file"
-                          accept="audio/*"
-                          disabled={isFileUploading}
-                          onChange={async (e) => {
-                            const file = e.target.files?.[0];
-                            if (!file) return;
-                            setIsFileUploading(true);
-                            try {
-                              const url = await uploadFileToFirebase(file, "lms_quizzes");
-                              setQuizBatch(prev => {
-                                const copy = [...prev];
-                                copy[selectedBatchIndex] = { ...copy[selectedBatchIndex], audioUrl: url };
-                                return copy;
-                              });
-                            } catch (err) {
-                              console.error(err);
-                              alert("Gagal upload audio");
-                            } finally {
-                              setIsFileUploading(false);
-                            }
-                          }}
-                          className="w-full text-[10px] text-slate-500 file:mr-2 file:py-1 file:px-2 file:rounded-md file:border-0 file:text-[10px] file:font-bold file:bg-slate-200 file:text-slate-700 hover:file:bg-slate-300 disabled:opacity-50 cursor-pointer"
-                        />
-                      )}
-                    </div>
+              {/* Google Forms Header Card: General Quiz Information */}
+              <div className="bg-white rounded-2xl sm:rounded-3xl border border-slate-200/90 shadow-sm p-4 sm:p-6 space-y-4">
+                <div className="border-b border-slate-150 pb-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <h4 className="text-sm font-extrabold text-slate-800 flex items-center gap-2">
+                      <span>⚙️ Pengaturan &amp; Identitas Kuis Bab</span>
+                    </h4>
+                    <p className="text-[11px] text-slate-500">
+                      Tentukan bab, kelas target, waktu pengerjaan, dan pengacakan untuk seluruh soal kuis ini.
+                    </p>
                   </div>
-                  {isFileUploading && (
-                    <p className="text-[10px] text-amber-600 font-bold animate-pulse text-left mt-2">⚡ Sedang mengunggah berkas kuis ke Firebase Storage... Mohon tunggu.</p>
-                  )}
+                  <span className="text-[11px] font-mono text-purple-800 bg-purple-50 border border-purple-200 px-3 py-1 rounded-xl self-start sm:self-auto font-bold">
+                    Total {quizBatch.length} Soal Bersusun
+                  </span>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                  {/* Bab Target */}
                   <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-slate-700">Mata Pelajaran</label>
-                    <select 
-                      value={currentQuiz.subject}
+                    <label className="text-xs font-bold text-slate-700 flex items-center gap-1">
+                      <span>📖 Bab Target</span>
+                      <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={batchChapterNumber}
+                      onChange={(e) => {
+                        const newBab = Number(e.target.value);
+                        if (newBab === batchChapterNumber) return;
+
+                        setBatchChapterNumber(newBab);
+                        setSelectedBabNumber(newBab);
+
+                        const existingForBab = (systemState?.lmsQuizzes || []).filter((q: any) => {
+                          const chNum = q.chapterNumber !== undefined ? Number(q.chapterNumber) : (q.chapterId !== undefined ? Number(q.chapterId) : NaN);
+                          return (chNum === newBab || String(q.chapterNumber) === String(newBab) || String(q.chapterId) === String(newBab)) &&
+                            (!q.subject || q.subject === (batchSubject || assessmentSubject || "Bahasa Jepang"));
+                        });
+
+                        const hasUserWork = quizBatch.some(q => (q.question && q.question.trim().length > 0) || q.imageUrl || q.audioUrl);
+                        if (hasUserWork && existingForBab.length === 0) {
+                          setQuizBatch(prev => prev.map(q => ({ ...q, chapterNumber: newBab, chapterId: newBab })));
+                          return;
+                        }
+
+                        if (existingForBab.length > 0) {
+                          const loaded = existingForBab.map((q: any) => {
+                            const cIndices = Array.isArray(q.correctAnswerIndices) && q.correctAnswerIndices.length > 0
+                              ? q.correctAnswerIndices.map(Number)
+                              : (q.correctAnswerIndex !== undefined ? [Number(q.correctAnswerIndex)] : [0]);
+                            const isMulti = !!q.allowMultipleAnswers || q.questionType === "pilihan_ganda_kompleks" || cIndices.length > 1;
+                            return {
+                              ...q,
+                              chapterNumber: newBab,
+                              options: Array.isArray(q.options) && q.options.length > 0 ? q.options : ["", "", "", ""],
+                              correctAnswerIndex: cIndices[0] !== undefined ? cIndices[0] : 0,
+                              correctAnswerIndices: cIndices,
+                              allowMultipleAnswers: isMulti,
+                              questionType: q.questionType || (isMulti ? "pilihan_ganda_kompleks" : "pilihan_ganda")
+                            };
+                          });
+                          const newBlank = {
+                            id: "QZ-" + Date.now() + "_" + Math.random().toString(36).substring(2, 9) + "_" + Math.floor(Math.random() * 100000),
+                            subject: batchSubject || assessmentSubject || "Bahasa Jepang",
+                            chapterNumber: newBab,
+                            chapterId: newBab,
+                            questionType: "pilihan_ganda",
+                            question: "",
+                            options: ["", "", "", ""],
+                            correctAnswerIndex: 0,
+                            correctAnswerIndices: [0],
+                            allowMultipleAnswers: false,
+                            correctAnswerEssay: "",
+                            correctAnswerText: "",
+                            imageUrl: "",
+                            videoUrl: "",
+                            audioUrl: ""
+                          };
+                          setQuizBatch([...loaded, newBlank]);
+                          setSelectedBatchIndex(loaded.length);
+                        } else {
+                          setQuizBatch(prev => prev.map(q => ({ ...q, chapterNumber: newBab, chapterId: newBab })));
+                        }
+                      }}
+                      className="w-full bg-slate-50 border border-slate-300 px-3 py-2 rounded-xl text-xs font-bold text-slate-800 focus:border-purple-600 focus:bg-white outline-none cursor-pointer"
+                    >
+                      {getClassChaptersList(activeStudentClass, batchSubject || assessmentSubject, true).map((ch: any) => (
+                        <option key={ch.number} value={ch.number}>
+                          Bab {ch.number}: {ch.title}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* Mata Pelajaran */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-700">📚 Mata Pelajaran</label>
+                    <select
+                      value={batchSubject}
                       onChange={(e) => {
                         const val = e.target.value;
-                        setQuizBatch(prev => {
-                          const copy = [...prev];
-                          copy[selectedBatchIndex] = { ...copy[selectedBatchIndex], subject: val };
-                          return copy;
-                        });
+                        setBatchSubject(val);
+                        setQuizBatch(prev => prev.map(q => ({ ...q, subject: val })));
                       }}
-                      className="w-full bg-slate-50 border border-slate-200 px-4 py-2.5 rounded-xl text-sm focus:border-blue-500 outline-none"
+                      className="w-full bg-slate-50 border border-slate-300 px-3 py-2 rounded-xl text-xs font-semibold text-slate-800 focus:border-purple-600 focus:bg-white outline-none cursor-pointer"
                     >
                       <option value="Bahasa Jepang">🇯🇵 Bahasa Jepang</option>
                       <option value="SSW">📐 SSW (SSW)</option>
                     </select>
                   </div>
 
+                  {/* Kelas Sasaran */}
                   <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-slate-700">Jenis Soal</label>
-                    <select 
-                      value={currentQuiz.questionType}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setQuizBatch(prev => {
-                          const copy = [...prev];
-                          copy[selectedBatchIndex] = { ...copy[selectedBatchIndex], questionType: val };
-                          return copy;
-                        });
-                      }}
-                      className="w-full bg-slate-50 border border-slate-200 px-4 py-2.5 rounded-xl text-sm focus:border-blue-500 outline-none"
+                    <label className="text-xs font-bold text-slate-700">👥 Kelas Sasaran</label>
+                    <select
+                      value={batchTargetClass}
+                      onChange={(e) => setBatchTargetClass(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-300 px-3 py-2 rounded-xl text-xs font-semibold text-slate-800 focus:border-purple-600 focus:bg-white outline-none cursor-pointer"
                     >
-                      <option value="pilihan_ganda">Pilihan Ganda</option>
-                      <option value="essay">Essay</option>
+                      <option value="Semua">Semua Kelas</option>
+                      {officialClasses.map((c: any) => (
+                        <option key={c.id || c.name} value={c.name}>{c.name}</option>
+                      ))}
                     </select>
                   </div>
-                </div>
-                
-                <div className="space-y-1.5">
-                  <label className="text-xs font-bold text-slate-700">Pertanyaan</label>
-                  <textarea 
-                    value={currentQuiz.question}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setQuizBatch(prev => {
-                        const copy = [...prev];
-                        copy[selectedBatchIndex] = { ...copy[selectedBatchIndex], question: val };
-                        return copy;
-                      });
-                    }}
-                    rows={3}
-                    className="w-full bg-slate-50 border border-slate-200 px-4 py-2.5 rounded-xl text-sm focus:border-blue-500 outline-none resize-none"
-                    placeholder="Ketik pertanyaan di sini..."
-                  />
-                </div>
 
-                {currentQuiz.questionType === "pilihan_ganda" && (
-                  <div className="space-y-3">
-                    <label className="text-xs font-bold text-slate-700">Pilihan Jawaban</label>
-                    {(currentQuiz.options || ["", "", "", ""]).map((opt, i) => (
-                      <div key={i} className="flex items-center gap-2">
-                        <input 
-                          type="radio" 
-                          name={`correctAnswer-${selectedBatchIndex}`}
-                          checked={currentQuiz.correctAnswerIndex === i}
-                          onChange={() => {
-                            setQuizBatch(prev => {
-                              const copy = [...prev];
-                              copy[selectedBatchIndex] = { ...copy[selectedBatchIndex], correctAnswerIndex: i };
-                              return copy;
-                            });
+                  {/* Durasi Pengerjaan */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-700">⏱️ Batas Durasi Kuis</label>
+                    <select
+                      value={batchDurationMinutes || ""}
+                      onChange={(e) => setBatchDurationMinutes(e.target.value === "" ? "" : Number(e.target.value))}
+                      className="w-full bg-slate-50 border border-slate-300 px-3 py-2 rounded-xl text-xs font-semibold text-slate-800 focus:border-purple-600 focus:bg-white outline-none cursor-pointer"
+                    >
+                      <option value="">Tanpa Batas Waktu</option>
+                      <option value="5">5 Menit</option>
+                      <option value="10">10 Menit</option>
+                      <option value="15">15 Menit</option>
+                      <option value="20">20 Menit</option>
+                      <option value="30">30 Menit</option>
+                      <option value="45">45 Menit</option>
+                      <option value="60">60 Menit (1 Jam)</option>
+                      <option value="90">90 Menit (1.5 Jam)</option>
+                      <option value="120">120 Menit (2 Jam)</option>
+                    </select>
+                  </div>
+
+                  {/* Tenggang Waktu (Deadline) */}
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-700">📅 Tenggang Waktu (Deadline)</label>
+                    <input
+                      type="datetime-local"
+                      value={batchDeadline || ""}
+                      onChange={(e) => setBatchDeadline(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-300 px-3 py-2 rounded-xl text-xs text-slate-800 focus:border-purple-600 focus:bg-white outline-none"
+                    />
+                  </div>
+
+                  {/* Acak Urutan Soal (Google Form Style) */}
+                  <div className="space-y-1.5 flex flex-col justify-end">
+                    <label className="text-xs font-bold text-slate-800 flex items-center gap-2 p-2.5 rounded-xl border border-slate-200 bg-slate-50 hover:bg-purple-50/50 transition cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={batchShuffleQuestions}
+                        onChange={(e) => setBatchShuffleQuestions(e.target.checked)}
+                        className="w-4 h-4 text-purple-600 rounded border-slate-300 focus:ring-purple-500 cursor-pointer"
+                      />
+                      <span className="text-xs">🔀 Acak Urutan Soal Tiap Siswa</span>
+                    </label>
+                  </div>
+
+                  {/* Sub-Bab / Sub-Materi Kuis (Support multiple quizzes per Bab) */}
+                  <div className="space-y-1.5 sm:col-span-2 lg:col-span-3 bg-purple-50/80 p-3.5 rounded-2xl border border-purple-200">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-1">
+                      <label className="text-xs font-bold text-purple-950 flex items-center gap-1.5">
+                        <span>🏷️ Judul Sub-Bab / Sub-Materi Kuis</span>
+                        <span className="text-[10px] text-purple-700 font-normal">(Membuat kuis untuk materi spesifik di Bab ini)</span>
+                      </label>
+                      {batchSubTitle && (
+                        <button 
+                          type="button" 
+                          onClick={() => {
+                            setBatchSubTitle("");
+                            setBatchLessonId("");
+                            setQuizBatch(prev => prev.map(q => ({ ...q, subTitle: "", lessonId: "" })));
                           }}
-                          className="h-4 w-4 text-emerald-600 focus:ring-emerald-500"
-                        />
-                        <input
-                          type="text"
-                          value={opt}
+                          className="text-[10px] text-purple-700 hover:text-purple-950 underline self-start sm:self-auto cursor-pointer font-semibold"
+                        >
+                          Reset ke Kuis Utama
+                        </button>
+                      )}
+                    </div>
+                    <input
+                      type="text"
+                      value={batchSubTitle}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setBatchSubTitle(val);
+                        setQuizBatch(prev => prev.map(q => ({ ...q, subTitle: val })));
+                      }}
+                      placeholder={`Contoh: Sub 1: Kosakata Bab ${batchChapterNumber} / Tata Bahasa Bunpou / Menyimak Kaiwa`}
+                      className="w-full bg-white border border-purple-300 px-3.5 py-2 rounded-xl text-xs font-bold text-slate-900 focus:border-purple-600 focus:ring-2 focus:ring-purple-200 outline-none placeholder:text-slate-400 font-sans"
+                    />
+                    {(() => {
+                      const chapterLessons = (lmsLessons || systemState?.lmsLessons || []).filter(
+                        (l: any) => l.chapterNumber === batchChapterNumber && (!l.subject || l.subject === batchSubject)
+                      );
+                      if (chapterLessons.length === 0) return null;
+                      return (
+                        <div className="pt-2 flex items-center gap-1.5 flex-wrap">
+                          <span className="text-[10px] text-purple-800 font-bold shrink-0">Tautkan ke materi bab ini:</span>
+                          {chapterLessons.map((l: any) => (
+                            <button
+                              key={l.id}
+                              type="button"
+                              onClick={() => {
+                                setBatchSubTitle(l.title);
+                                setBatchLessonId(l.id);
+                                setQuizBatch(prev => prev.map(q => ({ ...q, subTitle: l.title, lessonId: l.id })));
+                              }}
+                              className={`text-[10px] px-2.5 py-1 rounded-lg border font-semibold transition cursor-pointer flex items-center gap-1 ${
+                                batchSubTitle === l.title
+                                  ? "bg-purple-700 text-white border-purple-800 font-bold shadow-2xs"
+                                  : "bg-white text-purple-900 border-purple-200 hover:bg-purple-100"
+                              }`}
+                            >
+                              <span>{l.contentType === "video" ? "🎬" : l.contentType === "slide" ? "📽️" : "📝"}</span>
+                              <span>{l.title}</span>
+                            </button>
+                          ))}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                </div>
+              </div>
+
+              {/* STACK OF QUESTION CARDS (GOOGLE FORM STYLE) */}
+              <div className="space-y-5">
+                {quizBatch.map((q, qIdx) => {
+                  const isMultipleChoice = q.questionType !== "essay";
+                  const options = Array.isArray(q.options) && q.options.length > 0 ? q.options : ["", "", "", ""];
+                  const correctIndices: number[] = Array.isArray(q.correctAnswerIndices) && q.correctAnswerIndices.length > 0
+                    ? q.correctAnswerIndices.map(Number)
+                    : (q.correctAnswerIndex !== undefined ? [Number(q.correctAnswerIndex)] : [0]);
+                  const isMultiAnswer = !!q.allowMultipleAnswers || q.questionType === "pilihan_ganda_kompleks" || correctIndices.length > 1;
+                  const selectedKey = correctIndices[0] !== undefined ? correctIndices[0] : 0;
+
+                  return (
+                    <div
+                      key={q.id || qIdx}
+                      id={`google-form-question-${qIdx}`}
+                      onClick={() => setSelectedBatchIndex(qIdx)}
+                      className={`bg-white rounded-2xl sm:rounded-3xl border-2 transition-all p-4 sm:p-7 space-y-4 shadow-sm relative ${
+                        qIdx === selectedBatchIndex
+                          ? "border-purple-500 border-l-[10px] border-l-purple-600 ring-4 ring-purple-100/70 shadow-md"
+                          : "border-slate-200/90 border-l-[10px] border-l-transparent hover:border-slate-300"
+                      }`}
+                    >
+                      {/* Top Bar of Question Card (Google Form Style) */}
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-150 pb-3.5">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="bg-purple-600 text-white text-xs font-black px-3 py-1 rounded-xl shadow-2xs">
+                            Pertanyaan #{qIdx + 1}
+                          </span>
+                          <span className="text-[11px] font-semibold text-slate-500 bg-slate-100 px-2.5 py-0.5 rounded-lg">
+                            {isMultipleChoice ? `${options.length} Pilihan Jawaban` : "Essay / Isian"}
+                          </span>
+                          {isMultiAnswer && isMultipleChoice && (
+                            <span className="text-[10px] font-extrabold text-purple-800 bg-purple-100 border border-purple-300 px-2.5 py-0.5 rounded-lg flex items-center gap-1">
+                              <CheckSquare className="w-3 h-3" />
+                              <span>Multi-Kunci (&gt;1 Jawaban Benar)</span>
+                            </span>
+                          )}
+                          {q.required !== false && (
+                            <span className="text-[10px] font-bold text-red-600 bg-red-50 border border-red-200 px-2 py-0.5 rounded-md">
+                              * Wajib Diisi
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-2 self-end sm:self-auto">
+                          {/* Question Type Selector */}
+                          <select
+                            value={isMultiAnswer && isMultipleChoice ? "pilihan_ganda_kompleks" : (q.questionType || "pilihan_ganda")}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              const isKompleks = val === "pilihan_ganda_kompleks";
+                              setQuizBatch(prev => {
+                                const copy = [...prev];
+                                copy[qIdx] = {
+                                  ...copy[qIdx],
+                                  questionType: val,
+                                  allowMultipleAnswers: isKompleks,
+                                  correctAnswerIndices: isKompleks ? correctIndices : [correctIndices[0] || 0],
+                                  correctAnswerIndex: correctIndices[0] || 0,
+                                };
+                                return copy;
+                              });
+                            }}
+                            className="bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl text-xs font-bold text-slate-700 outline-none cursor-pointer focus:border-purple-500"
+                          >
+                            <option value="pilihan_ganda">🔘 Pilihan Ganda (1 Jawaban Benar)</option>
+                            <option value="pilihan_ganda_kompleks">☑️ Pilihan Ganda Kompleks (Bisa &gt;1 Jawaban Benar)</option>
+                            <option value="essay">📝 Essay / Isian Singkat</option>
+                          </select>
+
+                          {/* Duplicate Question */}
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const clone = {
+                                ...q,
+                                id: "QZ-" + Date.now() + "_" + Math.floor(Math.random() * 1000),
+                                options: [...options]
+                              };
+                              setQuizBatch(prev => {
+                                const copy = [...prev];
+                                copy.splice(qIdx + 1, 0, clone);
+                                return copy;
+                              });
+                            }}
+                            className="p-1.5 rounded-xl text-slate-500 hover:text-purple-700 hover:bg-purple-50 border border-slate-200 transition cursor-pointer flex items-center gap-1 text-xs font-semibold"
+                            title="Duplikat Soal Ini"
+                          >
+                            <Copy className="h-3.5 w-3.5" />
+                            <span className="hidden md:inline">Duplikat</span>
+                          </button>
+
+                          {/* Delete Question */}
+                          {quizBatch.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (confirm(`Hapus Soal #${qIdx + 1}?`)) {
+                                  const filtered = quizBatch.filter((_, i) => i !== qIdx);
+                                  setQuizBatch(filtered);
+                                  setSelectedBatchIndex(prev => (prev >= filtered.length ? filtered.length - 1 : prev));
+                                }
+                              }}
+                              className="p-1.5 rounded-xl text-slate-400 hover:text-red-600 hover:bg-red-50 border border-slate-200 transition cursor-pointer flex items-center gap-1 text-xs font-semibold"
+                              title="Hapus Soal Ini"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                              <span className="hidden md:inline">Hapus</span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Question Text Input (Google Form Style Textarea) */}
+                      <div className="space-y-1.5">
+                        <label className="text-xs font-extrabold text-slate-800 flex items-center justify-between">
+                          <span>Teks Pertanyaan Soal:</span>
+                          {!q.question?.trim() && (
+                            <span className="text-[10px] text-amber-600 font-bold bg-amber-50 px-2 py-0.5 rounded-md border border-amber-200">
+                              Harap isi pertanyaan
+                            </span>
+                          )}
+                        </label>
+                        <textarea
+                          value={q.question || ""}
                           onChange={(e) => {
                             const val = e.target.value;
                             setQuizBatch(prev => {
                               const copy = [...prev];
-                              const newOpts = [...(copy[selectedBatchIndex].options || ["", "", "", ""])];
-                              newOpts[i] = val;
-                              copy[selectedBatchIndex] = { ...copy[selectedBatchIndex], options: newOpts };
+                              copy[qIdx] = { ...copy[qIdx], question: val };
                               return copy;
                             });
                           }}
-                          className="flex-1 bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-sm focus:border-emerald-500 outline-none"
-                          placeholder={'Opsi ' + (i + 1)}
+                          rows={2}
+                          placeholder={`Tuliskan pertanyaan soal #${qIdx + 1} di sini... (contoh: Apa arti kosakata 'Ohayou Gozaimasu'?)`}
+                          className="w-full bg-slate-50/70 border border-slate-300 focus:bg-white focus:border-purple-600 focus:ring-2 focus:ring-purple-100 px-4 py-3 rounded-2xl text-sm font-medium text-slate-900 outline-none transition placeholder-slate-400"
                         />
                       </div>
-                    ))}
-                    <p className="text-[10px] text-slate-500 italic">* Pilih radio button untuk menandai jawaban yang benar.</p>
-                  </div>
-                )}
+
+                      {/* Media Attachments Section (Gambar & Audio) */}
+                      <div className="space-y-2 bg-slate-50/80 p-3 rounded-2xl border border-slate-200/80">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[11px] font-bold text-slate-700 flex items-center gap-1.5">
+                            <span>📎 Lampiran Media (Opsional):</span>
+                          </span>
+                          <span className="text-[10px] text-slate-400">Gambar atau Rekaman Suara</span>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          {/* Gambar Attachment */}
+                          <div className="bg-white border border-slate-200 rounded-xl p-2.5 flex flex-col justify-between gap-1.5">
+                            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">🖼️ Gambar</span>
+                            {q.imageUrl ? (
+                              <div className="relative rounded-lg overflow-hidden border border-slate-200 bg-slate-50 aspect-video flex items-center justify-center">
+                                <img src={q.imageUrl} alt="Lampiran Soal" className="max-h-full max-w-full object-contain" referrerPolicy="no-referrer" />
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setQuizBatch(prev => {
+                                      const copy = [...prev];
+                                      copy[qIdx] = { ...copy[qIdx], imageUrl: "" };
+                                      return copy;
+                                    });
+                                  }}
+                                  className="absolute top-1 right-1 bg-red-600 text-white rounded-full p-1 shadow hover:bg-red-700 transition cursor-pointer"
+                                  title="Hapus gambar"
+                                >
+                                  <X className="h-3 w-3" />
+                                </button>
+                              </div>
+                            ) : (
+                              <input
+                                type="file"
+                                accept="image/*"
+                                disabled={isFileUploading}
+                                onChange={async (e) => {
+                                  const file = e.target.files?.[0];
+                                  if (!file) return;
+                                  setIsFileUploading(true);
+                                  try {
+                                    const url = await uploadFileToFirebase(file, "lms_quizzes");
+                                    setQuizBatch(prev => {
+                                      const copy = [...prev];
+                                      copy[qIdx] = { ...copy[qIdx], imageUrl: url };
+                                      return copy;
+                                    });
+                                  } catch (err) {
+                                    alert("Gagal mengunggah gambar");
+                                  } finally {
+                                    setIsFileUploading(false);
+                                  }
+                                }}
+                                className="w-full text-[10px] text-slate-500 file:mr-2 file:py-1 file:px-2 file:rounded-md file:border-0 file:text-[10px] file:font-bold file:bg-slate-100 file:text-slate-700 hover:file:bg-purple-100 cursor-pointer"
+                              />
+                            )}
+                          </div>
+
+                          {/* Audio Attachment */}
+                          <div className="bg-white border border-slate-200 rounded-xl p-2.5 flex flex-col justify-between gap-1.5">
+                            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">🎙️ Audio (Suara)</span>
+                            {q.audioUrl ? (
+                              <div className="relative rounded-lg p-2 border border-slate-200 bg-slate-50 flex items-center justify-between gap-2">
+                                <audio src={q.audioUrl} controls className="w-full h-8" />
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setQuizBatch(prev => {
+                                      const copy = [...prev];
+                                      copy[qIdx] = { ...copy[qIdx], audioUrl: "" };
+                                      return copy;
+                                    });
+                                  }}
+                                  className="bg-red-600 text-white rounded-full p-1 shadow hover:bg-red-700 transition cursor-pointer shrink-0"
+                                  title="Hapus audio"
+                                >
+                                  <X className="h-3 w-3" />
+                                </button>
+                              </div>
+                            ) : (
+                              <input
+                                type="file"
+                                accept="audio/*"
+                                disabled={isFileUploading}
+                                onChange={async (e) => {
+                                  const file = e.target.files?.[0];
+                                  if (!file) return;
+                                  setIsFileUploading(true);
+                                  try {
+                                    const url = await uploadFileToFirebase(file, "lms_quizzes");
+                                    setQuizBatch(prev => {
+                                      const copy = [...prev];
+                                      copy[qIdx] = { ...copy[qIdx], audioUrl: url };
+                                      return copy;
+                                    });
+                                  } catch (err) {
+                                    alert("Gagal mengunggah audio");
+                                  } finally {
+                                    setIsFileUploading(false);
+                                  }
+                                }}
+                                className="w-full text-[10px] text-slate-500 file:mr-2 file:py-1 file:px-2 file:rounded-md file:border-0 file:text-[10px] file:font-bold file:bg-slate-100 file:text-slate-700 hover:file:bg-purple-100 cursor-pointer"
+                              />
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* OPTIONS SECTION: MULTIPLE CHOICE (GOOGLE FORM STYLE WITH DYNAMIC OPTIONS) */}
+                      {isMultipleChoice ? (
+                        <div className="space-y-3.5 pt-2">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-150 pb-2">
+                            <label className="text-xs font-black text-slate-800 flex items-center gap-2">
+                              <span>{isMultiAnswer ? "☑️ Pilihan Jawaban (Multi-Kunci):" : "🔘 Pilihan Jawaban:"}</span>
+                              <span className="text-[10px] font-bold text-purple-700 bg-purple-50 border border-purple-200 px-2 py-0.5 rounded-md">
+                                {options.length} Opsi Tersedia
+                              </span>
+                            </label>
+
+                            {/* Mode Toggle Button */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setQuizBatch(prev => {
+                                  const copy = [...prev];
+                                  const nextMulti = !isMultiAnswer;
+                                  copy[qIdx] = {
+                                    ...copy[qIdx],
+                                    allowMultipleAnswers: nextMulti,
+                                    questionType: nextMulti ? "pilihan_ganda_kompleks" : "pilihan_ganda",
+                                    correctAnswerIndices: nextMulti ? correctIndices : [correctIndices[0] || 0],
+                                    correctAnswerIndex: correctIndices[0] || 0,
+                                  };
+                                  return copy;
+                                });
+                              }}
+                              className={`px-3 py-1 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer border ${
+                                isMultiAnswer
+                                  ? "bg-purple-600 text-white border-purple-700 shadow-2xs"
+                                  : "bg-white hover:bg-purple-50 text-slate-700 hover:text-purple-700 border-slate-300"
+                              }`}
+                              title="Klik untuk mengaktifkan/menonaktifkan lebih dari 1 jawaban benar"
+                            >
+                              {isMultiAnswer ? <CheckSquare className="w-3.5 h-3.5" /> : <Square className="w-3.5 h-3.5 text-slate-400" />}
+                              <span>{isMultiAnswer ? "✓ Multi-Jawaban Benar Aktif" : "+ Izinkan >1 Jawaban Benar"}</span>
+                            </button>
+                          </div>
+
+                          {isMultiAnswer && (
+                            <div className="p-2.5 bg-purple-50 border border-purple-200 rounded-xl text-xs text-purple-900 flex items-center gap-2">
+                              <span className="text-base">💡</span>
+                              <span><strong>Mode Multi-Jawaban Aktif:</strong> Anda dapat memilih lebih dari satu opsi sebagai kunci jawaban yang benar. Klik opsi manapun untuk menambah atau menghapus kunci jawaban.</span>
+                            </div>
+                          )}
+
+                          {/* Options List */}
+                          <div className="space-y-3">
+                            {options.map((opt, optIdx) => {
+                              const letter = String.fromCharCode(65 + optIdx);
+                              const isCorrect = correctIndices.includes(optIdx);
+
+                              const handleToggleKey = () => {
+                                setQuizBatch(prev => {
+                                  const copy = [...prev];
+                                  if (isMultiAnswer) {
+                                    let newKeys: number[];
+                                    if (correctIndices.includes(optIdx)) {
+                                      if (correctIndices.length > 1) {
+                                        newKeys = correctIndices.filter(k => k !== optIdx);
+                                      } else {
+                                        newKeys = correctIndices;
+                                      }
+                                    } else {
+                                      newKeys = [...correctIndices, optIdx].sort((a, b) => a - b);
+                                    }
+                                    copy[qIdx] = {
+                                      ...copy[qIdx],
+                                      correctAnswerIndices: newKeys,
+                                      correctAnswerIndex: newKeys[0] || 0,
+                                      allowMultipleAnswers: true,
+                                      questionType: "pilihan_ganda_kompleks"
+                                    };
+                                  } else {
+                                    copy[qIdx] = {
+                                      ...copy[qIdx],
+                                      correctAnswerIndex: optIdx,
+                                      correctAnswerIndices: [optIdx],
+                                      allowMultipleAnswers: false,
+                                      questionType: "pilihan_ganda"
+                                    };
+                                  }
+                                  return copy;
+                                });
+                              };
+
+                              return (
+                                <div
+                                  key={optIdx}
+                                  className={`p-3 sm:p-3.5 rounded-2xl border-2 transition-all ${
+                                    isCorrect
+                                      ? "border-emerald-500 bg-emerald-50/70 ring-2 ring-emerald-200 shadow-2xs"
+                                      : "border-slate-200 bg-slate-50/60 hover:bg-slate-50 hover:border-slate-300"
+                                  }`}
+                                >
+                                  {/* Input row (Radio bullet / Checkbox + Letter badge + Text input + Delete) */}
+                                  <div className="flex items-center gap-2.5">
+                                    {/* Google Form Style Selector Button */}
+                                    <button
+                                      type="button"
+                                      onClick={handleToggleKey}
+                                      className={`h-7 w-7 ${isMultiAnswer ? "rounded-lg" : "rounded-full"} flex items-center justify-center transition cursor-pointer shrink-0 ${
+                                        isCorrect
+                                          ? "border-2 border-emerald-600 bg-emerald-600 shadow-xs text-white"
+                                          : "border-2 border-slate-400 hover:border-purple-600 bg-white"
+                                      }`}
+                                      title={isMultiAnswer ? `Klik untuk jadikan/hapus Opsi ${letter} sebagai Kunci Jawaban` : `Klik untuk jadikan Opsi ${letter} sebagai Kunci Jawaban`}
+                                    >
+                                      {isCorrect ? (
+                                        isMultiAnswer ? <Check className="h-4 w-4 stroke-[3]" /> : <div className="h-2 w-2 rounded-full bg-white" />
+                                      ) : (
+                                        <div className="h-1.5 w-1.5 rounded-full bg-transparent group-hover:bg-purple-400" />
+                                      )}
+                                    </button>
+
+                                    {/* Letter badge */}
+                                    <div
+                                      className={`h-8 w-8 rounded-xl flex items-center justify-center font-black text-xs shrink-0 select-none shadow-2xs ${
+                                        isCorrect
+                                          ? "bg-emerald-600 text-white"
+                                          : "bg-white border border-slate-300 text-slate-700"
+                                      }`}
+                                    >
+                                      {letter}
+                                    </div>
+
+                                    {/* Option Text Input */}
+                                    <input
+                                      type="text"
+                                      id={`google-form-opt-${qIdx}-${optIdx}`}
+                                      value={opt}
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                          e.preventDefault();
+                                          const newOpts = [...options, ""];
+                                          setQuizBatch(prev => {
+                                            const copy = [...prev];
+                                            copy[qIdx] = { ...copy[qIdx], options: newOpts };
+                                            return copy;
+                                          });
+                                          setTimeout(() => {
+                                            const el = document.getElementById(`google-form-opt-${qIdx}-${options.length}`);
+                                            if (el) el.focus();
+                                          }, 60);
+                                        }
+                                      }}
+                                      onChange={(e) => {
+                                        const val = e.target.value;
+                                        setQuizBatch(prev => {
+                                          const copy = [...prev];
+                                          const newOpts = [...(copy[qIdx].options || ["", "", "", ""])];
+                                          newOpts[optIdx] = val;
+                                          copy[qIdx] = { ...copy[qIdx], options: newOpts };
+                                          return copy;
+                                        });
+                                      }}
+                                      placeholder={`Tuliskan pilihan ${letter} (contoh: Opsi ${letter})`}
+                                      className="flex-1 bg-white border border-slate-300 focus:border-purple-600 focus:ring-2 focus:ring-purple-200 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-medium text-slate-800 outline-none transition placeholder-slate-400"
+                                    />
+
+                                    {/* Delete Option (X) */}
+                                    {options.length > 2 && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setQuizBatch(prev => {
+                                            const copy = [...prev];
+                                            const newOpts = copy[qIdx].options.filter((_: any, i: number) => i !== optIdx);
+                                            let newIndices = correctIndices
+                                              .filter(k => k !== optIdx)
+                                              .map(k => (k > optIdx ? k - 1 : k));
+                                            if (newIndices.length === 0) newIndices = [0];
+                                            copy[qIdx] = {
+                                              ...copy[qIdx],
+                                              options: newOpts,
+                                              correctAnswerIndices: newIndices,
+                                              correctAnswerIndex: newIndices[0] || 0
+                                            };
+                                            return copy;
+                                          });
+                                        }}
+                                        className="h-8 w-8 rounded-xl text-slate-400 hover:text-red-600 hover:bg-red-50 flex items-center justify-center transition cursor-pointer shrink-0"
+                                        title={`Hapus pilihan ${letter}`}
+                                      >
+                                        <X className="h-4 w-4" />
+                                      </button>
+                                    )}
+                                  </div>
+
+                                  {/* Direct Answer Key Button Underneath Each Option */}
+                                  <div className="mt-2.5 pt-2 border-t border-slate-200/60 flex flex-wrap items-center justify-between gap-2">
+                                    <button
+                                      type="button"
+                                      onClick={handleToggleKey}
+                                      className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer select-none active:scale-95 ${
+                                        isCorrect
+                                          ? "bg-emerald-600 text-white shadow-sm ring-2 ring-emerald-300"
+                                          : "bg-white hover:bg-emerald-50 text-slate-700 hover:text-emerald-700 border border-slate-300 hover:border-emerald-400"
+                                      }`}
+                                    >
+                                      {isCorrect ? (
+                                        <>
+                                          <CheckCircle2 className="w-4 h-4 text-white" />
+                                          <span>{isMultiAnswer ? `✓ Kunci Benar (Opsi ${letter})` : `✓ Kunci Jawaban (Benar)`}</span>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <span className="w-3.5 h-3.5 rounded-full border-2 border-slate-400 inline-block" />
+                                          <span>{isMultiAnswer ? `+ Tambah Opsi ${letter} Sebagai Kunci Benar` : `Pilih Opsi ${letter} Sebagai Kunci`}</span>
+                                        </>
+                                      )}
+                                    </button>
+
+                                    {isCorrect && (
+                                      <span className="text-[11px] font-extrabold text-emerald-800 bg-emerald-100 border border-emerald-300 px-2.5 py-0.5 rounded-full flex items-center gap-1">
+                                        <span>✓ Termasuk salah satu kunci jawaban benar</span>
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+
+                          {/* Google Forms Signature "Tambahkan Opsi" Row */}
+                          <div 
+                            onClick={() => {
+                              const newOpts = [...options, ""];
+                              setQuizBatch(prev => {
+                                const copy = [...prev];
+                                copy[qIdx] = { ...copy[qIdx], options: newOpts };
+                                return copy;
+                              });
+                              setTimeout(() => {
+                                const el = document.getElementById(`google-form-opt-${qIdx}-${options.length}`);
+                                if (el) el.focus();
+                              }, 60);
+                            }}
+                            className="flex items-center gap-3 p-3 rounded-2xl border-2 border-dashed border-slate-300 hover:border-purple-500 bg-white/70 hover:bg-purple-50/60 transition cursor-pointer group select-none shadow-2xs"
+                            title="Klik untuk menambahkan opsi pilihan baru"
+                          >
+                            <div className="h-7 w-7 rounded-full border-2 border-slate-400 group-hover:border-purple-600 flex items-center justify-center text-slate-400 group-hover:text-purple-700 bg-white transition shrink-0">
+                              <Plus className="h-4 w-4" />
+                            </div>
+                            <div className="flex-1 flex items-center justify-between">
+                              <span className="text-xs font-bold text-slate-600 group-hover:text-purple-900">
+                                Tambahkan opsi ({String.fromCharCode(65 + options.length)}) <span className="font-normal text-[11px] text-slate-400 ml-1 hidden sm:inline">• atau tekan Enter saat mengetik pilihan</span>
+                              </span>
+                              <span className="text-[11px] font-extrabold text-purple-700 bg-purple-100 group-hover:bg-purple-200 px-2.5 py-1 rounded-lg transition flex items-center gap-1">
+                                <Plus className="w-3.5 h-3.5" />
+                                <span>+ Tambah Opsi {String.fromCharCode(65 + options.length)}</span>
+                              </span>
+                            </div>
+                          </div>
+
+                          {/* Quick Presets & Options Management Toolbar */}
+                          <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-100">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mr-1">
+                                Preset Opsi:
+                              </span>
+
+                              {/* Button Add 1 Option */}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setQuizBatch(prev => {
+                                    const copy = [...prev];
+                                    const newOpts = [...(copy[qIdx].options || ["", "", "", ""]), ""];
+                                    copy[qIdx] = { ...copy[qIdx], options: newOpts };
+                                    return copy;
+                                  });
+                                  setTimeout(() => {
+                                    const el = document.getElementById(`google-form-opt-${qIdx}-${options.length}`);
+                                    if (el) el.focus();
+                                  }, 60);
+                                }}
+                                className="px-3 py-1.5 rounded-xl text-xs font-bold bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200 transition flex items-center gap-1 cursor-pointer active:scale-95"
+                              >
+                                <Plus className="h-3 w-3" />
+                                <span>+ Opsi {String.fromCharCode(65 + options.length)}</span>
+                              </button>
+
+                              {/* Preset 5 Options (A-E) */}
+                              {options.length !== 5 && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setQuizBatch(prev => {
+                                      const copy = [...prev];
+                                      let cur = [...(copy[qIdx].options || [])];
+                                      while (cur.length < 5) cur.push("");
+                                      if (cur.length > 5) cur = cur.slice(0, 5);
+                                      copy[qIdx] = { ...copy[qIdx], options: cur };
+                                      return copy;
+                                    });
+                                  }}
+                                  className="px-2.5 py-1.5 rounded-xl text-[11px] font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 transition cursor-pointer"
+                                  title="Format 5 Pilihan (A, B, C, D, E) untuk standar ujian"
+                                >
+                                  5 Opsi (A - E)
+                                </button>
+                              )}
+
+                              {/* Preset 4 Options (A-D) */}
+                              {options.length !== 4 && (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setQuizBatch(prev => {
+                                      const copy = [...prev];
+                                      let cur = [...(copy[qIdx].options || [])];
+                                      while (cur.length < 4) cur.push("");
+                                      if (cur.length > 4) cur = cur.slice(0, 4);
+                                      copy[qIdx] = { ...copy[qIdx], options: cur };
+                                      return copy;
+                                    });
+                                  }}
+                                  className="px-2.5 py-1.5 rounded-xl text-[11px] font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 transition cursor-pointer"
+                                  title="Format 4 Pilihan (A, B, C, D)"
+                                >
+                                  4 Opsi (A - D)
+                                </button>
+                              )}
+
+                              {/* Preset Benar / Salah (True/False) */}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setQuizBatch(prev => {
+                                    const copy = [...prev];
+                                    copy[qIdx] = { ...copy[qIdx], options: ["Benar", "Salah"], correctAnswerIndex: 0, correctAnswerIndices: [0] };
+                                    return copy;
+                                  });
+                                }}
+                                className="px-2.5 py-1.5 rounded-xl text-[11px] font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 transition cursor-pointer"
+                                title="Set 2 Pilihan: Benar / Salah"
+                              >
+                                2 Opsi (Benar / Salah)
+                              </button>
+                            </div>
+
+                            <div className="text-xs font-bold text-emerald-800 bg-emerald-50 border border-emerald-200 px-3 py-1.5 rounded-xl flex items-center gap-1.5 flex-wrap">
+                              <span>🔑 Kunci Aktif ({correctIndices.length}):</span>
+                              <strong>Opsi {correctIndices.map(k => String.fromCharCode(65 + k)).join(", ")}</strong>
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        /* ESSAY SECTION: AUTO-GRADING KEY */
+                        <div className="space-y-2.5 bg-emerald-50/70 border border-emerald-300 rounded-2xl p-4 shadow-2xs">
+                          <div className="flex items-center justify-between">
+                            <label className="text-xs font-black text-emerald-950 flex items-center gap-1.5">
+                              <span>🔑 Kunci Jawaban Essay (Penilaian Otomatis)</span>
+                            </label>
+                            <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2.5 py-0.5 rounded-full border border-emerald-300">
+                              Auto-Grading Aktif
+                            </span>
+                          </div>
+                          <textarea
+                            value={q.correctAnswerEssay || q.correctAnswerText || ""}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setQuizBatch(prev => {
+                                const copy = [...prev];
+                                copy[qIdx] = {
+                                  ...copy[qIdx],
+                                  correctAnswerEssay: val,
+                                  correctAnswerText: val
+                                };
+                                return copy;
+                              });
+                            }}
+                            rows={2}
+                            className="w-full bg-white border border-emerald-300 px-3.5 py-2.5 rounded-xl text-xs sm:text-sm focus:border-emerald-600 focus:ring-1 focus:ring-emerald-600 outline-none resize-none text-slate-900 placeholder-slate-400 font-medium"
+                            placeholder="Contoh: こんにちは, atau pisahkan dengan tanda koma (,) jika ada beberapa variasi penulisan yang benar..."
+                          />
+                          <p className="text-[10px] text-emerald-800 leading-relaxed">
+                            💡 Siswa yang menuliskan kata di atas (tidak membedakan huruf besar/kecil) akan otomatis mendapatkan nilai 100%. Pisahkan alternatif jawaban dengan tanda koma (<code>,</code>).
+                          </p>
+                        </div>
+                      )}
+
+                      {/* Optional Pembahasan Jawaban */}
+                      <div className="space-y-1.5 pt-1">
+                        <label className="text-[11px] font-bold text-slate-600 flex items-center gap-1">
+                          <span>💡 Pembahasan / Penjelasan Jawaban (Opsional):</span>
+                        </label>
+                        <textarea
+                          value={q.explanation || ""}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setQuizBatch(prev => {
+                              const copy = [...prev];
+                              copy[qIdx] = { ...copy[qIdx], explanation: val };
+                              return copy;
+                            });
+                          }}
+                          rows={1}
+                          placeholder="Tuliskan penjelasan atau arti materi yang akan ditampilkan ke siswa setelah kuis selesai..."
+                          className="w-full bg-slate-50 border border-slate-200 px-3 py-2 rounded-xl text-xs text-slate-800 focus:bg-white focus:border-purple-500 outline-none"
+                        />
+                      </div>
+
+                      {/* Google Form Style Bottom Toolbar of the Question Card */}
+                      <div className="pt-3 border-t border-slate-150 flex flex-wrap items-center justify-between gap-3 text-xs">
+                        <div className="flex items-center gap-3">
+                          {/* Poin Soal (Bobot Nilai) */}
+                          <div className="flex items-center gap-1.5 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200">
+                            <span className="text-[11px] font-bold text-slate-600">Bobot Poin:</span>
+                            <input
+                              type="number"
+                              min={1}
+                              max={100}
+                              value={q.points !== undefined ? q.points : 10}
+                              onChange={(e) => {
+                                const val = Number(e.target.value) || 1;
+                                setQuizBatch(prev => {
+                                  const copy = [...prev];
+                                  copy[qIdx] = { ...copy[qIdx], points: val };
+                                  return copy;
+                                });
+                              }}
+                              className="w-12 bg-white border border-slate-300 rounded-lg px-1.5 py-0.5 text-center font-bold text-xs text-purple-700 outline-none focus:border-purple-500"
+                            />
+                            <span className="text-[10px] text-slate-400">Poin</span>
+                          </div>
+
+                          {/* Wajib Diisi (Required Toggle Switch) */}
+                          <label className="flex items-center gap-2 cursor-pointer select-none">
+                            <input
+                              type="checkbox"
+                              checked={q.required !== false}
+                              onChange={(e) => {
+                                const checked = e.target.checked;
+                                setQuizBatch(prev => {
+                                  const copy = [...prev];
+                                  copy[qIdx] = { ...copy[qIdx], required: checked };
+                                  return copy;
+                                });
+                              }}
+                              className="w-4 h-4 text-purple-600 rounded border-slate-300 focus:ring-purple-500 cursor-pointer"
+                            />
+                            <span className="text-xs font-bold text-slate-700">Wajib Diisi</span>
+                          </label>
+                        </div>
+
+                        {/* Card Action Buttons (Duplicate, Delete, Insert Below) */}
+                        <div className="flex items-center gap-2">
+                          {/* Duplikat */}
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const clone = {
+                                ...q,
+                                id: "QZ-" + Date.now() + "_" + Math.floor(Math.random() * 1000),
+                                options: [...options]
+                              };
+                              setQuizBatch(prev => {
+                                const copy = [...prev];
+                                copy.splice(qIdx + 1, 0, clone);
+                                return copy;
+                              });
+                            }}
+                            className="p-2 rounded-xl text-slate-500 hover:text-purple-700 hover:bg-purple-50 border border-slate-200 transition cursor-pointer flex items-center gap-1.5 text-xs font-bold"
+                            title="Duplikat pertanyaan ini"
+                          >
+                            <Copy className="h-3.5 w-3.5" />
+                            <span>Duplikat</span>
+                          </button>
+
+                          {/* Hapus */}
+                          {quizBatch.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (confirm(`Hapus Soal #${qIdx + 1}?`)) {
+                                  const filtered = quizBatch.filter((_, i) => i !== qIdx);
+                                  setQuizBatch(filtered);
+                                  setSelectedBatchIndex(prev => (prev >= filtered.length ? filtered.length - 1 : prev));
+                                }
+                              }}
+                              className="p-2 rounded-xl text-slate-400 hover:text-red-600 hover:bg-red-50 border border-slate-200 transition cursor-pointer flex items-center gap-1.5 text-xs font-bold"
+                              title="Hapus pertanyaan ini"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                              <span>Hapus</span>
+                            </button>
+                          )}
+
+                          {/* Sisipkan Pertanyaan Baru */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const template = {
+                                id: "QZ-" + Date.now() + "_" + Math.floor(Math.random() * 1000),
+                                subject: batchSubject || "Bahasa Jepang",
+                                questionType: "pilihan_ganda",
+                                question: "",
+                                options: ["", "", "", ""],
+                                correctAnswerIndex: 0,
+                                correctAnswerEssay: "",
+                                correctAnswerText: "",
+                                chapterNumber: batchChapterNumber,
+                                deadline: batchDeadline || "",
+                                durationMinutes: batchDurationMinutes || "",
+                                imageUrl: "",
+                                videoUrl: "",
+                                audioUrl: "",
+                                points: 10,
+                                required: true
+                              };
+                              setQuizBatch(prev => {
+                                const copy = [...prev];
+                                copy.splice(qIdx + 1, 0, template);
+                                return copy;
+                              });
+                              setTimeout(() => {
+                                const nextEl = document.getElementById(`google-form-question-${qIdx + 1}`);
+                                if (nextEl) nextEl.scrollIntoView({ behavior: "smooth", block: "center" });
+                              }, 100);
+                            }}
+                            className="px-3.5 py-2 rounded-xl text-xs font-bold text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 transition flex items-center gap-1.5 cursor-pointer active:scale-95 shadow-2xs"
+                            title="Sisipkan pertanyaan baru tepat di bawah soal ini"
+                          >
+                            <Plus className="h-3.5 w-3.5" />
+                            <span>+ Sisipkan Soal</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-              
-              <div className="bg-slate-50 border-t border-slate-100 p-4 sm:p-6 shrink-0 flex flex-col sm:flex-row items-center justify-between gap-4">
-                <div className="text-[11px] text-slate-500 font-mono text-center sm:text-left">
-                  Menyimpan <span className="font-extrabold text-emerald-600">{quizBatch.filter(q => q.question?.trim()).length}</span> dari <span className="font-extrabold">{quizBatch.length}</span> soal yang valid.
-                </div>
-                <div className="flex items-center gap-2.5 w-full sm:w-auto">
-                  <button
-                    type="button"
-                    onClick={() => setIsQuizFormOpen(false)}
-                    className="flex-1 sm:flex-none border border-slate-200 hover:bg-slate-100 text-slate-700 font-bold text-xs px-4 py-2.5 rounded-xl transition cursor-pointer"
-                  >
-                    Batal
-                  </button>
-                  <button
-                    type="button"
-                    disabled={isFileUploading || quizBatch.filter(q => q.question?.trim()).length === 0}
-                    onClick={async () => {
-                      if (onUpdateState) {
-                        const validQuizzes = quizBatch.filter(q => q.question?.trim());
-                        for (const q of validQuizzes) {
-                          const id = "QZ-" + Math.floor(Math.random() * 10000);
-                          const payload = { 
-                            ...q, 
-                            id,
-                            targetClass: batchTargetClass,
-                            deadline: batchDeadline,
-                            durationMinutes: batchDurationMinutes
-                          };
-                          await onUpdateState('lmsQuizzes', 'add', payload);
-                        }
-                      }
-                      setIsQuizFormOpen(false);
-                    }}
-                    className="flex-1 sm:flex-none bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-xs px-5 py-2.5 rounded-xl transition cursor-pointer flex items-center justify-center gap-1.5"
-                  >
-                    <Save className="h-4 w-4" />
-                    <span>Simpan Semua Soal</span>
-                  </button>
-                </div>
+
+              {/* Big Bottom Add Question Button */}
+              <div className="pt-2 pb-6">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const template = {
+                      id: "QZ-" + Date.now() + "_" + Math.floor(Math.random() * 1000),
+                      subject: batchSubject || "Bahasa Jepang",
+                      questionType: "pilihan_ganda",
+                      question: "",
+                      options: ["", "", "", ""],
+                      correctAnswerIndex: 0,
+                      correctAnswerEssay: "",
+                      correctAnswerText: "",
+                      chapterNumber: batchChapterNumber,
+                      deadline: batchDeadline || "",
+                      durationMinutes: batchDurationMinutes || "",
+                      imageUrl: "",
+                      videoUrl: "",
+                      audioUrl: ""
+                    };
+                    setQuizBatch(prev => [...prev, template]);
+                    setTimeout(() => {
+                      const nextIdx = quizBatch.length;
+                      const el = document.getElementById(`google-form-question-${nextIdx}`);
+                      if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+                    }, 100);
+                  }}
+                  className="w-full py-5 rounded-3xl border-2 border-dashed border-purple-300 hover:border-purple-600 bg-white hover:bg-purple-50/50 text-purple-800 font-extrabold text-sm transition flex items-center justify-center gap-2 shadow-xs cursor-pointer group active:scale-98"
+                >
+                  <div className="h-8 w-8 rounded-full bg-purple-100 group-hover:bg-purple-600 text-purple-700 group-hover:text-white flex items-center justify-center transition">
+                    <Plus className="h-5 w-5" />
+                  </div>
+                  <span>+ Tambah Pertanyaan Baru (Soal #{quizBatch.length + 1})</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Sticky Bottom Modal Footer Bar (ALWAYS VISIBLE) */}
+            <div className="bg-white border-t border-slate-200 p-3.5 sm:p-5 shrink-0 flex flex-col sm:flex-row items-center justify-between gap-3 shadow-lg z-30">
+              <div className="text-xs text-slate-600 text-center sm:text-left flex items-center gap-2">
+                <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 inline-block animate-pulse" />
+                <span>
+                  Menyimpan <strong className="font-extrabold text-emerald-700">{quizBatch.filter(q => q.question?.trim()).length}</strong> dari <strong className="font-extrabold">{quizBatch.length}</strong> soal untuk <span className="font-bold text-purple-700">Bab {batchChapterNumber}</span>.
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2.5 w-full sm:w-auto">
+                <button
+                  type="button"
+                  onClick={() => setIsQuizFormOpen(false)}
+                  className="flex-1 sm:flex-none border border-slate-300 hover:bg-slate-100 text-slate-700 font-bold text-xs px-4 py-2.5 rounded-xl transition cursor-pointer"
+                >
+                  Batal
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const template = {
+                      id: "QZ-" + Date.now() + "_" + Math.floor(Math.random() * 1000),
+                      subject: batchSubject || "Bahasa Jepang",
+                      questionType: "pilihan_ganda",
+                      question: "",
+                      options: ["", "", "", ""],
+                      correctAnswerIndex: 0,
+                      correctAnswerEssay: "",
+                      correctAnswerText: "",
+                      chapterNumber: batchChapterNumber,
+                      deadline: batchDeadline || "",
+                      durationMinutes: batchDurationMinutes || "",
+                      imageUrl: "",
+                      videoUrl: "",
+                      audioUrl: ""
+                    };
+                    setQuizBatch(prev => [...prev, template]);
+                  }}
+                  className="border border-purple-200 hover:bg-purple-50 text-purple-700 font-bold text-xs px-4 py-2.5 rounded-xl transition cursor-pointer hidden sm:flex items-center gap-1.5"
+                >
+                  <Plus className="h-4 w-4" />
+                  <span>Tambah Soal</span>
+                </button>
+
+                <button
+                  type="button"
+                  disabled={isFileUploading || isSavingQuizBatch || quizBatch.filter(q => q.question?.trim() || q.imageUrl || q.audioUrl).length === 0}
+                  onClick={handleSaveAllQuizzes}
+                  className="flex-1 sm:flex-none bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-xs px-6 py-2.5 rounded-xl transition cursor-pointer flex items-center justify-center gap-2 shadow-sm active:scale-95"
+                >
+                  {isSavingQuizBatch ? (
+                    <>
+                      <RefreshCw className="h-4 w-4 animate-spin" />
+                      <span>Menyimpan Semua Soal ke Database Firestore...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Save className="h-4 w-4" />
+                      <span>Simpan Semua Soal Kuis ({quizBatch.filter(q => q.question?.trim() || q.imageUrl || q.audioUrl).length} Soal)</span>
+                    </>
+                  )}
+                </button>
               </div>
             </div>
           </div>
-        );
-      })()}
+        </div>,
+        document.body
+      )}
 
       {isLessonFormOpen && (
         <div className="fixed inset-0 z-[10000] bg-slate-950/65 backdrop-blur-sm flex items-center justify-center p-2 sm:p-4 overflow-y-auto animate-fade-in">
@@ -2778,68 +5069,165 @@ export default function LmsView({
 
               {/* Conditional Embed URLs */}
               {lessonContentType === "video" && (
-                <div className="animate-fade-in">
+                <div className="animate-fade-in space-y-2">
                   <div className="flex items-center justify-between mb-1.5">
                     <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">Tautan / Upload Video</label>
                     <div className="flex gap-1 bg-slate-100 p-0.5 rounded-lg">
-                      <button type="button" onClick={() => setLessonUploadMethod("url")} className={`px-2 py-1 text-[9px] font-bold rounded-md ${lessonUploadMethod === "url" ? "bg-white text-emerald-700 shadow-sm" : "text-slate-500"}`}>Link Semat</button>
-                      <button type="button" onClick={() => setLessonUploadMethod("file")} className={`px-2 py-1 text-[9px] font-bold rounded-md ${lessonUploadMethod === "file" ? "bg-white text-emerald-700 shadow-sm" : "text-slate-500"}`}>Upload File</button>
+                      <button type="button" onClick={() => setLessonUploadMethod("url")} className={`px-2 py-1 text-[9px] font-bold rounded-md cursor-pointer ${lessonUploadMethod === "url" ? "bg-white text-emerald-700 shadow-sm" : "text-slate-500"}`}>Link Video / YouTube</button>
+                      <button type="button" onClick={() => setLessonUploadMethod("file")} className={`px-2 py-1 text-[9px] font-bold rounded-md cursor-pointer ${lessonUploadMethod === "file" ? "bg-white text-emerald-700 shadow-sm" : "text-slate-500"}`}>Upload Video</button>
                     </div>
                   </div>
 
                   {lessonUploadMethod === "url" ? (
-                    <>
-                      <input
-                        type="url"
-                        required
-                        placeholder="Contoh: https://www.youtube.com/embed/dQw4w9WgXcQ"
-                        value={lessonVideoUrl}
-                        onChange={(e) => setLessonVideoUrl(e.target.value)}
-                        className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-normal text-slate-800 focus:outline-emerald-600"
-                      />
-                      <span className="text-[9px] text-slate-400 block mt-1">Harap gunakan format link embed mandiri demi menghindari blokir iframe oleh browser.</span>
-                    </>
+                    <div className="space-y-2">
+                      <div className="relative">
+                        <input
+                          type="url"
+                          required
+                          placeholder="Paste link YouTube (contoh: https://www.youtube.com/watch?v=... atau https://youtu.be/...)"
+                          value={lessonVideoUrl}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            // If user pastes full HTML iframe or standard youtube link, auto format
+                            if (val.includes("youtube.com") || val.includes("youtu.be") || val.includes("<iframe") || val.includes("vimeo.com")) {
+                              setLessonVideoUrl(formatVideoEmbedUrl(val));
+                            } else {
+                              setLessonVideoUrl(val);
+                            }
+                          }}
+                          onBlur={() => {
+                            if (lessonVideoUrl) {
+                              setLessonVideoUrl(formatVideoEmbedUrl(lessonVideoUrl));
+                            }
+                          }}
+                          className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-normal text-slate-800 focus:outline-emerald-600 focus:ring-1 focus:ring-emerald-500"
+                        />
+                      </div>
+                      <div className="flex items-center justify-between text-[9px] text-slate-500">
+                        <span className="flex items-center gap-1 text-emerald-700 font-medium">
+                          ✓ Otomatis mengonversi semua jenis link YouTube (watch, embed, live, shorts, youtu.be) agar tidak terjadi error &quot;refused to connect&quot;.
+                        </span>
+                        {lessonVideoUrl && (
+                          <button
+                            type="button"
+                            onClick={() => setLessonVideoUrl("")}
+                            className="text-rose-600 hover:underline font-bold shrink-0 ml-2 cursor-pointer"
+                          >
+                            Hapus
+                          </button>
+                        )}
+                      </div>
+
+                      {/* Live Video Preview in Modal */}
+                      {lessonVideoUrl && (
+                        <div className="mt-2 space-y-1 bg-slate-50 p-2.5 rounded-xl border border-slate-200">
+                          <div className="flex items-center justify-between text-[10px] font-bold text-slate-700 mb-1">
+                            <span className="flex items-center gap-1 text-emerald-600">
+                              ✓ Pratinjau Video (Siap Ditampilkan di Materi)
+                            </span>
+                            <a
+                              href={getDirectVideoUrl(lessonVideoUrl)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-rose-600 hover:underline flex items-center gap-1 text-[9px] cursor-pointer"
+                              title="Buka langsung di YouTube"
+                            >
+                              <ExternalLink className="w-2.5 h-2.5" />
+                              Buka di YouTube
+                            </a>
+                          </div>
+                          <div className="relative aspect-video w-full rounded-lg overflow-hidden border border-slate-200 bg-black">
+                            <iframe
+                              src={formatVideoEmbedUrl(lessonVideoUrl)}
+                              className="w-full h-full"
+                              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                              allowFullScreen
+                              referrerPolicy="strict-origin-when-cross-origin"
+                              title="Pratinjau Video Materi"
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   ) : (
-                    <>
+                    <div className="space-y-2">
                       <input
                         type="file"
                         accept="video/*"
                         disabled={isFileUploading}
-                        onChange={(e) => handleFileUpload(e, setLessonVideoUrl)}
+                        onChange={(e) => handleFileUpload(e, setLessonVideoUrl, "video")}
                         className="w-full bg-slate-50 border border-dashed border-slate-300 rounded-xl px-3 py-2 text-xs font-normal text-slate-800 focus:outline-emerald-600 file:mr-4 file:py-1 file:px-3 file:rounded-full file:border-0 file:text-[10px] file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100 disabled:opacity-50"
                       />
-                      {isFileUploading ? (
-                        <span className="text-[9px] text-amber-600 font-bold block mt-1 animate-pulse">⚡ Mengunggah & mengompres berkas video... Mohon tunggu...</span>
-                      ) : (
-                        <span className="text-[9px] text-slate-400 block mt-1">Pilih file Video dari perangkat Anda. (Max 2MB direkomendasikan untuk upload lokal)</span>
+                      {lessonVideoUrl && (
+                        <div className="flex items-center justify-between p-2 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800">
+                          <span className="truncate max-w-[240px] font-medium text-[11px]">✓ Video tersimpan di Firebase Storage</span>
+                          <button type="button" onClick={() => setLessonVideoUrl("")} className="text-[10px] text-rose-600 hover:underline font-bold ml-2">Ganti</button>
+                        </div>
                       )}
-                    </>
+                      <div className="flex items-center gap-1.5 text-[10px] text-emerald-600">
+                        <span>⚡ Auto-kompres & integrasi Firebase Storage aktif.</span>
+                      </div>
+                    </div>
                   )}
                 </div>
               )}
 
               {lessonContentType === "slide" && (
-                <div className="animate-fade-in">
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">Link Semat / Embed Google Slides URL</label>
-                  <input
-                    type="url"
-                    required
-                    placeholder="Contoh: https://docs.google.com/presentation/d/.../embed"
-                    value={lessonSlidesUrl}
-                    onChange={(e) => setLessonSlidesUrl(e.target.value)}
-                    className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-normal text-slate-800 focus:outline-emerald-600"
-                  />
-                  <span className="text-[9px] text-slate-400 block mt-1">Gunakan link sebaran Google Slide dengan akhiran /embed atau tautan interaktif sejenis.</span>
+                <div className="animate-fade-in space-y-2">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">Tautan / Upload Slide PPT & PDF</label>
+                    <div className="flex gap-1 bg-slate-100 p-0.5 rounded-lg">
+                      <button type="button" onClick={() => setLessonUploadMethod("url")} className={`px-2 py-1 text-[9px] font-bold rounded-md ${lessonUploadMethod === "url" ? "bg-white text-emerald-700 shadow-sm" : "text-slate-500"}`}>Link Semat / Google Slide</button>
+                      <button type="button" onClick={() => setLessonUploadMethod("file")} className={`px-2 py-1 text-[9px] font-bold rounded-md ${lessonUploadMethod === "file" ? "bg-white text-emerald-700 shadow-sm" : "text-slate-500"}`}>Upload File PPT/PDF</button>
+                    </div>
+                  </div>
+                  
+                  {lessonUploadMethod === "url" ? (
+                    <>
+                      <input
+                        type="url"
+                        required
+                        placeholder="Contoh: https://docs.google.com/presentation/d/.../embed"
+                        value={lessonSlidesUrl}
+                        onChange={(e) => setLessonSlidesUrl(e.target.value)}
+                        className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-normal text-slate-800 focus:outline-emerald-600"
+                      />
+                      <span className="text-[9px] text-slate-400 block mt-1">Gunakan link sebaran Google Slide dengan akhiran /embed atau tautan interaktif sejenis.</span>
+                    </>
+                  ) : (
+                    <div className="space-y-2">
+                      <input
+                        type="file"
+                        accept=".ppt,.pptx,.pdf,.odp,.pps,.ppsx,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/pdf,image/*"
+                        disabled={isFileUploading}
+                        onChange={(e) => handleFileUpload(e, setLessonSlidesUrl, "slide")}
+                        className="w-full bg-slate-50 border border-dashed border-slate-300 rounded-xl px-3 py-2 text-xs font-normal text-slate-800 focus:outline-emerald-600 file:mr-4 file:py-1 file:px-3 file:rounded-full file:border-0 file:text-[10px] file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100 disabled:opacity-50"
+                      />
+                      {lessonSlidesUrl && (
+                        <div className="flex items-center justify-between p-2 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800">
+                          <div className="flex items-center gap-2 truncate">
+                            <span className="font-bold text-[11px]">✓ Slide tersimpan di Firebase Storage</span>
+                            <a href={lessonSlidesUrl} target="_blank" rel="noreferrer" className="text-[10px] text-emerald-700 underline hover:text-emerald-900 truncate max-w-[160px]">Buka Berkas</a>
+                          </div>
+                          <button type="button" onClick={() => setLessonSlidesUrl("")} className="text-[10px] text-rose-600 hover:underline font-bold ml-2">Ganti</button>
+                        </div>
+                      )}
+                      <div className="flex items-center justify-between text-[10px] text-slate-500">
+                        <span>Format: PPT, PPTX, PDF, ODP, Gambar</span>
+                        <span className="text-emerald-600 font-semibold">⚡ Auto-kompres & Firebase Storage</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
 
               {lessonContentType === "buku" && (
-                <div className="animate-fade-in">
+                <div className="animate-fade-in space-y-2">
                   <div className="flex items-center justify-between mb-1.5">
-                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">Tautan / Upload Buku PDF</label>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">Tautan / Upload Buku PDF & Modul</label>
                     <div className="flex gap-1 bg-slate-100 p-0.5 rounded-lg">
-                      <button type="button" onClick={() => setLessonUploadMethod("url")} className={`px-2 py-1 text-[9px] font-bold rounded-md ${lessonUploadMethod === "url" ? "bg-white text-emerald-700 shadow-sm" : "text-slate-500"}`}>Link Tautan</button>
-                      <button type="button" onClick={() => setLessonUploadMethod("file")} className={`px-2 py-1 text-[9px] font-bold rounded-md ${lessonUploadMethod === "file" ? "bg-white text-emerald-700 shadow-sm" : "text-slate-500"}`}>Upload File</button>
+                      <button type="button" onClick={() => setLessonUploadMethod("url")} className={`px-2 py-1 text-[9px] font-bold rounded-md ${lessonUploadMethod === "url" ? "bg-white text-emerald-700 shadow-sm" : "text-slate-500"}`}>Link URL</button>
+                      <button type="button" onClick={() => setLessonUploadMethod("file")} className={`px-2 py-1 text-[9px] font-bold rounded-md ${lessonUploadMethod === "file" ? "bg-white text-emerald-700 shadow-sm" : "text-slate-500"}`}>Upload File PDF</button>
                     </div>
                   </div>
                   
@@ -2856,21 +5244,40 @@ export default function LmsView({
                       <span className="text-[9px] text-slate-400 block mt-1">Tautan rujukan langsung ke server dokumen PDF atau berkas drive publik Anda.</span>
                     </>
                   ) : (
-                    <>
+                    <div className="space-y-2">
                       <input
                         type="file"
-                        accept=".pdf,application/pdf"
+                        accept=".pdf,application/pdf,.epub,.doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                         disabled={isFileUploading}
-                        onChange={(e) => handleFileUpload(e, setLessonBookUrl)}
+                        onChange={(e) => handleFileUpload(e, setLessonBookUrl, "buku PDF")}
                         className="w-full bg-slate-50 border border-dashed border-slate-300 rounded-xl px-3 py-2 text-xs font-normal text-slate-800 focus:outline-emerald-600 file:mr-4 file:py-1 file:px-3 file:rounded-full file:border-0 file:text-[10px] file:font-semibold file:bg-emerald-50 file:text-emerald-700 hover:file:bg-emerald-100 disabled:opacity-50"
                       />
-                      {isFileUploading ? (
-                        <span className="text-[9px] text-amber-600 font-bold block mt-1 animate-pulse">⚡ Mengunggah & mengompres dokumen PDF... Mohon tunggu...</span>
-                      ) : (
-                        <span className="text-[9px] text-slate-400 block mt-1">Pilih file PDF dari perangkat Anda. File berukuran besar mungkin tidak didukung.</span>
+                      {lessonBookUrl && (
+                        <div className="flex items-center justify-between p-2 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800">
+                          <div className="flex items-center gap-2 truncate">
+                            <span className="font-bold text-[11px]">✓ Buku PDF tersimpan di Firebase Storage</span>
+                            <a href={lessonBookUrl} target="_blank" rel="noreferrer" className="text-[10px] text-emerald-700 underline hover:text-emerald-900 truncate max-w-[160px]">Buka Berkas</a>
+                          </div>
+                          <button type="button" onClick={() => setLessonBookUrl("")} className="text-[10px] text-rose-600 hover:underline font-bold ml-2">Ganti</button>
+                        </div>
                       )}
-                    </>
+                      <div className="flex items-center justify-between text-[10px] text-slate-500">
+                        <span>Format: PDF, EPUB, DOCX</span>
+                        <span className="text-emerald-600 font-semibold">⚡ Auto-kompres & Firebase Storage</span>
+                      </div>
+                    </div>
                   )}
+                </div>
+              )}
+
+              {uploadProgressText && (
+                <div className={`p-2.5 rounded-xl text-xs font-medium border animate-fade-in ${
+                  isFileUploading ? "bg-amber-50 border-amber-200 text-amber-800" : "bg-emerald-50 border-emerald-200 text-emerald-800"
+                }`}>
+                  <div className="flex items-center gap-2">
+                    {isFileUploading && <span className="animate-spin inline-block w-3.5 h-3.5 border-2 border-amber-600 border-t-transparent rounded-full" />}
+                    <span>{uploadProgressText}</span>
+                  </div>
                 </div>
               )}
 
@@ -3201,36 +5608,11 @@ export default function LmsView({
       )}
 
       {viewingAttendancePhoto && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in" onClick={() => setViewingAttendancePhoto(null)}>
-          <div className="bg-white rounded-3xl p-4 max-w-md w-full shadow-2xl relative space-y-3" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-              <h4 className="font-extrabold text-xs text-slate-800 flex items-center gap-2">
-                <span>📷</span> Foto Bukti Presensi
-              </h4>
-              <button
-                onClick={() => setViewingAttendancePhoto(null)}
-                className="p-1 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <div className="rounded-2xl overflow-hidden bg-slate-950 flex items-center justify-center min-h-[220px] max-h-[65vh]">
-              <img
-                src={viewingAttendancePhoto}
-                alt="Foto Absen"
-                className="max-h-[63vh] w-auto object-contain rounded-xl"
-              />
-            </div>
-            <div className="text-center pt-1">
-              <button
-                onClick={() => setViewingAttendancePhoto(null)}
-                className="px-5 py-2 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-slate-800 transition cursor-pointer"
-              >
-                Tutup
-              </button>
-            </div>
-          </div>
-        </div>
+        <MediaViewerModal
+          url={viewingAttendancePhoto}
+          title="Foto Bukti Presensi Siswa"
+          onClose={() => setViewingAttendancePhoto(null)}
+        />
       )}
 
     </div>

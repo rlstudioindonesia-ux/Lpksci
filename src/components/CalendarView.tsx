@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { ConfirmForm } from "./ConfirmForm";
 import { ConfirmButton } from "./ConfirmButton";
+import { sendBroadcastNotification } from "../lib/notifications";
 import { 
   Calendar, Plus, Trash2, Users, BookOpen, Shield, Award, 
   Bell, CheckCircle2, Megaphone, Info, AlertCircle, ArrowRight,
@@ -130,8 +131,9 @@ export default function CalendarView({
       // Also match class if specified and it's student or teacher
       let matchesClass = true;
       if (e.targetClass && e.targetClass !== "Semua Kelas") {
-        const userClass = currentUser.assignedClass || "";
-        if (userClass && userClass.trim().toLowerCase() !== e.targetClass.trim().toLowerCase()) {
+        const userClass = (currentUser.assignedClass || "").toString().trim().toLowerCase();
+        const targetClass = String(e.targetClass || "").trim().toLowerCase();
+        if (userClass && targetClass && userClass !== targetClass) {
           matchesClass = false;
         }
       }
@@ -250,6 +252,13 @@ export default function CalendarView({
     const ok = await onUpdateState("events", action, payload);
     setIsLoading(false);
     if (ok) {
+      if (!editingEventId) {
+        sendBroadcastNotification(
+          "📅 Agenda / Jadwal Harian Baru",
+          `Agenda LPK baru: "${title}" (${date}) telah dibuat & disebarkan ke semua akun.`,
+          { type: "jadwal_harian", url: "/?tab=kalender" }
+        );
+      }
       setSuccessMsg(editingEventId ? "Agenda kegiatan sukses diperbarui!" : "Agenda kegiatan sukses disimpan & disebarkan ke notifikasi target!");
       if (!editingEventId) {
         setTitle("");

@@ -14,8 +14,8 @@ function fileToBase64(file: Blob | File): Promise<string> {
 }
 
 /**
- * Automatically compresses image files to a lightweight JPEG format
- * with a customizable maximum dimension and 70% quality.
+ * Automatically compresses image files to a lightweight format
+ * with customizable maximum dimension and quality.
  */
 export async function compressImageIfNeeded(file: File, maxDim = 1200): Promise<File | Blob> {
   if (!file.type.startsWith('image/')) {
@@ -48,82 +48,6 @@ export async function compressImageIfNeeded(file: File, maxDim = 1200): Promise<
         canvas.height = height;
         const ctx = canvas.getContext('2d');
         if (ctx) {
-          ctx.drawImage(img, 0, 0, width, height);
-          canvas.toBlob(
-            (blob) => {
-              if (blob) {
-                // Return compressed Blob with original name or new JPEG extension safely
-                const lastDotIdx = file.name.lastIndexOf('.');
-                const nameWithoutExt = lastDotIdx !== -1 ? file.name.substring(0, lastDotIdx) : file.name;
-                const newName = `${nameWithoutExt || 'image'}.jpg`;
-                const compressedFile = new File([blob], newName, {
-                  type: 'image/jpeg',
-                  lastModified: Date.now(),
-                });
-                console.log(`[Compression] Reduced image from ${file.size} bytes to ${compressedFile.size} bytes (maxDim: ${maxDim}).`);
-                resolve(compressedFile);
-              } else {
-                resolve(file);
-              }
-            },
-            'image/jpeg',
-            0.7 // 70% quality compression
-          );
-        } else {
-          resolve(file);
-        }
-      };
-      img.onerror = () => resolve(file);
-    };
-    reader.onerror = () => resolve(file);
-  });
-}
-
-/**
- * Compresses an image to a very small size suitable for Base64 storage in Firestore (max 5KB - 25KB).
- */
-export async function compressForBase64(file: File, folder: string): Promise<Blob | File> {
-  if (!file.type.startsWith('image/')) {
-    return file;
-  }
-  // High-definition settings ensuring crisp photos and clear text readability
-  // profile_pictures: maxDim 600px, quality 85% -> around 30KB - 70KB (crystal clear avatar)
-  // documents/attendance/payments/customization/galeri: maxDim 1600px, quality 85% -> high resolution document & photo detail
-  let maxDim = 600;
-  let quality = 0.65;
-  if (folder === "profile_pictures") {
-    maxDim = 300;
-    quality = 0.60;
-  } else if (folder === "customization" || folder === "galeri" || folder === "documents" || folder === "attendance") {
-    maxDim = 700;
-    quality = 0.65;
-  }
-
-  return new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.readAsDataURL(file);
-    reader.onload = (event) => {
-      const img = new Image();
-      img.src = event.target?.result as string;
-      img.onload = () => {
-        const canvas = document.createElement('canvas');
-        let width = img.width;
-        let height = img.height;
-
-        if (width > maxDim || height > maxDim) {
-          if (width > height) {
-            height = Math.round((height * maxDim) / width);
-            width = maxDim;
-          } else {
-            width = Math.round((width * maxDim) / height);
-            height = maxDim;
-          }
-        }
-
-        canvas.width = width;
-        canvas.height = height;
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
           ctx.imageSmoothingEnabled = true;
           ctx.imageSmoothingQuality = 'high';
           ctx.drawImage(img, 0, 0, width, height);
@@ -137,14 +61,15 @@ export async function compressForBase64(file: File, folder: string): Promise<Blo
                   type: 'image/jpeg',
                   lastModified: Date.now(),
                 });
-                console.log(`[HD Image Compression] Processed ${file.name} to ${compressedFile.size} bytes (maxDim: ${maxDim}, quality: ${quality}).`);
+                const pct = Math.round((1 - (compressedFile.size / (file.size || 1))) * 100);
+                console.log(`[Auto-Compress] Image ${file.name} (${Math.round(file.size/1024)} KB) -> (${Math.round(compressedFile.size/1024)} KB) [-${pct}%].`);
                 resolve(compressedFile);
               } else {
                 resolve(file);
               }
             },
             'image/jpeg',
-            quality
+            0.75 // 75% high quality compression
           );
         } else {
           resolve(file);
@@ -157,15 +82,56 @@ export async function compressForBase64(file: File, folder: string): Promise<Blo
 }
 
 /**
+ * Compresses an image to a lightweight size suitable for Base64 storage.
+ */
+export async function compressForBase64(file: File, folder: string): Promise<Blob | File> {
+  if (!file.type.startsWith('image/')) {
+    return file;
+  }
+  const maxDim = folder === "profile_pictures" ? 300 : 700;
+  return compressImageIfNeeded(file, maxDim);
+}
+
+/**
+ * Universal file compressor that optimizes images and documents before upload.
+ */
+export async function autoCompressFile(file: File, folder = "uploads"): Promise<{ file: File | Blob; originalSize: number; finalSize: number; compressed: boolean; message: string }> {
+  const originalSize = file.size;
+  if (file.type.startsWith('image/')) {
+    const maxDim = folder === "profile_pictures" ? 400 : folder.includes("lms") ? 1400 : 1200;
+    const compressed = await compressImageIfNeeded(file, maxDim);
+    const finalSize = compressed.size;
+    const isSmaller = finalSize < originalSize;
+    return {
+      file: isSmaller ? compressed : file,
+      originalSize,
+      finalSize: isSmaller ? finalSize : originalSize,
+      compressed: isSmaller,
+      message: isSmaller ? `Foto berhasil dikompres (${Math.round(originalSize/1024)}KB → ${Math.round(finalSize/1024)}KB)` : `Ukuran foto optimal (${Math.round(originalSize/1024)}KB)`
+    };
+  }
+  
+  // For PDFs, PPTs, Slides, etc.
+  return {
+    file,
+    originalSize,
+    finalSize: originalSize,
+    compressed: false,
+    message: `Dokumen siap (${Math.round(originalSize/1024)}KB)`
+  };
+}
+
+/**
  * Uploads a file/image to Firebase Storage with automatic compression.
  * If Firebase Storage is not active, fails fast (with a timeout) and
  * falls back to uploading to the local Express server (/api/upload).
  * 
  * @param file File object to upload
- * @param folder Target folder inside storage (e.g., 'registrations', 'payments', 'profile_pictures')
+ * @param folder Target folder inside storage (e.g., 'lms_materials', 'registrations', 'payments', 'profile_pictures')
+ * @param onProgress Optional callback for progress status text
  * @returns Promise<string> Public download URL or local file path URL
  */
-async function uploadFileToLocalServer(file: File, base64Data: string): Promise<string> {
+async function uploadFileToLocalServer(file: File, base64Data: string, folder: string): Promise<string> {
   const response = await fetch('/api/upload', {
     method: 'POST',
     headers: {
@@ -173,11 +139,13 @@ async function uploadFileToLocalServer(file: File, base64Data: string): Promise<
     },
     body: JSON.stringify({
       fileName: file.name,
-      fileData: base64Data
+      fileData: base64Data,
+      folder: folder
     })
   });
   if (!response.ok) {
-    throw new Error("Local server upload failed");
+    const errText = await response.text().catch(() => "");
+    throw new Error(`Local server upload failed with status ${response.status}: ${errText}`);
   }
   const result = await response.json();
   if (result.url) {
@@ -186,57 +154,113 @@ async function uploadFileToLocalServer(file: File, base64Data: string): Promise<
   throw new Error("Local server did not return file URL");
 }
 
-export async function uploadFileToFirebase(file: File, folder: string): Promise<string> {
-  // Step 1: Compress if it's an image
+export async function uploadFileToFirebase(
+  file: File,
+  folder: string = "uploads",
+  onProgress?: (status: string) => void
+): Promise<string> {
+  onProgress?.("Mengompres & memverifikasi berkas...");
+  
+  // Step 1: Auto-compress images and optimize assets
   let finalFile: File | Blob = file;
   try {
-    const maxDim = folder === "profile_pictures" ? 400 : 1000;
-    finalFile = await compressImageIfNeeded(file, maxDim);
+    const compressionResult = await autoCompressFile(file, folder);
+    finalFile = compressionResult.file;
+    if (compressionResult.compressed) {
+      console.log(`[Storage Upload] ${compressionResult.message}`);
+    }
   } catch (compressErr) {
-    console.warn("Image compression failed, uploading original file:", compressErr);
+    console.warn("Auto-compression skipped:", compressErr);
   }
 
-  const cleanFileName = finalFile instanceof File ? finalFile.name.replace(/[^a-zA-Z0-9_.-]/g, "_") : file.name.replace(/[^a-zA-Z0-9_.-]/g, "_");
+  const cleanFileName = finalFile instanceof File 
+    ? finalFile.name.replace(/[^a-zA-Z0-9_.-]/g, "_") 
+    : file.name.replace(/[^a-zA-Z0-9_.-]/g, "_");
+
+  const mimeType = finalFile.type || file.type || "application/octet-stream";
+
+  onProgress?.("Mengunggah berkas ke Firebase Storage...");
 
   // Step 2: Try backend upload endpoint (/api/upload) first.
-  // The Express server uses Node.js to upload directly to Firebase Storage without browser CORS restrictions.
+  // The Express server uses Node.js to upload directly to Firebase Storage with full credentials.
   try {
     const rawBase64 = await fileToBase64(finalFile);
-    const backendUrl = await uploadFileToLocalServer(finalFile instanceof File ? finalFile : file, rawBase64);
-    console.log(`Successfully uploaded ${file.name} via backend upload:`, backendUrl);
+    const backendUrl = await uploadFileToLocalServer(
+      finalFile instanceof File ? finalFile : file, 
+      rawBase64,
+      folder
+    );
+    console.log(`[Storage Upload] Successfully uploaded ${file.name} via backend:`, backendUrl);
+    onProgress?.("Unggahan berhasil disimpan!");
     return backendUrl;
   } catch (backendErr) {
-    console.warn("Backend upload failed, attempting direct browser Firebase Storage upload...", backendErr);
+    console.warn("[Storage Upload] Backend upload endpoint had an issue, attempting direct Firebase Storage client SDK:", backendErr);
   }
 
-  // Step 3: Fallback to direct client-side Firebase Storage SDK upload
+  // Step 3: Direct client-side Firebase Storage SDK upload fallback
   try {
     const path = `${folder}/${Date.now()}_${cleanFileName}`;
     const storageRef = ref(storage, path);
+    const metadata = {
+      contentType: mimeType,
+      customMetadata: {
+        originalName: file.name,
+        uploadedAt: new Date().toISOString()
+      }
+    };
+    
     const timeoutPromise = new Promise<never>((_, reject) => {
-      setTimeout(() => reject(new Error("Timeout uploading to Firebase Storage.")), 8000);
+      setTimeout(() => reject(new Error("Timeout uploading to Firebase Storage.")), 15000);
     });
+    
     const uploadPromise = (async () => {
-      const snapshot = await uploadBytes(storageRef, finalFile);
+      const snapshot = await uploadBytes(storageRef, finalFile, metadata);
       return await getDownloadURL(snapshot.ref);
     })();
 
     const result = await Promise.race([uploadPromise, timeoutPromise]);
-    console.log(`Successfully uploaded ${file.name} via direct client Firebase Storage:`, result);
+    console.log(`[Storage Upload] Successfully uploaded ${file.name} via direct client Firebase Storage:`, result);
+    onProgress?.("Unggahan berhasil disimpan ke Firebase!");
     return result;
   } catch (error: any) {
-    console.warn(`Direct client Firebase Storage upload failed/timed out (${error.message || error}). Fallback to Base64...`);
+    console.warn(`[Storage Upload] Direct client Firebase Storage upload failed (${error?.message || error}). Applying persistent zero-loss fallback...`);
     
-    // Step 4: Final fallback: Compressed Base64 Data URL so user content is never lost
-    if (file.type.startsWith('image/')) {
-      try {
+    // Step 4: Final fallback: Return Base64 Data URL so user never loses their slides/PDF/content
+    try {
+      if (file.type.startsWith('image/')) {
         const smallFile = await compressForBase64(file, folder);
         return await fileToBase64(smallFile);
-      } catch (e) {
-        return await fileToBase64(finalFile);
       }
+      return await fileToBase64(finalFile);
+    } catch (base64Err) {
+      console.error("Base64 fallback failed:", base64Err);
+      throw new Error(`Gagal memproses berkas ${file.name}: ${error?.message || "Koneksi storage terputus"}`);
     }
-    throw error;
+  }
+}
+
+// Placeholder the server substitutes for embedded base64 photos it strips out of
+// /api/state responses (see optimizedLogs in server.ts) to keep that payload small.
+export const STRIPPED_PHOTO_PLACEHOLDER = "[FOTO_TERSIMPAN]";
+
+/**
+ * Resolves a log entry's real attendance photo URL for display. `photoUrl` as seen
+ * in systemState.logs may be the stripped placeholder (or empty, for logs older than
+ * the server's in-memory cap) rather than the actual image - in that case, fetch the
+ * real photoUrl on demand from the dedicated single-log endpoint. Returns null if no
+ * photo is available.
+ */
+export async function resolveAttendancePhotoUrl(logId: string | undefined, photoUrl: string | undefined): Promise<string | null> {
+  if (photoUrl && photoUrl !== STRIPPED_PHOTO_PLACEHOLDER) return photoUrl;
+  if (!logId) return null;
+  try {
+    const res = await fetch(`/api/logs/${encodeURIComponent(logId)}/photo`);
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.photoUrl || null;
+  } catch (e) {
+    console.error("Gagal mengambil foto bukti presensi:", e);
+    return null;
   }
 }
 
@@ -459,16 +483,127 @@ export function createSvgAvatar(name: string = "User", customBg?: string): strin
 }
 
 /**
+ * Cleans document/photo URLs by stripping any "filename|" prefix, trimming whitespace,
+ * and handling undefined/null values safely.
+ */
+export function cleanDocUrl(rawUrl?: string | null): string {
+  if (!rawUrl) return "";
+  let str = rawUrl.trim();
+  if (str.includes("|")) {
+    const parts = str.split("|");
+    // If format is "filename|https://...", take the URL part (everything after the first pipe)
+    str = parts.slice(1).join("|").trim() || parts[0].trim();
+  }
+  return str;
+}
+
+export interface ParsedMedia {
+  raw: string;
+  url: string;
+  filename: string;
+  isBiometricOnly: boolean;
+  isGoogleDrive: boolean;
+  isPdf: boolean;
+  isImage: boolean;
+  googleDriveEmbedUrl?: string;
+  googleDriveThumbnailUrl?: string;
+}
+
+/**
+ * Robust parser for attendance photos and uploaded documents.
+ * Handles pipes ("filename|url"), base64, Google Drive, PDFs, and biometric markers.
+ */
+export function parseMediaInfo(rawUrl?: string | null, defaultTitle = "Dokumen / Foto"): ParsedMedia {
+  if (!rawUrl || rawUrl.trim() === "" || rawUrl === "NONE" || rawUrl === "pasfoto_default.jpg") {
+    return {
+      raw: "",
+      url: "",
+      filename: defaultTitle,
+      isBiometricOnly: false,
+      isGoogleDrive: false,
+      isPdf: false,
+      isImage: false,
+    };
+  }
+
+  const trimmed = rawUrl.trim();
+
+  // Biometric only status check
+  if (trimmed === "REGISTERED_OK" || trimmed.startsWith("REGISTERED_")) {
+    return {
+      raw: trimmed,
+      url: "",
+      filename: "Biometrik Wajah Terdaftar",
+      isBiometricOnly: true,
+      isGoogleDrive: false,
+      isPdf: false,
+      isImage: false,
+    };
+  }
+
+  let filename = defaultTitle;
+  let cleanUrl = trimmed;
+
+  if (trimmed.includes("|")) {
+    const parts = trimmed.split("|");
+    filename = parts[0].trim() || defaultTitle;
+    cleanUrl = parts.slice(1).join("|").trim();
+  }
+
+  let isGoogleDrive = false;
+  let googleDriveEmbedUrl: string | undefined = undefined;
+  let googleDriveThumbnailUrl: string | undefined = undefined;
+
+  if (cleanUrl.includes("drive.google.com") || cleanUrl.includes("docs.google.com")) {
+    isGoogleDrive = true;
+    const fileIdMatch = cleanUrl.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) || cleanUrl.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+    if (fileIdMatch && fileIdMatch[1]) {
+      const fileId = fileIdMatch[1];
+      googleDriveEmbedUrl = `https://drive.google.com/file/d/${fileId}/preview`;
+      googleDriveThumbnailUrl = `https://drive.google.com/thumbnail?id=${fileId}&sz=w1600`;
+    }
+  }
+
+  const isPdf =
+    cleanUrl.startsWith("data:application/pdf") ||
+    cleanUrl.toLowerCase().includes(".pdf") ||
+    filename.toLowerCase().endsWith(".pdf") ||
+    cleanUrl.includes("application/pdf");
+
+  const isImage =
+    !isPdf &&
+    (cleanUrl.startsWith("data:image/") ||
+      cleanUrl.startsWith("blob:") ||
+      /\.(jpe?g|png|webp|gif|svg|bmp)(\?.*)?$/i.test(cleanUrl) ||
+      cleanUrl.includes("firebasestorage.googleapis.com") ||
+      cleanUrl.includes("googleusercontent.com") ||
+      Boolean(googleDriveThumbnailUrl) ||
+      cleanUrl.startsWith("/uploads/"));
+
+  return {
+    raw: trimmed,
+    url: cleanUrl,
+    filename,
+    isBiometricOnly: false,
+    isGoogleDrive,
+    isPdf,
+    isImage,
+    googleDriveEmbedUrl,
+    googleDriveThumbnailUrl,
+  };
+}
+
+/**
  * Ensures photo URLs (profile pictures, docFoto) render safely without broken image icons.
  */
 export function getSafePhotoUrl(rawPhotoUrl?: string, defaultName: string = 'User'): string {
-  if (!rawPhotoUrl || rawPhotoUrl === 'NONE' || rawPhotoUrl === 'pasfoto_default.jpg' || rawPhotoUrl.trim() === '') {
+  if (!rawPhotoUrl || rawPhotoUrl === 'NONE' || rawPhotoUrl === 'pasfoto_default.jpg' || rawPhotoUrl === '[BERKAS_TERSIMPAN]' || rawPhotoUrl === '[FOTO_TERSIMPAN]' || rawPhotoUrl === '[BUKTI_TERSIMPAN]' || rawPhotoUrl.trim() === '') {
     return createSvgAvatar(defaultName);
   }
   let str = rawPhotoUrl.trim();
   if (str.includes('|')) {
     const parts = str.split('|');
-    str = parts[1] || parts[0];
+    str = parts.slice(1).join('|').trim() || parts[0].trim();
   }
   if (str.startsWith('data:') || str.startsWith('http://') || str.startsWith('https://') || str.startsWith('/') || str.startsWith('blob:')) {
     return str;

@@ -1,5 +1,6 @@
 import React from "react";
 import { Camera, Download, Maximize2 } from "lucide-react";
+import { DEFAULT_GALLERY_ITEMS } from "../../data/defaultGallery";
 
 interface MobileGaleriSubpageProps {
   setSelectedGalleryImage: any;
@@ -7,6 +8,10 @@ interface MobileGaleriSubpageProps {
 }
 
 export default function MobileGaleriSubpage({ setSelectedGalleryImage, systemState }: MobileGaleriSubpageProps) {
+  const galleryItems = (systemState?.galleries && systemState.galleries.length > 0)
+    ? systemState.galleries
+    : DEFAULT_GALLERY_ITEMS;
+
   return (
     <div className="p-4 space-y-4 text-left">
                   <div className="flex items-center justify-between border-b pb-2">
@@ -22,13 +27,8 @@ export default function MobileGaleriSubpage({ setSelectedGalleryImage, systemSta
                     Mengabadikan momen-momen penting dari asrama LPK Pati hingga touchdown di berbagai kota besar Jepang.
                   </p>
     
-                  {(systemState.galleries || []).length === 0 && (
-                    <div className="text-center py-10 text-slate-400 text-xs italic border border-dashed rounded-2xl">
-                      Belum ada foto galeri.
-                    </div>
-                  )}
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                    {(systemState.galleries || []).map((item: any, idx) => (
+                    {galleryItems.map((item: any, idx: number) => (
                       <div
                         key={idx}
                         onClick={() => setSelectedGalleryImage({

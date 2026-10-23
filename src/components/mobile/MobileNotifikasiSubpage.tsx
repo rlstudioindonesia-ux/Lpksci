@@ -1,6 +1,8 @@
-import React from "react";
-import { Bell } from "lucide-react";
+import React, { useEffect, useState } from "react";
+import { Bell, CheckCircle2, VolumeX, Smartphone, Settings, Zap } from "lucide-react";
 import { formatDateIndo, getZoomAppLink } from "../MobileDashboardView";
+import { markAllNotificationsAsRead, stopAllNotificationChimes, markNotificationAsRead, testDeviceNotification } from "../../lib/notifications";
+import AndroidNotificationModal from "../AndroidNotificationModal";
 
 interface MobileNotifikasiSubpageProps {
   currentUser: any;
@@ -8,8 +10,92 @@ interface MobileNotifikasiSubpageProps {
 }
 
 export default function MobileNotifikasiSubpage({ currentUser, systemState }: MobileNotifikasiSubpageProps) {
+  const [isAndroidModalOpen, setIsAndroidModalOpen] = useState(false);
+  const [testStatus, setTestStatus] = useState<string | null>(null);
+
+  // When user opens this notification page, all notification sounds are immediately deactivated
+  useEffect(() => {
+    markAllNotificationsAsRead();
+    stopAllNotificationChimes();
+  }, []);
+
+  const handleQuickTest = async () => {
+    setTestStatus("Mengirim notifikasi ke HP...");
+    try {
+      const res = await testDeviceNotification();
+      setTestStatus(res.success ? "✅ Notifikasi berhasil dikirim ke HP!" : "⚠️ Periksa izin notifikasi HP");
+      setTimeout(() => setTestStatus(null), 3500);
+    } catch {
+      setTestStatus("Kendala uji notifikasi");
+      setTimeout(() => setTestStatus(null), 3000);
+    }
+  };
+
   return (
     <div className="flex-1 p-4 space-y-4 text-left font-sans animate-fade-in">
+      {/* Read Status Header */}
+      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-3.5 flex items-center justify-between shadow-sm">
+        <div className="flex items-center gap-2.5">
+          <div className="h-8 w-8 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center border border-emerald-500/20">
+            <CheckCircle2 className="h-4 w-4" />
+          </div>
+          <div>
+            <div className="text-xs font-bold text-white flex items-center gap-1.5">
+              <span>Pusat Notifikasi</span>
+            </div>
+            <p className="text-[10px] text-slate-400 mt-0.5">
+              Notifikasi telah dibuka &bull; Bunyi alarm dinonaktifkan
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-1 text-[10px] font-semibold text-emerald-400 bg-emerald-500/10 px-2.5 py-1 rounded-full border border-emerald-500/20">
+          <VolumeX className="h-3 w-3" />
+          <span>Bunyi Senyap</span>
+        </div>
+      </div>
+
+      {/* Android APK Notification Banner & Quick Test */}
+      <div className="bg-gradient-to-br from-indigo-950 via-slate-900 to-indigo-900 border border-indigo-500/30 rounded-2xl p-3.5 text-white shadow-md space-y-2.5">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <div className="h-7 w-7 rounded-xl bg-indigo-500/20 text-indigo-300 flex items-center justify-center border border-indigo-400/30">
+              <Smartphone className="h-4 w-4" />
+            </div>
+            <div>
+              <h4 className="text-xs font-extrabold text-white">Notifikasi HP & Android APK</h4>
+              <p className="text-[10px] text-slate-300">Sinkronkan notifikasi jadwal & job order ke status bar HP</p>
+            </div>
+          </div>
+          <button
+            onClick={() => setIsAndroidModalOpen(true)}
+            className="text-[10px] font-bold px-2.5 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-indigo-200 border border-white/20 flex items-center gap-1 transition cursor-pointer"
+          >
+            <Settings className="h-3 w-3" />
+            <span>Panduan APK</span>
+          </button>
+        </div>
+
+        <div className="flex items-center gap-2 pt-1">
+          <button
+            onClick={handleQuickTest}
+            className="flex-1 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-400 hover:to-purple-500 text-white font-extrabold text-[11px] py-2 px-3 rounded-xl flex items-center justify-center gap-1.5 shadow-sm active:scale-95 transition cursor-pointer"
+          >
+            <Bell className="h-3.5 w-3.5" />
+            <span>🔔 Uji Notifikasi ke HP Sekarang</span>
+          </button>
+        </div>
+
+        {testStatus && (
+          <div className="text-[10px] text-emerald-300 bg-emerald-950/60 border border-emerald-500/30 p-1.5 rounded-lg text-center font-medium">
+            {testStatus}
+          </div>
+        )}
+      </div>
+
+      <AndroidNotificationModal
+        isOpen={isAndroidModalOpen}
+        onClose={() => setIsAndroidModalOpen(false)}
+      />
                   {(() => {
                     const today = new Date();
                     const year = today.getFullYear();

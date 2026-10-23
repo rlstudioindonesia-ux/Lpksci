@@ -2,17 +2,21 @@ import express from "express";
 import compression from "compression";
 import path from "path";
 import { createServer as createViteServer } from "vite";
-import { GoogleGenAI } from "@google/genai";
 import dotenv from "dotenv";
 import fs from "fs";
-import { testConnection, loadStateFromFirestore, syncEntityToFirestore, syncCustomizationToFirestore, syncLmsClassToFirestore, deleteEntityFromFirestore, uploadBufferToFirebaseStorage, getUserFromFirestore, getEntityFromFirestore } from "./src/db/firebase-adapter.ts";
+import { testConnection, loadStateFromFirestore, syncEntityToFirestore, syncCustomizationToFirestore, syncGalleriesToFirestore, syncLmsClassToFirestore, syncAllLmsClassesToFirestore, deleteEntityFromFirestore, uploadBufferToFirebaseStorage, getUserFromFirestore, getEntityFromFirestore, db, touchSyncMeta } from "./src/db/firebase-adapter.ts";
+import { doc, getDoc } from "firebase/firestore";
+import { DEFAULT_GALLERY_ITEMS } from "./src/data/defaultGallery.ts";
 import { isHashedPassword, hashPassword, verifyPassword, stripPassword } from "./server/auth-utils.ts";
 import { handleStateUpdate } from "./server/handlers/index.ts";
+import { invalidateStateCache, getStateVersion, getCachedStateResponse, setCachedStateResponse } from "./server/stateCache.ts";
+
+export { invalidateStateCache };
 
 dotenv.config();
 
 const app = express();
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 3000;
 
 // Safety net: this server holds ALL application state in memory and takes
 // ~25-30s to reload it from Firestore on boot (see stateInitPromise below).
@@ -34,9 +38,45 @@ process.on("uncaughtException", (err) => {
 // Enable gzip/deflate compression for all HTTP responses (reduces JSON payload by ~85-90%)
 app.use(compression());
 
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+// Set safe body size limit (15mb) preventing buffer memory bloat and container OOM termination
+app.use(express.json({ limit: '15mb' }));
+app.use(express.urlencoded({ extended: true, limit: '15mb' }));
 app.get("/api/health", (req, res) => res.json({ status: "ok", initialized: isStateReady }));
+app.get("/api/ping", async (req, res) => {
+  // Trigger warm-up check asynchronously to ensure database connection is responsive
+  testConnection().catch(() => {});
+  res.json({ status: "pong", time: new Date().toISOString(), initialized: isStateReady });
+});
+// Firebase Authentication Reverse Proxy for Custom Auth Domain (e.g. lpksci.com)
+// Proxies all OAuth redirect & helper requests to Firebase Auth backend so Google displays lpksci.com instead of gen-lang-client
+app.all("/__/auth/*", async (req, res) => {
+  try {
+    const targetUrl = `https://gen-lang-client-0782283050.firebaseapp.com${req.originalUrl}`;
+    const headers: Record<string, string> = {};
+    for (const [key, value] of Object.entries(req.headers)) {
+      if (typeof value === "string" && key.toLowerCase() !== "host") {
+        headers[key] = value;
+      }
+    }
+    const response = await fetch(targetUrl, {
+      method: req.method,
+      headers,
+      body: req.method !== "GET" && req.method !== "HEAD" ? JSON.stringify(req.body) : undefined,
+    });
+
+    response.headers.forEach((val, key) => {
+      if (key.toLowerCase() !== "content-encoding") {
+        res.setHeader(key, val);
+      }
+    });
+    res.status(response.status);
+    const buffer = Buffer.from(await response.arrayBuffer());
+    res.send(buffer);
+  } catch (err) {
+    console.error("Firebase auth proxy error:", err);
+    res.status(502).send("Auth Proxy Error");
+  }
+});
 
 app.get("/robots.txt", (req, res) => {
   res.type("text/plain");
@@ -88,7 +128,13 @@ app.get("/sitemap.xml", (req, res) => {
   res.send(sitemap);
 });
 
-app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
+// Serve uploaded assets
+const uploadsDir = path.join(process.cwd(), "uploads");
+const publicUploadsDir = path.join(process.cwd(), "public", "uploads");
+if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+if (!fs.existsSync(publicUploadsDir)) fs.mkdirSync(publicUploadsDir, { recursive: true });
+app.use("/uploads", express.static(uploadsDir));
+app.use("/uploads", express.static(publicUploadsDir));
 
 let isStateReady = false;
 let stateInitPromise: Promise<void> | null = null;
@@ -100,6 +146,138 @@ export async function ensureStateReady(maxWaitMs = 35000): Promise<void> {
   await Promise.race([stateInitPromise, timeout]);
 }
 
+export const SERVER_INSTANCE_ID = `srv-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+
+let lastProcessedSyncMetaTime = 0;
+let lastProcessedCostConfigHash = "";
+let syncIntervalTimer: NodeJS.Timeout | null = null;
+
+export function initRealtimeSync(): void {
+  if (!db) {
+    console.warn("⚠️ Firestore DB not initialized, skipping real-time sync.");
+    return;
+  }
+  
+  if (syncIntervalTimer) {
+    clearInterval(syncIntervalTimer);
+  }
+
+  console.log(`🔌 [Real-time Sync] Resilient polling synchronizer started (instanceId: ${SERVER_INSTANCE_ID})...`);
+
+  const pollSync = async () => {
+    try {
+      // 1. Check sync_meta using unary getDoc (eliminates idle gRPC stream RST_STREAM disconnects)
+      const metaDoc = await getDoc(doc(db, "system", "sync_meta"));
+      if (metaDoc && metaDoc.exists()) {
+        const data = metaDoc.data();
+        const updatedAt = Number(data?.updatedAt) || 0;
+
+        if (updatedAt > lastProcessedSyncMetaTime) {
+          lastProcessedSyncMetaTime = updatedAt;
+
+          // Skip self-updates within 2000ms
+          if (!(data.instanceId === SERVER_INSTANCE_ID && Date.now() - updatedAt < 2000)) {
+            console.log(`⚡ [Real-time Sync] Detected remote update from ${data.source || 'unknown'}: dataType=${data.dataType || 'all'}, action=${data.action || 'sync'}`);
+
+            // Fast sync for costConfig
+            if (data.dataType === "costConfig" || (data.dataType === "system" && data.id === "costConfig")) {
+              try {
+                const freshCost = await getEntityFromFirestore("system", "costConfig");
+                if (freshCost) {
+                  state.costConfig = {
+                    ...(state.costConfig || {}),
+                    ...freshCost
+                  };
+                  invalidateStateCache();
+                  console.log("⚡ [Real-time Sync] costConfig updated via sync_meta fast-path:", state.costConfig);
+                  return;
+                }
+              } catch (e) {}
+            }
+
+            // Fast single-doc sync if entity is specified
+            if (data.dataType && data.id && data.action !== "delete") {
+              try {
+                const freshItem = await getEntityFromFirestore(data.dataType, data.id);
+                if (freshItem && Array.isArray(state[data.dataType])) {
+                  const arr = state[data.dataType];
+                  const idx = arr.findIndex((item: any) => item && (item.id === data.id || item.username === data.id));
+                  if (idx >= 0) {
+                    arr[idx] = { ...arr[idx], ...freshItem };
+                  } else {
+                    arr.unshift(freshItem);
+                  }
+                  invalidateStateCache();
+                  return;
+                }
+              } catch (e) {}
+            }
+
+            // Background reload for batch or general changes
+            triggerBackgroundResync(false).catch(() => {});
+            invalidateStateCache();
+          }
+        }
+      }
+
+      // 2. Direct costConfig poll check
+      const costDoc = await getDoc(doc(db, "system", "costConfig"));
+      if (costDoc && costDoc.exists()) {
+        const costData = costDoc.data();
+        if (costData) {
+          const currentHash = JSON.stringify(costData);
+          if (currentHash !== lastProcessedCostConfigHash) {
+            lastProcessedCostConfigHash = currentHash;
+            state.costConfig = {
+              ...(state.costConfig || {}),
+              ...costData
+            };
+            invalidateStateCache();
+          }
+        }
+      }
+    } catch (err: any) {
+      // Silently tolerate transient network hiccups; next tick will seamlessly retry
+    }
+  };
+
+  // Run initial poll after 3s, then check every 15s
+  setTimeout(pollSync, 3000);
+  syncIntervalTimer = setInterval(pollSync, 15000);
+}
+
+let isResyncing = false;
+let lastResyncTime = 0;
+
+export async function triggerBackgroundResync(force = false): Promise<void> {
+  const now = Date.now();
+  if (isResyncing) return;
+  if (!force && now - lastResyncTime < 10000) return; // Debounce 10s
+  isResyncing = true;
+  lastResyncTime = now;
+  try {
+    const loadedState = await loadStateFromFirestore(state);
+    if (loadedState) {
+      Object.keys(loadedState).forEach((key) => {
+        if (Array.isArray(loadedState[key])) {
+          if (loadedState[key].length > 0) {
+            state[key] = loadedState[key];
+          }
+        } else if (loadedState[key]) {
+          state[key] = loadedState[key];
+        }
+      });
+      isStateReady = true;
+      invalidateStateCache();
+      console.log(`🔄 [Resync] Synchronized state with Firestore: ${state.chapterAssessments?.length || 0} assessments, ${state.attendance?.length || 0} attendance, ${state.activeStudents?.length || 0} students`);
+    }
+  } catch (err) {
+    console.warn("⚠️ Background resync error:", err);
+  } finally {
+    isResyncing = false;
+  }
+}
+
 // In-Memory Database with clean initial state
 let state: any = {
   registeredStudents: [],
@@ -108,18 +286,26 @@ let state: any = {
   payments: [],
   inventory: [],
   taxes: [],
+  costConfig: {
+    registration: 500000,
+    dp: 5000000,
+    fullPayment: 2000000,
+    stage3: 3000000,
+    managementFee: 0,
+  },
   customization: {
     logoText: "LPK SCI",
     logoIcon: "Award",
     themeColor: "indigo",
-    logoUrl: "",
-    faviconUrl: "",
+    logoUrl: "https://firebasestorage.googleapis.com/v0/b/gen-lang-client-0782283050.firebasestorage.app/o/branding%2F1788528497434_7bd439c1-0aa7-49dd-9669-ec38ea03c0a8.jpg?alt=media&token=efc874ae-2989-4604-96e0-8d0f9bc0071d",
+    faviconUrl: "https://firebasestorage.googleapis.com/v0/b/gen-lang-client-0782283050.firebasestorage.app/o/branding%2F1792028427128_favicon.png?alt=media&token=d45ddbb1-8d22-49c2-85d6-b1558a2db5a1",
     officeLocation: {
       latitude: 0,
       longitude: 0,
       radius: 200,
       enforce: false
     },
+    runningText: "🇯🇵 Selamat Datang di Portal Resmi LPK Source Course Indonesia (SCI) Pati • Lembaga Resmi Pelatihan Kerja & Pengiriman Tenaga Profesional ke Jepang (Program Tokutei Ginou / SSW & Magang) • Bimbingan Bahasa Jepang Intensif N5, N4, JFT-Basic & Skill Kaigo Lansia • Info Pendaftaran & Konsultasi Hubungi Kantor LPK SCI Pati",
     paymentAccounts: [],
     slides: [],
     gallery: [],
@@ -133,7 +319,23 @@ let state: any = {
       programsTitle: "Program Unggulan LPK SCI",
       programsSubtitle: "Jalur karir spesifik (SSW) dan Magang (Ginou Jisshusei).",
       programs: [],
-      opportunityImages: []
+      opportunityImages: [
+        {
+          id: 1,
+          label: "Pelatihan Teori & Praktik",
+          url: "https://firebasestorage.googleapis.com/v0/b/gen-lang-client-0782283050.firebasestorage.app/o/galeri%2F1788397965132_WhatsApp_Image_2026-09-02_at_10.02.15.jpeg?alt=media&token=afd37c47-ed69-440a-bf04-0f524e94c79f"
+        },
+        {
+          id: 2,
+          label: "Penyerahan Sertifikat",
+          url: "https://firebasestorage.googleapis.com/v0/b/gen-lang-client-0782283050.firebasestorage.app/o/galeri%2F1788398049192_WhatsApp_Image_2026-09-02_at_09.10.45.jpeg?alt=media&token=f7bcb632-ff46-4e62-879e-9589b46ceecc"
+        },
+        {
+          id: 3,
+          label: "Foto Bersama Alumni",
+          url: "https://firebasestorage.googleapis.com/v0/b/gen-lang-client-0782283050.firebasestorage.app/o/galeri%2F1788398162422_WhatsApp_Image_2026-09-01_at_09.06.50.jpg?alt=media&token=a63b6a63-c29b-48db-9416-1cb10d74401d"
+        }
+      ]
     }
   },
   lmsLessons: [],
@@ -198,26 +400,6 @@ let state: any = {
   ]
 };
 
-// Lazy initialization of Gemini API Client
-let geminiAI: GoogleGenAI | null = null;
-function getGeminiSDK(): GoogleGenAI {
-  if (!geminiAI) {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      throw new Error("GEMINI_API_KEY is not defined. Please configure it in your Secrets Panel.");
-    }
-    geminiAI = new GoogleGenAI({
-      apiKey: apiKey,
-      httpOptions: {
-        headers: {
-          "User-Agent": "aistudio-build",
-        },
-      },
-    });
-  }
-  return geminiAI;
-}
-
 // REST APIs
 
 app.get("/api/debug/customization", (req, res) => {
@@ -225,36 +407,78 @@ app.get("/api/debug/customization", (req, res) => {
 });
 
 app.post("/api/upload", async (req, res) => {
-  const { fileData, fileName } = req.body;
+  const { fileData, fileName, folder } = req.body;
   if (!fileData || !fileName) {
     return res.status(400).json({ error: "Missing fileData or fileName" });
   }
   try {
-    const matches = fileData.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
-    let base64Image = fileData;
-    let mimeType = "image/jpeg";
-    if (matches && matches.length === 3) {
-      mimeType = matches[1];
-      base64Image = matches[2];
-    }
-    const buffer = Buffer.from(base64Image, "base64");
-    
-    // Attempt Firebase Storage upload first
-    try {
-      console.log(`Attempting to upload ${fileName} (${mimeType}) directly to Firebase Storage...`);
-      const firebaseStorageUrl = await uploadBufferToFirebaseStorage(buffer, fileName, mimeType);
-      console.log(`Successfully uploaded ${fileName} to Firebase Storage: ${firebaseStorageUrl}`);
-      return res.json({ url: firebaseStorageUrl });
-    } catch (firebaseErr: any) {
-      console.warn("Firebase Storage upload failed on backend. Returning persistent base64 data URL fallback:", firebaseErr.message || firebaseErr);
+    let mimeType = "application/octet-stream";
+    let base64Content = fileData;
+
+    // Robust parsing of data URLs for any MIME type (including complex PPT/PDF types with dots/dashes)
+    if (typeof fileData === "string" && fileData.startsWith("data:")) {
+      const commaIdx = fileData.indexOf(",");
+      const semiIdx = fileData.indexOf(";");
+      if (commaIdx !== -1 && semiIdx !== -1 && semiIdx < commaIdx) {
+        mimeType = fileData.substring(5, semiIdx) || mimeType;
+        base64Content = fileData.substring(commaIdx + 1);
+      }
+    } else {
+      // Derive mimeType from file extension if not in data URL
+      const ext = fileName.split('.').pop()?.toLowerCase();
+      if (ext === 'pdf') mimeType = 'application/pdf';
+      else if (ext === 'ppt') mimeType = 'application/vnd.ms-powerpoint';
+      else if (ext === 'pptx') mimeType = 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+      else if (ext === 'jpg' || ext === 'jpeg') mimeType = 'image/jpeg';
+      else if (ext === 'png') mimeType = 'image/png';
+      else if (ext === 'webp') mimeType = 'image/webp';
+      else if (ext === 'mp4') mimeType = 'video/mp4';
+      else if (ext === 'webm') mimeType = 'video/webm';
+      else if (ext === 'mp3') mimeType = 'audio/mpeg';
+      else if (ext === 'wav') mimeType = 'audio/wav';
+      else if (ext === 'doc') mimeType = 'application/msword';
+      else if (ext === 'docx') mimeType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
     }
 
-    // Persistent Fallback: Return persistent base64 Data URL so photos are never lost when container restarts
-    const persistentUrl = fileData.startsWith("data:") ? fileData : `data:${mimeType};base64,${base64Image}`;
-    res.json({ url: persistentUrl });
+    const buffer = Buffer.from(base64Content, "base64");
+    const targetFolder = folder || "uploads";
+    
+    // 1. Attempt Firebase Storage upload first
+    try {
+      console.log(`[Storage] Uploading ${fileName} (${mimeType}, ${buffer.length} bytes) to Firebase Storage [folder: ${targetFolder}]...`);
+      const firebaseStorageUrl = await uploadBufferToFirebaseStorage(buffer, fileName, mimeType, targetFolder);
+      console.log(`[Storage] Successfully uploaded ${fileName} to Firebase Storage: ${firebaseStorageUrl}`);
+      return res.json({ url: firebaseStorageUrl, storage: "firebase", size: buffer.length });
+    } catch (firebaseErr: any) {
+      console.info(`[Storage] Firebase Storage direct upload note (${firebaseErr?.message || "unauthorized"}). Activating fast local disk storage pipeline.`);
+    }
+
+    // 2. Persistent Storage: When Firebase Storage bucket direct upload is not active,
+    // generate a persistent Base64 Data URL so uploaded photos/documents are saved directly in Firestore
+    // documents (galleries, slideshows, students, etc.) and never disappear across container restarts.
+    const persistentUrl = fileData.startsWith("data:") ? fileData : `data:${mimeType};base64,${base64Content}`;
+    
+    // Also save a local disk copy for static serving during current runtime
+    try {
+      const safeName = `${Date.now()}_${fileName.replace(/[^a-zA-Z0-9_.-]/g, "_")}`;
+      const targetDir = path.join(process.cwd(), "uploads", targetFolder);
+      const publicTargetDir = path.join(process.cwd(), "public", "uploads", targetFolder);
+      
+      if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
+      if (!fs.existsSync(publicTargetDir)) fs.mkdirSync(publicTargetDir, { recursive: true });
+      
+      fs.writeFileSync(path.join(targetDir, safeName), buffer);
+      try {
+        fs.writeFileSync(path.join(publicTargetDir, safeName), buffer);
+      } catch (pErr) {}
+    } catch (fsErr) {
+      console.warn("[Storage] Local disk write error:", fsErr);
+    }
+
+    return res.json({ url: persistentUrl, storage: "base64", size: buffer.length });
   } catch (error: any) {
     console.error("Upload API error:", error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: error.message || "Gagal mengunggah berkas" });
   }
 });
 
@@ -334,44 +558,133 @@ app.post("/api/reset-password", async (req, res) => {
   }
 });
 
-app.get("/api/state", async (req, res) => {
-  try {
-    // Wait if state is still initializing from Firestore on cold boot. The full
-    // sync of ~20 collections consistently takes ~25-28s in practice, so 15s was
-    // cutting it short and causing requests to see partially-empty data.
-    await ensureStateReady(30000);
-  } catch (e) {}
+// State caching & versioning for high-concurrency, low-memory delivery handled via server/stateCache.ts
 
-  // Strip excessive biometric photo base64 strings from generic logs to prevent multi-megabyte transfers
-  const optimizedLogs = (state.logs || []).map((l: any) => {
-    if (!l || typeof l !== "object") return l;
-    let hasBigBase64 = false;
-    for (const key of Object.keys(l)) {
-      const val = l[key];
-      if (typeof val === "string" && val.startsWith("data:image") && val.length > 500) {
-        hasBigBase64 = true;
-        break;
-      }
+
+function isHeavyBase64(val: any): boolean {
+  return typeof val === "string" && val.startsWith("data:") && val.length > 500;
+}
+
+const PRESERVED_AVATAR_KEYS = new Set([
+  "profilePicture",
+  "docFoto",
+  "faceBiometricData",
+  "avatar",
+  "logoUrl",
+  "faviconUrl",
+  "customLogo",
+]);
+
+function stripHeavyBase64Shallow(obj: any, placeholder = "[BERKAS_TERSIMPAN]", preservedKeys: Set<string> = PRESERVED_AVATAR_KEYS): any {
+  if (!obj || typeof obj !== "object") return obj;
+  let hasHeavy = false;
+  for (const k of Object.keys(obj)) {
+    if (preservedKeys.has(k)) continue;
+    if (isHeavyBase64(obj[k])) {
+      hasHeavy = true;
+      break;
     }
-    if (!hasBigBase64) return l;
-
-    const copy = { ...l };
-    for (const [k, v] of Object.entries(copy)) {
-      if (typeof v === "string" && v.startsWith("data:image") && v.length > 500) {
-        copy[k] = "[FOTO_TERSIMPAN]";
-      }
+  }
+  if (!hasHeavy) return obj;
+  const copy = { ...obj };
+  for (const k of Object.keys(copy)) {
+    if (preservedKeys.has(k)) continue;
+    if (isHeavyBase64(copy[k])) {
+      copy[k] = placeholder;
     }
-    return copy;
-  });
+  }
+  return copy;
+}
 
-  res.setHeader("Cache-Control", "no-cache");
-  res.json({
+function getOrBuildStateJson(): { json: string; etag: string; version: number } {
+  const currentVersion = getStateVersion();
+  const etag = `W/"s-${currentVersion}"`;
+  const cached = getCachedStateResponse();
+  if (cached && isStateReady) {
+    return { json: cached, etag, version: currentVersion };
+  }
+
+  const payload = {
     ...state,
     _isReady: isStateReady,
-    logs: optimizedLogs,
-    users: (state.users || []).map(u => ({ ...stripPassword(u), hasPassword: !!u.password })),
-    registeredStudents: (state.registeredStudents || []).map(stripPassword),
-  });
+    _stateVersion: currentVersion,
+    logs: (state.logs || []).map((l: any) => stripHeavyBase64Shallow(l, "[FOTO_TERSIMPAN]", new Set(["avatar"]))),
+    attendance: (state.attendance || []).map((a: any) => stripHeavyBase64Shallow(a, "[FOTO_TERSIMPAN]", new Set(["avatar"]))),
+    payments: (state.payments || []).map((p: any) => stripHeavyBase64Shallow(p, "[BUKTI_TERSIMPAN]", new Set(["avatar"]))),
+    users: (state.users || []).map((u: any) => {
+      // Resolve sensei or user photo if profilePicture is missing but docFoto or faceBiometricData exists
+      let pic = u.profilePicture && u.profilePicture !== "[BERKAS_TERSIMPAN]" ? u.profilePicture : "";
+      if (!pic) {
+        if (u.docFoto && u.docFoto !== "[BERKAS_TERSIMPAN]") {
+          pic = u.docFoto.includes('|') ? u.docFoto.split('|')[1] : u.docFoto;
+        } else if (u.faceBiometricData && typeof u.faceBiometricData === "string" && u.faceBiometricData.startsWith("data:image")) {
+          pic = u.faceBiometricData;
+        }
+      }
+      return stripHeavyBase64Shallow({ 
+        ...stripPassword(u), 
+        profilePicture: pic || u.profilePicture || "",
+        hasPassword: !!u.password 
+      }, "[BERKAS_TERSIMPAN]", PRESERVED_AVATAR_KEYS);
+    }),
+    registeredStudents: (state.registeredStudents || []).map((s: any) => stripHeavyBase64Shallow(stripPassword(s), "[BERKAS_TERSIMPAN]", PRESERVED_AVATAR_KEYS)),
+    activeStudents: (state.activeStudents || []).map((s: any) => stripHeavyBase64Shallow(stripPassword(s), "[BERKAS_TERSIMPAN]", PRESERVED_AVATAR_KEYS)),
+    chapterAssessments: (state.chapterAssessments || []).map((c: any) => stripHeavyBase64Shallow(c, "[BERKAS_TERSIMPAN]", PRESERVED_AVATAR_KEYS)),
+    customization: {
+      ...(state.customization || {}),
+      gallery: (Array.isArray(state.galleries) && state.galleries.length > 0) ? state.galleries : (state.customization?.gallery || []),
+    },
+  };
+
+  const jsonStr = JSON.stringify(payload);
+  if (isStateReady) {
+    setCachedStateResponse(jsonStr);
+  }
+  return { json: jsonStr, etag, version: currentVersion };
+}
+
+app.get("/api/state", async (req, res) => {
+  try {
+    // Wait for initial Firestore boot if needed
+    if (!isStateReady) {
+      await ensureStateReady(3500);
+    }
+    // Proactive self-healing: if server memory is suspiciously low on assessments or attendance, re-sync immediately
+    if (isStateReady && ((!state.chapterAssessments || state.chapterAssessments.length < 50) || (!state.attendance || state.attendance.length < 50))) {
+      await triggerBackgroundResync(true).catch(() => {});
+    }
+  } catch (e) {}
+
+  const { json, etag } = getOrBuildStateJson();
+
+  // Support conditional requests: if client already has this version, respond instantly with 304 (0 bytes transferred)
+  const clientEtag = req.headers["if-none-match"];
+  if (clientEtag && clientEtag === etag) {
+    return res.status(304).end();
+  }
+
+  res.setHeader("Content-Type", "application/json; charset=utf-8");
+  res.setHeader("Cache-Control", "no-cache, private, must-revalidate");
+  res.setHeader("ETag", etag);
+  return res.send(json);
+});
+
+// Real-time on-demand reload endpoint to synchronize server memory directly from Firestore
+app.all(["/api/sync/reload", "/api/state/reload-firestore"], async (req, res) => {
+  try {
+    await triggerBackgroundResync(true);
+    return res.json({
+      success: true,
+      activeStudents: state.activeStudents?.length || 0,
+      chapterAssessments: state.chapterAssessments?.length || 0,
+      attendance: state.attendance?.length || 0,
+      lmsClasses: state.lmsClasses?.length || 0,
+      users: state.users?.length || 0,
+      timestamp: new Date().toISOString()
+    });
+  } catch (err: any) {
+    return res.status(500).json({ error: err?.message || String(err) });
+  }
 });
 
 // /api/state strips embedded base64 photos out of every log entry (see optimizedLogs
@@ -380,7 +693,7 @@ app.get("/api/state", async (req, res) => {
 // attendance photo. Falls back to Firestore for logs older than the in-memory cap.
 app.get("/api/logs/:id/photo", async (req, res) => {
   try {
-    await ensureStateReady(30000);
+    await ensureStateReady(2000);
   } catch (e) {}
 
   const { id } = req.params;
@@ -397,6 +710,61 @@ app.get("/api/logs/:id/photo", async (req, res) => {
   } catch (e) {}
 
   return res.status(404).json({ error: "Foto bukti presensi tidak ditemukan." });
+});
+
+// On-demand attendance photo endpoint
+app.get("/api/attendance/:id/photo", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const item = (state.attendance || []).find((a: any) => a.id === id);
+    if (item && (item.photo || item.photoUrl || item.proof)) {
+      return res.json({ photoUrl: item.photo || item.photoUrl || item.proof });
+    }
+    const doc = await getEntityFromFirestore("attendance", id);
+    if (doc && (doc.photo || doc.photoUrl || doc.proof)) {
+      return res.json({ photoUrl: doc.photo || doc.photoUrl || doc.proof });
+    }
+    return res.status(404).json({ error: "Foto presensi tidak ditemukan." });
+  } catch (e: any) {
+    return res.status(500).json({ error: e?.message || "Internal error" });
+  }
+});
+
+// On-demand payment proof endpoint
+app.get("/api/payments/:id/proof", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const item = (state.payments || []).find((p: any) => p.id === id);
+    if (item && item.proofOfPayment) {
+      return res.json({ proofOfPayment: item.proofOfPayment });
+    }
+    const doc = await getEntityFromFirestore("payments", id);
+    if (doc && doc.proofOfPayment) {
+      return res.json({ proofOfPayment: doc.proofOfPayment });
+    }
+    return res.status(404).json({ error: "Bukti pembayaran tidak ditemukan." });
+  } catch (e: any) {
+    return res.status(500).json({ error: e?.message || "Internal error" });
+  }
+});
+
+// On-demand student document endpoint
+app.get("/api/students/:id/doc/:field", async (req, res) => {
+  try {
+    const { id, field } = req.params;
+    const student = (state.registeredStudents || []).find((s: any) => s.id === id) ||
+                    (state.activeStudents || []).find((s: any) => s.id === id);
+    if (student && student[field]) {
+      return res.json({ docUrl: student[field] });
+    }
+    const regDoc = await getEntityFromFirestore("registeredStudents", id);
+    if (regDoc && regDoc[field]) return res.json({ docUrl: regDoc[field] });
+    const actDoc = await getEntityFromFirestore("activeStudents", id);
+    if (actDoc && actDoc[field]) return res.json({ docUrl: actDoc[field] });
+    return res.status(404).json({ error: "Dokumen tidak ditemukan." });
+  } catch (e: any) {
+    return res.status(500).json({ error: e?.message || "Internal error" });
+  }
 });
 
 // Server-side credential verification (bcrypt) - replaces the old client-side plaintext check.
@@ -451,6 +819,43 @@ app.post("/api/login", async (req, res) => {
       adminUser.status = "Active";
       adminUser.password = hashPassword(cleanPassword);
       syncEntityToFirestore("users", adminUser.username, adminUser);
+    }
+
+    // Record login audit log
+    try {
+      const loginLogId = `LOG-LOGIN-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+      const nowIso = new Date().toISOString();
+      const clientIp = (req.headers["x-forwarded-for"] as string || req.socket.remoteAddress || "Client").split(",")[0].trim();
+      const ua = req.headers["user-agent"] || "";
+      let deviceName = "Web Browser";
+      if (/android/i.test(ua)) deviceName = "Android Mobile";
+      else if (/iphone|ipad|ipod/i.test(ua)) deviceName = "iOS Mobile";
+      else if (/windows/i.test(ua)) deviceName = "Windows PC";
+      else if (/macintosh|mac os x/i.test(ua)) deviceName = "Mac";
+      else if (/linux/i.test(ua)) deviceName = "Linux PC";
+
+      const loginLog = {
+        id: loginLogId,
+        user: adminUser.name || adminUser.username,
+        username: adminUser.username,
+        role: adminUser.role,
+        action: `Login Berhasil (@${adminUser.username})`,
+        type: "LOGIN",
+        details: `Login akun ${adminUser.name || adminUser.username} (${adminUser.role}) pada ${new Date().toLocaleTimeString("id-ID")}`,
+        description: `Login ke sistem sebagai ${adminUser.role}`,
+        time: nowIso,
+        timestamp: nowIso,
+        ip: clientIp,
+        device: deviceName,
+        location: clientIp === "127.0.0.1" || clientIp.startsWith("::") ? "Lokal / Cloud Server" : clientIp,
+        status: "Berhasil"
+      };
+      if (!state.logs) state.logs = [];
+      state.logs.unshift(loginLog);
+      if (state.logs.length > 500) state.logs.pop();
+      syncEntityToFirestore("logs", loginLogId, loginLog);
+    } catch (logErr) {
+      console.warn("Failed to record master admin login audit log:", logErr);
     }
 
     return res.json({ user: stripPassword(adminUser) });
@@ -559,6 +964,43 @@ app.post("/api/login", async (req, res) => {
 
   user.lastActive = new Date().toISOString();
   syncEntityToFirestore("users", user.username, user);
+
+  // Record login audit log
+  try {
+    const loginLogId = `LOG-LOGIN-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+    const nowIso = new Date().toISOString();
+    const clientIp = (req.headers["x-forwarded-for"] as string || req.socket.remoteAddress || "Client").split(",")[0].trim();
+    const ua = req.headers["user-agent"] || "";
+    let deviceName = "Web Browser";
+    if (/android/i.test(ua)) deviceName = "Android Mobile";
+    else if (/iphone|ipad|ipod/i.test(ua)) deviceName = "iOS Mobile";
+    else if (/windows/i.test(ua)) deviceName = "Windows PC";
+    else if (/macintosh|mac os x/i.test(ua)) deviceName = "Mac";
+    else if (/linux/i.test(ua)) deviceName = "Linux PC";
+
+    const loginLog = {
+      id: loginLogId,
+      user: user.name || user.username,
+      username: user.username,
+      role: user.role,
+      action: `Login Berhasil (@${user.username})`,
+      type: "LOGIN",
+      details: `Login akun ${user.name || user.username} (${user.role}) pada ${new Date().toLocaleTimeString("id-ID")}`,
+      description: `Login ke sistem sebagai ${user.role}`,
+      time: nowIso,
+      timestamp: nowIso,
+      ip: clientIp,
+      device: deviceName,
+      location: clientIp === "127.0.0.1" || clientIp.startsWith("::") ? "Lokal / Cloud Server" : clientIp,
+      status: "Berhasil"
+    };
+    if (!state.logs) state.logs = [];
+    state.logs.unshift(loginLog);
+    if (state.logs.length > 500) state.logs.pop();
+    syncEntityToFirestore("logs", loginLogId, loginLog);
+  } catch (logErr) {
+    console.warn("Failed to record user login audit log:", logErr);
+  }
 
   return res.json({ user: stripPassword(user) });
   } catch (error: any) {
@@ -741,6 +1183,7 @@ app.post("/api/register", async (req, res) => {
   };
   state.payments.unshift(newPay);
   syncEntityToFirestore('payments', newPay.id, newPay);
+  invalidateStateCache();
 
   res.json({ success: true, registered: stripPassword(newReg), payment: newPay });
   } catch (error: any) {
@@ -750,7 +1193,7 @@ app.post("/api/register", async (req, res) => {
 });
 
 // Update standard datasets from the Admin Portal or LMS E-Benkyou
-app.post("/api/state/update", (req, res) => {
+app.post("/api/state/update", async (req, res) => {
   const { dataType, action, payload, userRole } = req.body;
   if (!dataType || !action) {
     return res.status(400).json({ error: "Missing parameter" });
@@ -759,19 +1202,35 @@ app.post("/api/state/update", (req, res) => {
   // Hook sync logic post-response using monkeypatch
   const originalJson = res.json;
   res.json = function(val) {
+    invalidateStateCache();
     res.locals.responseData = val;
     return originalJson.call(this, val);
   };
 
   res.on("finish", async () => {
+    invalidateStateCache();
     try {
       if (dataType === "customization") {
          syncCustomizationToFirestore(state.customization);
          if (state.customization.lmsClasses) {
             state.customization.lmsClasses.forEach(syncLmsClassToFirestore);
+            syncAllLmsClassesToFirestore(state.customization.lmsClasses);
          }
+         if (Array.isArray(state.galleries) && state.galleries.length > 0) {
+            syncGalleriesToFirestore(state.galleries);
+         }
+      } else if (dataType === "lmsClasses") {
+         if (state.lmsClasses) {
+            state.lmsClasses.forEach(syncLmsClassToFirestore);
+            syncAllLmsClassesToFirestore(state.lmsClasses);
+         }
+         if (state.customization) {
+            syncCustomizationToFirestore(state.customization);
+         }
+      } else if (dataType === "galleries") {
+         syncGalleriesToFirestore(state.galleries);
       } else if (state[dataType] || dataType === "registeredStudents") {
-         if (dataType === "galleries" || dataType === "slideshows") return; // Handled manually
+         if (dataType === "slideshows") return;
          // "users" responses always have the password stripped for security
          // (stripPassword()) before being sent to the client. Auto-syncing that
          // stripped response body here would immediately overwrite the correct,
@@ -808,18 +1267,58 @@ app.post("/api/state/update", (req, res) => {
              }
          }
       }
+      touchSyncMeta({ source: "api", instanceId: SERVER_INSTANCE_ID, dataType, action, id: payload?.id || payload?.username }).catch(() => {});
     } catch(e) { console.error("Auto-sync error:", e); }
   });
 
   try {
-    if (handleStateUpdate(req, res, dataType, action, payload, state)) return;
+    if (await handleStateUpdate(req, res, dataType, action, payload, state)) return;
     return res.status(400).json({ error: "Unknown action or dataType" });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
 });
 
-// VVIP Strategic Advice calculated via Rule-Based Algorithmic Engine (No AI as requested)
+// Broadcast notification endpoint (for job orders, daily schedules, announcements to all registered accounts)
+app.post("/api/broadcast-notification", (req, res) => {
+  try {
+    const { title, body, type, url, id } = req.body;
+    if (!title || !body) {
+      return res.status(400).json({ error: "title and body are required" });
+    }
+    const notifItem = {
+      id: id || `notif_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      title,
+      body,
+      type: type || "announcement",
+      url: url || "/",
+      createdAt: Date.now(),
+      timestamp: new Date().toISOString()
+    };
+    if (!(state as any).broadcastNotifications) {
+      (state as any).broadcastNotifications = [];
+    }
+    (state as any).broadcastNotifications.unshift(notifItem);
+    if ((state as any).broadcastNotifications.length > 50) {
+      (state as any).broadcastNotifications = (state as any).broadcastNotifications.slice(0, 50);
+    }
+    try {
+      syncEntityToFirestore("broadcast_notifications", notifItem.id, notifItem);
+    } catch (e) {
+      console.warn("Firestore sync error for broadcast_notifications:", e);
+    }
+    return res.json({ success: true, notification: notifItem });
+  } catch (err: any) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+app.get("/api/broadcast-notifications", (req, res) => {
+  const notifs = (state as any).broadcastNotifications || [];
+  return res.json({ notifications: notifs });
+});
+
+// VVIP Strategic Advice calculated via deterministic algorithmic engine
 app.post("/api/vvip/analyze", (req, res) => {
   try {
     const activeCount = state.activeStudents.length;
@@ -836,7 +1335,7 @@ app.post("/api/vvip/analyze", (req, res) => {
       executiveSummary += "Jumlah peserta didik di asrama bimbingan belajar masih mendominasi. Kurikulum intensif penunjang tes Prometric perlu diprioritaskan.";
     }
 
-    const recommendations = [
+    const defaultRecommendations = [
       {
         namaStrategi: "Akselerasi Kurikulum JFT-Basic & Kaigo Tokutei",
         deskripsi: `Mengoptimalkan bimbingan harian untuk ${studyingCount} siswa yang masih berada di masa belajar agar segera lulus sertifikasi bahasa Jepang.`,
@@ -869,17 +1368,19 @@ app.post("/api/vvip/analyze", (req, res) => {
         "Suku cadang peralatan inventori asrama yang mengalami aus fisik.",
         "Pelaporan draft pertanggungjawaban pajak pertambahan nilai secara akurat."
       ],
-      rekomendasiStrategis: recommendations
+      rekomendasiStrategis: defaultRecommendations
     });
   } catch (error: any) {
     console.error("Strategic analysis error:", error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: error.message || "Gagal memproses analisis strategis" });
   }
 });
 
 // Configure Vite middleware in development or serve static build in production
 async function startServer() {
-  if (process.env.NODE_ENV !== "production") {
+  const isProduction = process.env.NODE_ENV === "production";
+
+  if (!isProduction) {
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
@@ -1001,6 +1502,7 @@ async function startServer() {
         });
 
         isStateReady = true;
+        invalidateStateCache();
         console.log("🔥 Memory state loaded & synchronized with Firestore successfully!");
 
         // Seed events if completely empty
@@ -1056,6 +1558,23 @@ async function startServer() {
             } catch (e) {
               console.error("Failed to seed event:", e);
             }
+          });
+        }
+
+        // Ensure default gallery items are seeded ONLY if collection is completely empty
+        if (!Array.isArray(state.galleries) || state.galleries.length === 0) {
+          console.log("📸 Seeding initial default gallery collection in Firestore...");
+          state.galleries = DEFAULT_GALLERY_ITEMS;
+          if (state.customization) {
+            state.customization.gallery = DEFAULT_GALLERY_ITEMS;
+            syncCustomizationToFirestore(state.customization);
+          }
+          syncGalleriesToFirestore(DEFAULT_GALLERY_ITEMS);
+          syncEntityToFirestore("system", "galleries", {
+            data: DEFAULT_GALLERY_ITEMS,
+            galleries: DEFAULT_GALLERY_ITEMS,
+            gallery: DEFAULT_GALLERY_ITEMS,
+            updatedAt: new Date().toISOString()
           });
         }
 
@@ -1252,11 +1771,18 @@ async function startServer() {
 
       isStateReady = true;
       console.log("🔥 Memory state loaded & synchronized with Firestore successfully!");
+      initRealtimeSync();
     } catch (err) {
       console.error("Error during background Firestore sync:", err);
       isStateReady = true;
+      initRealtimeSync();
     }
   })();
 }
 
 startServer();
+
+// Keep-alive timer: Ping Firestore every 5 minutes to keep background socket active
+setInterval(() => {
+  testConnection().catch(() => {});
+}, 5 * 60 * 1000);

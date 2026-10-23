@@ -5,48 +5,57 @@
  * categories are free text typed by staff, so this uses a fuzzy
  * substring match plus a handful of known synonyms per category.
  */
+export type PaymentCategoryBucket =
+  | "Administrasi Pendaftaran"
+  | "Biaya Belajar Tahap 1"
+  | "Biaya Belajar Tahap 2"
+  | "Biaya Belajar Tahap 3 (N4)"
+  | "Manajemen Fee"
+  | null;
+
+export function categorizePaymentBucket(paymentCategory: string | null | undefined): PaymentCategoryBucket {
+  const pCatLower = (paymentCategory || "").toLowerCase().trim();
+  if (!pCatLower) return null;
+  // Specific stages first
+  if (pCatLower.includes("tahap 3") || pCatLower.includes("tahap-3") || pCatLower.includes("n4") || pCatLower.includes("level 3")) {
+    return "Biaya Belajar Tahap 3 (N4)";
+  }
+  if (pCatLower.includes("tahap 2") || pCatLower.includes("tahap-2") || pCatLower.includes("pelunasan") || pCatLower.includes("cicilan ke-2") || pCatLower.includes("bayar satu kali")) {
+    return "Biaya Belajar Tahap 2";
+  }
+  if (pCatLower.includes("pendaftaran") || pCatLower.includes("administrasi") || pCatLower.includes("registrasi")) {
+    return "Administrasi Pendaftaran";
+  }
+  if (pCatLower.includes("dp") || pCatLower.includes("tahap 1") || pCatLower.includes("tahap-1") || pCatLower.includes("awal") || pCatLower.includes("pelatihan") || pCatLower.includes("asrama")) {
+    return "Biaya Belajar Tahap 1";
+  }
+  if (pCatLower.includes("manajemen") || pCatLower.includes("management")) {
+    return "Manajemen Fee";
+  }
+  return null;
+}
+
 export function matchesPaymentCategory(
   paymentCategory: string | null | undefined,
   defaultCategoryLabel: string,
 ): boolean {
-  const pCatLower = (paymentCategory || "").toLowerCase();
-  const catLower = defaultCategoryLabel.toLowerCase();
+  if (!paymentCategory || !defaultCategoryLabel) return false;
+  const pCatLower = paymentCategory.toLowerCase().trim();
+  const catLower = defaultCategoryLabel.toLowerCase().trim();
+
+  // If exact or normalized match
+  if (pCatLower === catLower) return true;
+
+  // Check bucket categorization
+  const bucketA = categorizePaymentBucket(paymentCategory);
+  const bucketB = categorizePaymentBucket(defaultCategoryLabel);
+
+  if (bucketA && bucketB) {
+    return bucketA === bucketB;
+  }
 
   return (
     pCatLower.includes(catLower) ||
-    catLower.includes(pCatLower) ||
-    (defaultCategoryLabel.includes("Pendaftaran") && pCatLower.includes("pendaftaran")) ||
-    (defaultCategoryLabel.includes("DP Biaya Belajar") &&
-      (pCatLower.includes("pelatihan") || pCatLower.includes("asrama") || pCatLower.includes("dp"))) ||
-    (defaultCategoryLabel.includes("Pelunasan") && pCatLower.includes("pelunasan")) ||
-    (defaultCategoryLabel.includes("Manajemen") && pCatLower.includes("manajemen"))
+    catLower.includes(pCatLower)
   );
-}
-
-export type PaymentCategoryBucket =
-  | "Administrasi Pendaftaran"
-  | "DP Biaya Belajar"
-  | "Pelunasan Biaya Belajar"
-  | "Manajemen Fee"
-  | null;
-
-/**
- * Buckets a payment's free-text category into one of the 4 billing report
- * groups, for revenue-by-category rollups. Returns null when nothing
- * matches (the payment is excluded from every bucket, same as before).
- *
- * Deliberately does NOT match on a bare "1" for the Pelunasan bucket -
- * that check used to match ANY category containing the digit 1 anywhere
- * (e.g. a typo'd amount, a date, "Termin 1"), silently miscategorizing
- * unrelated payments. It was also dead weight for the one legitimate case
- * it was meant to catch ("Pelunasan Biaya Belajar (Max 1 Bulan)"), since
- * that already matches on "pelunasan" first.
- */
-export function categorizePaymentBucket(paymentCategory: string | null | undefined): PaymentCategoryBucket {
-  const pCatLower = (paymentCategory || "").toLowerCase();
-  if (pCatLower.includes("pendaftaran") || pCatLower.includes("administrasi")) return "Administrasi Pendaftaran";
-  if (pCatLower.includes("dp") || pCatLower.includes("awal")) return "DP Biaya Belajar";
-  if (pCatLower.includes("pelunasan") || pCatLower.includes("cicilan") || pCatLower.includes("satu")) return "Pelunasan Biaya Belajar";
-  if (pCatLower.includes("manajemen") || pCatLower.includes("management") || pCatLower.includes("fee")) return "Manajemen Fee";
-  return null;
 }

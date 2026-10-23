@@ -1,4 +1,5 @@
 import { ChapterAssessment } from "../types";
+import { isMathSubject, isJapaneseSubject } from "./subjectHelper";
 
 export type SubjectGroup = "Bahasa Jepang" | "Matematika";
 
@@ -14,8 +15,8 @@ export function isGradedAssessment(a: Pick<ChapterAssessment, "status" | "score"
 }
 
 function matchesSubjectGroup(a: Pick<ChapterAssessment, "subject">, subjectGroup: SubjectGroup): boolean {
-  if (subjectGroup === "Bahasa Jepang") return (a.subject || "Bahasa Jepang") === "Bahasa Jepang";
-  return MATH_SUBJECTS.includes((a.subject as string) || "");
+  if (subjectGroup === "Bahasa Jepang") return isJapaneseSubject(a.subject);
+  return isMathSubject(a.subject);
 }
 
 export function filterStudentAssessments(

@@ -216,10 +216,10 @@ export default function ChatView({ currentUser, systemState, onUpdateState, onCl
   const personalContacts = (systemState.users || []).reduce((acc: UserAccount[], u) => {
     if (u.username === currentUser.username) return acc;
     
-    if (currentUser.role === "Siswa") {
+    if (currentUser.role === "Siswa" || currentUser.role === "Alumni") {
       if (u.role === "Pengajar") acc.push(u);
     } else if (currentUser.role === "Pengajar") {
-      if (u.role === "Siswa" || u.role === "VVIP") acc.push(u);
+      if (u.role === "Siswa" || u.role === "Alumni" || u.role === "VVIP") acc.push(u);
     } else if (currentUser.role === "Admin" || currentUser.role === "Admin Super" || currentUser.role === "Admin Biasa") {
       if (u.role !== "Admin" && u.role !== "Admin Super" && u.role !== "Admin Biasa") acc.push(u);
     } else if (currentUser.role === "VVIP") {
@@ -254,7 +254,7 @@ export default function ChatView({ currentUser, systemState, onUpdateState, onCl
   
   classes.forEach(cls => {
     // A user can see a class group if they are an Admin, VVIP, or belong to that class
-    const canSee = (currentUser.role === "Admin" || currentUser.role === "Admin Super" || currentUser.role === "Admin Biasa" || currentUser.role === "VVIP" || currentUser.role === "Pengajar" || currentUser.assignedClass === cls.name);
+    const canSee = (currentUser.role === "Admin" || currentUser.role === "Admin Super" || currentUser.role === "Admin Biasa" || currentUser.role === "VVIP" || currentUser.role === "Pengajar" || currentUser.role === "Alumni" || currentUser.assignedClass === cls.name);
     
     if (canSee) {
       const groupName = `Kelas: ${cls.name}`;
@@ -274,14 +274,15 @@ export default function ChatView({ currentUser, systemState, onUpdateState, onCl
     if (!systemState.messages) return 0;
     
     let latestMsg = 0;
+    const allMsgs = systemState.messages || [];
     if (isGroup) {
-      const msgs = systemState.messages.filter((m: any) => m.receiverId === contactUsername);
+      const msgs = allMsgs.filter((m: any) => m.receiverId === contactUsername);
       for (const m of msgs) {
         const time = new Date(m.timestamp).getTime();
         if (time > latestMsg) latestMsg = time;
       }
     } else {
-      const msgs = systemState.messages.filter((m: any) => 
+      const msgs = allMsgs.filter((m: any) => 
         (m.senderId === contactUsername && m.receiverId === myChatId) ||
         (m.senderId === myChatId && m.receiverId === contactUsername)
       );
@@ -322,13 +323,13 @@ export default function ChatView({ currentUser, systemState, onUpdateState, onCl
 
   return (
     <div 
-      className="flex flex-col bg-slate-50 relative overflow-hidden w-full" 
-      style={{ height: (activeChatUser && isMobileScreen) ? viewportHeight : "100%" }}
+      className="flex flex-col bg-slate-50 relative w-full flex-1 min-h-[calc(100vh-140px)]" 
+      style={{ height: (activeChatUser && isMobileScreen) ? viewportHeight : "auto" }}
     >
       {!activeChatUser ? (
         // LIST OF CONTACTS
-        <div className="flex-1 flex flex-col h-full overflow-hidden">
-          <div className="p-4 space-y-3 sm:space-y-4">
+        <div className="flex-1 flex flex-col w-full min-h-[calc(100vh-140px)]">
+          <div className="p-4 space-y-3 sm:space-y-4 shrink-0">
             <div className="bg-gradient-to-r from-indigo-700 to-[#001d3d] text-white p-4 rounded-2xl shadow-md">
               <div className="flex items-center justify-between">
                 <h3 className="font-black text-sm uppercase tracking-tight">Pusat Komunikasi LPK</h3>
@@ -395,7 +396,7 @@ export default function ChatView({ currentUser, systemState, onUpdateState, onCl
             </div>
           </div>
           
-          <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-2">
+          <div className="flex-1 px-4 pb-8 space-y-2 overflow-y-auto min-h-[300px]">
             <h4 className="text-[10px] font-bold text-slate-500 uppercase px-2 mb-2 flex items-center justify-between">
               <span>
                 {selectedTab === "recent" ? "⚡ Chat & Pesan Terbaru" : selectedTab === "personal" ? "👤 Daftar Kontak Personal" : "👥 Daftar Grup Kelas"} ({filteredContacts.length})
@@ -403,12 +404,32 @@ export default function ChatView({ currentUser, systemState, onUpdateState, onCl
             </h4>
 
             {selectedTab === "recent" && filteredContacts.length === 0 && (
-              <div className="p-6 text-center bg-white border border-slate-200/80 rounded-2xl my-2 shadow-2xs">
-                <MessageSquare className="h-10 w-10 text-slate-300 mx-auto mb-2" />
-                <p className="text-xs font-bold text-slate-800">Belum Ada Percakapan Terbaru</p>
-                <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
-                  Pesan atau chat baru yang masuk akan otomatis tampil di tab <b>Chat Terbaru</b> ini. Silakan pilih tab <b>Kontak</b> atau <b>Grup Kelas</b> untuk memulai obrolan.
-                </p>
+              <div className="p-6 text-center bg-white border border-slate-200/80 rounded-2xl my-2 shadow-2xs space-y-3">
+                <MessageSquare className="h-10 w-10 text-indigo-400 mx-auto" />
+                <div>
+                  <p className="text-xs font-bold text-slate-800">Belum Ada Percakapan Terbaru</p>
+                  <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">
+                    Pesan atau chat baru yang masuk akan otomatis tampil di tab ini. Silakan pilih kontak personal atau grup kelas untuk memulai obrolan.
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2 justify-center pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedTab("personal")}
+                    className="px-3 py-1.5 bg-indigo-50 text-indigo-700 border border-indigo-200 rounded-xl text-xs font-bold hover:bg-indigo-100 transition cursor-pointer"
+                  >
+                    👤 Buka Daftar Kontak ({personalContacts.length})
+                  </button>
+                  {groupContacts.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedTab("groups")}
+                      className="px-3 py-1.5 bg-blue-50 text-blue-700 border border-blue-200 rounded-xl text-xs font-bold hover:bg-blue-100 transition cursor-pointer"
+                    >
+                      👥 Buka Grup Kelas ({groupContacts.length})
+                    </button>
+                  )}
+                </div>
               </div>
             )}
             
@@ -537,7 +558,7 @@ export default function ChatView({ currentUser, systemState, onUpdateState, onCl
         // (e.g. the 600px chat card on the desktop "Chat Terpadu" tab)
         // instead of covering the whole browser window edge-to-edge.
         <div
-          className={`flex flex-col bg-slate-100 z-20 overflow-hidden ${isMobileScreen ? "fixed inset-0" : "absolute inset-0"}`}
+          className={`flex flex-col bg-slate-100 z-50 overflow-hidden ${isMobileScreen ? "fixed inset-0" : "absolute inset-0"}`}
           style={{ height: isMobileScreen ? viewportHeight : "100%" }}
         >
           <div className="bg-indigo-900 text-white p-3 flex items-center justify-between drop-shadow-md z-20 shrink-0">

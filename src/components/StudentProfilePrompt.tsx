@@ -42,7 +42,7 @@ export default function StudentProfilePrompt({
     user?.birthDate ||
     "";
 
-  const isMissingBirthDate = !existingBirthDate || existingBirthDate === "-" || existingBirthDate.trim() === "";
+  const isMissingBirthDate = !existingBirthDate || existingBirthDate === "-" || String(existingBirthDate).trim() === "";
 
   const [birthDate, setBirthDate] = useState(existingBirthDate !== "-" ? existingBirthDate : "");
   const [newPassword, setNewPassword] = useState("");

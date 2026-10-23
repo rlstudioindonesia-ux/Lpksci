@@ -1,13 +1,33 @@
 import type { Request, Response } from "express";
-import { syncEntityToFirestore, deleteEntityFromFirestore } from "../../src/db/firebase-adapter.ts";
-import { hashPassword } from "../auth-utils.ts";
+import { syncEntityToFirestore, syncEntityToFirestoreAsync, deleteEntityFromFirestore, uploadBufferToFirebaseStorage, touchSyncMeta } from "../../src/db/firebase-adapter.ts";
+import { hashPassword, isHashedPassword } from "../auth-utils.ts";
+import { invalidateStateCache } from "../stateCache.ts";
+
+async function uploadBase64IfPresent(dataStr: string | undefined, prefix: string, folder: string): Promise<string> {
+  if (!dataStr || typeof dataStr !== "string" || !dataStr.startsWith("data:")) {
+    return dataStr || "";
+  }
+  try {
+    const commaIdx = dataStr.indexOf(",");
+    const semiIdx = dataStr.indexOf(";");
+    const mime = (semiIdx !== -1 && commaIdx !== -1) ? dataStr.substring(5, semiIdx) : "image/jpeg";
+    const b64 = commaIdx !== -1 ? dataStr.substring(commaIdx + 1) : dataStr;
+    const buf = Buffer.from(b64, "base64");
+    const ext = mime.includes("pdf") ? "pdf" : (mime.split("/")[1] || "jpg");
+    const filename = `${prefix}_${Date.now()}.${ext}`;
+    return await uploadBufferToFirebaseStorage(buf, filename, mime, folder);
+  } catch (err) {
+    console.warn(`[Firebase Storage] Note during ${folder} upload:`, err);
+    return dataStr;
+  }
+}
 
 // Active student records
 // Extracted verbatim from the monolithic /api/state/update handler in server.ts.
 // Returns a truthy value (the Express Response) if this domain handled the
 // (dataType, action) combination and already sent a response; otherwise false,
 // so the caller (server/handlers/index.ts) can try the next domain in order.
-export function handleStudentsState(req: Request, res: Response, dataType: string, action: string, payload: any, state: any) {
+export async function handleStudentsState(req: Request, res: Response, dataType: string, action: string, payload: any, state: any): Promise<boolean> {
 
 
     if (dataType === "activeStudents") {
@@ -92,7 +112,11 @@ export function handleStudentsState(req: Request, res: Response, dataType: strin
             deleteEntityFromFirestore("registeredStudents", regStudent.id);
           }
         }
-        return res.json({ success: true, id });
+        if (typeof invalidateStateCache === "function") invalidateStateCache();
+        const targetId = id || payload?.id || "";
+        touchSyncMeta({ source: "activeStudents", ...(targetId ? { id: targetId } : {}), action: "delete" }).catch(() => {});
+        res.json({ success: true, id: targetId });
+        return true;
       }
       if (action === "add") {
         const { name, batch, class: className, status, prefecture, city, company, latitude, longitude, sensei, graduationYear } = payload;
@@ -129,78 +153,169 @@ export function handleStudentsState(req: Request, res: Response, dataType: strin
         syncActiveStudentToAlumniUser(newId, name, newStudent.status, payload.profilePicture);
 
         syncEntityToFirestore("activeStudents", newStudent.id, newStudent);
-        return res.json({ success: true, item: newStudent });
+        if (typeof invalidateStateCache === "function") invalidateStateCache();
+        touchSyncMeta({ source: "activeStudents", id: newStudent.id, action: "add" }).catch(() => {});
+        res.json({ success: true, item: newStudent });
+        return true;
       }
 
-      if (action === "update" || action === "edit") {
-         const { id } = payload;
-         const index = state.activeStudents.findIndex(s => s.id === id);
-         if (index !== -1) {
-            const oldStudent = state.activeStudents[index];
-            state.activeStudents[index] = { ...state.activeStudents[index], ...payload };
-            if (payload.docFoto && payload.docFoto !== oldStudent.docFoto) {
-              state.activeStudents[index].profilePicture = payload.docFoto.includes('|') ? payload.docFoto.split('|')[1] : payload.docFoto;
-              payload.profilePicture = state.activeStudents[index].profilePicture; // to trigger user sync below
-            }
+      if (action === "update" || action === "edit" || action === "update_status") {
+        const {
+          id,
+          status,
+          class: className,
+          program,
+          prefecture,
+          city,
+          company,
+          latitude,
+          longitude,
+          profilePicture,
+          docFoto,
+          district,
+          birthDate,
+          gender,
+          education,
+          school,
+          japaneseLevel,
+          sensei,
+          statusPendaftaran,
+          graduationYear,
+          phone,
+          name,
+          email,
+          password,
+          batch,
+          currentChapter,
+          keterangan,
+          mitraSO,
+          jobKeterangan,
+          job1Bidang,
+          job1TanggalMensetsu,
+          job1Lokasi,
+          job2Bidang,
+          job2TanggalMensetsu,
+          job2Lokasi,
+          bulanKelulusan,
+          attitudeScore,
+          kaiwaScore,
+          bobotNilaiRekomendasi,
+          docAkta,
+          docIjazahSD,
+          docIjazahSMP,
+          docIjazahSMA,
+          docKK,
+          docKTP,
+          docTranskip,
+          docPraMCU,
+          docVaksin,
+          docCV1,
+          docCV2,
+          docCV3,
+          docCV4,
+          docCV5,
+          docMoU,
+          docKontrak,
+          verifiedDocs,
+        } = payload;
 
-            const isAlumni = ["Lulus", "Di Jepang"].includes(state.activeStudents[index].status);
-            if (isAlumni) {
-              state.activeStudents[index].class = "";
-              state.activeStudents[index].sensei = "";
-              state.activeStudents[index].statusPendaftaran = "Alumni";
-              state.activeStudents[index].kategoriPendaftaran = "Alumni";
-              syncActiveStudentToAlumniUser(id, state.activeStudents[index].name, state.activeStudents[index].status, state.activeStudents[index].profilePicture);
-            } else {
-              // Sync up to UserAccount if they are regular
-              const userIndex = state.users.findIndex(u => 
-                !["Pengajar", "VVIP", "Admin", "Admin Super", "Admin Biasa"].includes(u.role) && (
-                  (u.studentId === id) || 
-                  (u.name === oldStudent.name)
-                )
-              );
-              if (userIndex !== -1) {
-                let updatedUser = false;
-                if (payload.profilePicture !== undefined && state.users[userIndex].profilePicture !== payload.profilePicture) {
-                  state.users[userIndex].profilePicture = payload.profilePicture;
-                  updatedUser = true;
-                }
-                if (payload.name !== undefined && state.users[userIndex].name !== payload.name) {
-                  state.users[userIndex].name = payload.name;
-                  updatedUser = true;
-                }
-                if (payload.class !== undefined && state.users[userIndex].assignedClass !== payload.class) {
-                  state.users[userIndex].assignedClass = payload.class;
-                  updatedUser = true;
-                }
-                if (updatedUser) {
-                  syncEntityToFirestore("users", state.users[userIndex].username, state.users[userIndex]);
-                }
+        let index = state.activeStudents.findIndex((s: any) => 
+          (s.id && id && String(s.id).trim().toLowerCase() === String(id).trim().toLowerCase()) ||
+          (s.name && payload.name && s.name.trim().toLowerCase() === payload.name.trim().toLowerCase()) ||
+          (s.email && payload.email && s.email.trim().toLowerCase() === payload.email.trim().toLowerCase())
+        );
+        if (index === -1 && payload.name) {
+          index = state.activeStudents.findIndex(
+            (s: any) => s.name && s.name.trim().toLowerCase() === payload.name.trim().toLowerCase()
+          );
+        }
+
+        const effectiveClass = className !== undefined ? className : program;
+        let effectivePhoto = profilePicture || docFoto;
+
+        const processUpdateStudent = async () => {
+          if (effectivePhoto && typeof effectivePhoto === "string" && effectivePhoto.startsWith("data:")) {
+            effectivePhoto = await uploadBase64IfPresent(effectivePhoto, `student_${id || "photo"}`, "profile_pictures");
+          }
+
+          let finalDocAkta = docAkta !== undefined ? await uploadBase64IfPresent(docAkta, `docAkta_${id || "student"}`, "student_docs") : undefined;
+          let finalDocIjazahSD = docIjazahSD !== undefined ? await uploadBase64IfPresent(docIjazahSD, `docIjazahSD_${id || "student"}`, "student_docs") : undefined;
+          let finalDocIjazahSMP = docIjazahSMP !== undefined ? await uploadBase64IfPresent(docIjazahSMP, `docIjazahSMP_${id || "student"}`, "student_docs") : undefined;
+          let finalDocIjazahSMA = docIjazahSMA !== undefined ? await uploadBase64IfPresent(docIjazahSMA, `docIjazahSMA_${id || "student"}`, "student_docs") : undefined;
+          let finalDocKK = docKK !== undefined ? await uploadBase64IfPresent(docKK, `docKK_${id || "student"}`, "student_docs") : undefined;
+          let finalDocKTP = docKTP !== undefined ? await uploadBase64IfPresent(docKTP, `docKTP_${id || "student"}`, "student_docs") : undefined;
+          let finalDocTranskip = docTranskip !== undefined ? await uploadBase64IfPresent(docTranskip, `docTranskip_${id || "student"}`, "student_docs") : undefined;
+          let finalDocPraMCU = docPraMCU !== undefined ? await uploadBase64IfPresent(docPraMCU, `docPraMCU_${id || "student"}`, "student_docs") : undefined;
+          let finalDocVaksin = docVaksin !== undefined ? await uploadBase64IfPresent(docVaksin, `docVaksin_${id || "student"}`, "student_docs") : undefined;
+          let finalDocCV1 = docCV1 !== undefined ? await uploadBase64IfPresent(docCV1, `docCV1_${id || "student"}`, "student_docs") : undefined;
+          let finalDocCV2 = docCV2 !== undefined ? await uploadBase64IfPresent(docCV2, `docCV2_${id || "student"}`, "student_docs") : undefined;
+          let finalDocCV3 = docCV3 !== undefined ? await uploadBase64IfPresent(docCV3, `docCV3_${id || "student"}`, "student_docs") : undefined;
+          let finalDocCV4 = docCV4 !== undefined ? await uploadBase64IfPresent(docCV4, `docCV4_${id || "student"}`, "student_docs") : undefined;
+          let finalDocCV5 = docCV5 !== undefined ? await uploadBase64IfPresent(docCV5, `docCV5_${id || "student"}`, "student_docs") : undefined;
+          let finalDocMoU = docMoU !== undefined ? await uploadBase64IfPresent(docMoU, `docMoU_${id || "student"}`, "student_docs") : undefined;
+          let finalDocKontrak = docKontrak !== undefined ? await uploadBase64IfPresent(docKontrak, `docKontrak_${id || "student"}`, "student_docs") : undefined;
+
+          if (index !== -1) {
+            // Guarantee all scores and fields in payload are copied to memory & Firestore
+            Object.keys(payload).forEach((key) => {
+              if (key !== "id" && payload[key] !== undefined) {
+                state.activeStudents[index][key] = payload[key];
               }
+            });
+            if (status) {
+              state.activeStudents[index].status = status;
             }
-
-            syncEntityToFirestore("activeStudents", state.activeStudents[index].id, state.activeStudents[index]);
-            return res.json({ success: true, item: state.activeStudents[index] });
-         } else {
-            return res.status(404).json({ error: "Student not found to update." });
-         }
-      }
-
-      if (action === "update_status") {
-        const { id, status, class: className, prefecture, city, company, latitude, longitude, profilePicture, sensei, statusPendaftaran, graduationYear, phone, name, batch, currentChapter, keterangan, mitraSO, jobKeterangan, job1Bidang, job1TanggalMensetsu, job1Lokasi, job2Bidang, job2TanggalMensetsu, job2Lokasi, bulanKelulusan, attitudeScore, kaiwaScore, bobotNilaiRekomendasi } = payload;
-        const index = state.activeStudents.findIndex(s => s.id === id);
-        if (index !== -1) {
-          if (status) {
-            state.activeStudents[index].status = status;
-          }
-          if (name) {
-            state.activeStudents[index].name = name;
-          }
-          if (batch !== undefined) {
-            state.activeStudents[index].batch = batch;
-          }
-          if (phone) {
-            state.activeStudents[index].phone = phone;
-          }
+            if (name) {
+              state.activeStudents[index].name = name.trim();
+            }
+            if (email !== undefined) {
+              state.activeStudents[index].email = email.trim();
+            }
+            if (batch !== undefined) {
+              state.activeStudents[index].batch = batch;
+            }
+            if (phone !== undefined) {
+              state.activeStudents[index].phone = phone;
+            }
+            if (district !== undefined) {
+              state.activeStudents[index].district = district;
+            }
+            if (birthDate !== undefined) {
+              state.activeStudents[index].birthDate = birthDate;
+            }
+            if (gender !== undefined) {
+              state.activeStudents[index].gender = gender;
+            }
+            if (education !== undefined) {
+              state.activeStudents[index].education = education;
+            }
+            if (school !== undefined) {
+              state.activeStudents[index].school = school;
+            }
+            if (japaneseLevel !== undefined) {
+              state.activeStudents[index].japaneseLevel = japaneseLevel;
+            }
+            if (effectivePhoto !== undefined) {
+              state.activeStudents[index].profilePicture = effectivePhoto;
+              state.activeStudents[index].docFoto = effectivePhoto;
+            }
+            if (finalDocAkta !== undefined) state.activeStudents[index].docAkta = finalDocAkta;
+            if (finalDocIjazahSD !== undefined) state.activeStudents[index].docIjazahSD = finalDocIjazahSD;
+            if (finalDocIjazahSMP !== undefined) state.activeStudents[index].docIjazahSMP = finalDocIjazahSMP;
+            if (finalDocIjazahSMA !== undefined) state.activeStudents[index].docIjazahSMA = finalDocIjazahSMA;
+            if (finalDocKK !== undefined) state.activeStudents[index].docKK = finalDocKK;
+            if (finalDocKTP !== undefined) state.activeStudents[index].docKTP = finalDocKTP;
+            if (finalDocTranskip !== undefined) state.activeStudents[index].docTranskip = finalDocTranskip;
+            if (finalDocPraMCU !== undefined) state.activeStudents[index].docPraMCU = finalDocPraMCU;
+            if (finalDocVaksin !== undefined) state.activeStudents[index].docVaksin = finalDocVaksin;
+            if (finalDocCV1 !== undefined) state.activeStudents[index].docCV1 = finalDocCV1;
+            if (finalDocCV2 !== undefined) state.activeStudents[index].docCV2 = finalDocCV2;
+            if (finalDocCV3 !== undefined) state.activeStudents[index].docCV3 = finalDocCV3;
+            if (finalDocCV4 !== undefined) state.activeStudents[index].docCV4 = finalDocCV4;
+            if (finalDocCV5 !== undefined) state.activeStudents[index].docCV5 = finalDocCV5;
+            if (finalDocMoU !== undefined) state.activeStudents[index].docMoU = finalDocMoU;
+            if (finalDocKontrak !== undefined) state.activeStudents[index].docKontrak = finalDocKontrak;
+            if (verifiedDocs !== undefined) state.activeStudents[index].verifiedDocs = verifiedDocs;
           if (graduationYear !== undefined) {
             state.activeStudents[index].graduationYear = graduationYear;
           }
@@ -212,7 +327,6 @@ export function handleStudentsState(req: Request, res: Response, dataType: strin
           // If status is an alumni status (Lulus, Di Jepang), default to Alumni IF NOT ALREADY SET TO SISWA
           const isAlumniStatus = ["Lulus", "Di Jepang"].includes(state.activeStudents[index].status);
           if (isAlumniStatus) {
-            // Only force Alumni if it's not explicitly set to a student status or if it was previously empty/siswa and we are transitioning to Japan
             if (!statusPendaftaran && state.activeStudents[index].statusPendaftaran !== "Siswa Baru" && state.activeStudents[index].statusPendaftaran !== "Siswa") {
               state.activeStudents[index].statusPendaftaran = "Alumni";
               state.activeStudents[index].kategoriPendaftaran = "Alumni";
@@ -221,80 +335,51 @@ export function handleStudentsState(req: Request, res: Response, dataType: strin
             state.activeStudents[index].class = "";
             state.activeStudents[index].sensei = "";
 
-            // Sync status to registeredStudents if exists
-            const regIndex = state.registeredStudents.findIndex(rs => rs.id === id || rs.name.trim().toLowerCase() === state.activeStudents[index].name.trim().toLowerCase());
-            if (regIndex !== -1) {
-              // Only update if not explicitly kept as Siswa
-              if (state.activeStudents[index].statusPendaftaran === "Alumni") {
-                state.registeredStudents[regIndex].statusPendaftaran = "Alumni";
-              }
-              state.registeredStudents[regIndex].status = "Disetujui";
-              syncEntityToFirestore("registeredStudents", state.registeredStudents[regIndex].id, state.registeredStudents[regIndex]);
+            if (prefecture !== undefined) {
+              state.activeStudents[index].prefecture = prefecture;
             }
-
-            syncActiveStudentToAlumniUser(id, state.activeStudents[index].name, state.activeStudents[index].status, state.activeStudents[index].profilePicture);
+            if (city !== undefined) {
+              state.activeStudents[index].city = city;
+            }
+            if (company !== undefined) {
+              state.activeStudents[index].company = company;
+            }
+            if (latitude !== undefined && longitude !== undefined) {
+              state.activeStudents[index].latitude = Number(latitude);
+              state.activeStudents[index].longitude = Number(longitude);
+            }
+            syncActiveStudentToAlumniUser(
+              state.activeStudents[index].id,
+              state.activeStudents[index].name,
+              state.activeStudents[index].status,
+              state.activeStudents[index].profilePicture
+            );
           } else {
-            // Only reset to Siswa Baru if not already an Alumni (don't downgrade alumni back to student unless status changed back to Belajar etc)
-            if (!statusPendaftaran && (status === "Belajar" || status === "On Proges Job" || status === "On Progres JFT/JLPT/SSW" || status === "Diklat SO")) {
-               state.activeStudents[index].statusPendaftaran = "Siswa Baru";
-               state.activeStudents[index].kategoriPendaftaran = "Siswa";
-            }
-
-            // Sync back user role to Siswa if it is currently Alumni and status is back to Belajar
-            const userIndex = state.users.findIndex(u => !["Pengajar", "VVIP", "Admin", "Admin Super", "Admin Biasa"].includes(u.role) && ((u.studentId && u.studentId === id) || u.name === state.activeStudents[index].name));
-            if (userIndex !== -1) {
-              if (state.users[userIndex].role === "Alumni" && (status === "Belajar" || status === "On Proges Job")) {
-                state.users[userIndex].role = "Siswa";
-              }
-              syncEntityToFirestore("users", state.users[userIndex].username, state.users[userIndex]);
-            }
-          }
-
-          if (className !== undefined) {
-            state.activeStudents[index].class = className;
-            // Automatically find and assign the sensei for this class!
-            if (className) {
-              const classSensei = state.users.find(u => u.role === "Pengajar" && u.assignedClass && u.assignedClass.toLowerCase() === className.toLowerCase());
-              if (classSensei) {
-                state.activeStudents[index].sensei = classSensei.name;
+            if (effectiveClass !== undefined) {
+              state.activeStudents[index].class = effectiveClass;
+              if (effectiveClass) {
+                const classSensei = state.users.find(
+                  (u: any) =>
+                    u.role === "Pengajar" &&
+                    u.assignedClass &&
+                    u.assignedClass.toLowerCase() === effectiveClass.toLowerCase()
+                );
+                if (classSensei) {
+                  state.activeStudents[index].sensei = classSensei.name;
+                } else {
+                  state.activeStudents[index].sensei = "-";
+                }
               } else {
-                state.activeStudents[index].sensei = "";
+                state.activeStudents[index].sensei = "-";
               }
-            } else {
-              state.activeStudents[index].sensei = "";
             }
           }
+
           if (sensei !== undefined) {
             state.activeStudents[index].sensei = sensei;
           }
-          if (prefecture !== undefined) {
-            state.activeStudents[index].prefecture = prefecture;
-          }
-          if (city !== undefined) {
-            state.activeStudents[index].city = city;
-          }
-          if (company !== undefined) {
-            state.activeStudents[index].company = company;
-          }
-          if (latitude !== undefined) {
-            state.activeStudents[index].latitude = latitude !== null ? Number(latitude) : undefined;
-          }
-          if (longitude !== undefined) {
-            state.activeStudents[index].longitude = longitude !== null ? Number(longitude) : undefined;
-          }
-          if (profilePicture !== undefined) {
-            state.activeStudents[index].profilePicture = profilePicture;
-            
-            // Also sync back to registeredStudents docFoto!
-            const actStudent = state.activeStudents[index];
-            const regIndex = state.registeredStudents.findIndex(rs => rs.id === id || rs.name.trim().toLowerCase() === actStudent.name.trim().toLowerCase());
-            if (regIndex !== -1) {
-              state.registeredStudents[regIndex].docFoto = profilePicture;
-              syncEntityToFirestore("registeredStudents", state.registeredStudents[regIndex].id, state.registeredStudents[regIndex]);
-            }
-          }
           if (currentChapter !== undefined) {
-            state.activeStudents[index].currentChapter = currentChapter;
+            state.activeStudents[index].currentChapter = Number(currentChapter);
           }
           if (keterangan !== undefined) {
             state.activeStudents[index].keterangan = keterangan;
@@ -327,47 +412,168 @@ export function handleStudentsState(req: Request, res: Response, dataType: strin
             state.activeStudents[index].bulanKelulusan = bulanKelulusan;
           }
           if (attitudeScore !== undefined) {
-            state.activeStudents[index].attitudeScore = attitudeScore !== null && attitudeScore !== "" ? Number(attitudeScore) : undefined;
+            state.activeStudents[index].attitudeScore =
+              attitudeScore !== null && attitudeScore !== "" ? Number(attitudeScore) : undefined;
           }
           if (kaiwaScore !== undefined) {
-            state.activeStudents[index].kaiwaScore = kaiwaScore !== null && kaiwaScore !== "" ? Number(kaiwaScore) : undefined;
+            state.activeStudents[index].kaiwaScore =
+              kaiwaScore !== null && kaiwaScore !== "" ? Number(kaiwaScore) : undefined;
           }
           if (bobotNilaiRekomendasi !== undefined) {
-            state.activeStudents[index].bobotNilaiRekomendasi = bobotNilaiRekomendasi !== null && bobotNilaiRekomendasi !== "" ? Number(bobotNilaiRekomendasi) : undefined;
+            state.activeStudents[index].bobotNilaiRekomendasi =
+              bobotNilaiRekomendasi !== null && bobotNilaiRekomendasi !== ""
+                ? Number(bobotNilaiRekomendasi)
+                : undefined;
+          }
+          if (payload.fiveSScore !== undefined) {
+            state.activeStudents[index].fiveSScore = Number(payload.fiveSScore) || 0;
+          }
+          if (payload.ethicsScore !== undefined) {
+            state.activeStudents[index].ethicsScore = Number(payload.ethicsScore) || 0;
+          }
+          if (payload.mathScore !== undefined) {
+            state.activeStudents[index].mathScore = Number(payload.mathScore) || 0;
+          }
+          if (payload.japaneseScore !== undefined) {
+            state.activeStudents[index].japaneseScore = Number(payload.japaneseScore) || 0;
+          }
+          if (payload.attendanceScore !== undefined) {
+            state.activeStudents[index].attendanceScore = Number(payload.attendanceScore) || 0;
           }
 
           const actStudent = state.activeStudents[index];
-          const regIndex = state.registeredStudents.findIndex(rs => rs.id === id || rs.name.trim().toLowerCase() === actStudent.name.trim().toLowerCase());
 
-          // Sync up to UserAccount!
-          const userIndex = state.users.findIndex(u => 
-             !["Pengajar", "VVIP", "Admin", "Admin Super", "Admin Biasa"].includes(u.role) && (
-               (u.studentId && u.studentId === id) || 
-               (u.name && u.name.trim().toLowerCase() === actStudent.name.trim().toLowerCase()) ||
-               (regIndex !== -1 && u.email && u.email.trim().toLowerCase() === state.registeredStudents[regIndex].email.trim().toLowerCase()) ||
-               (regIndex !== -1 && u.username && u.username.trim().toLowerCase() === state.registeredStudents[regIndex].email.trim().toLowerCase())
-             )
+          // Synchronize changes to registeredStudents if record exists
+          const regIndex = state.registeredStudents.findIndex(
+            (rs: any) =>
+              rs.id === id || (rs.name && rs.name.trim().toLowerCase() === actStudent.name.trim().toLowerCase())
           );
-          if (userIndex !== -1) {
-            let userUpdated = false;
-            if (profilePicture !== undefined && state.users[userIndex].profilePicture !== profilePicture) {
-              state.users[userIndex].profilePicture = profilePicture;
-              userUpdated = true;
+          if (regIndex !== -1) {
+            state.registeredStudents[regIndex] = {
+              ...state.registeredStudents[regIndex],
+              name: actStudent.name,
+              phone: actStudent.phone || state.registeredStudents[regIndex].phone,
+              email: actStudent.email || state.registeredStudents[regIndex].email,
+              district: actStudent.district || state.registeredStudents[regIndex].district,
+              birthDate: actStudent.birthDate || state.registeredStudents[regIndex].birthDate,
+              gender: actStudent.gender || state.registeredStudents[regIndex].gender,
+              education: actStudent.education || state.registeredStudents[regIndex].education,
+              school: actStudent.school || state.registeredStudents[regIndex].school,
+              graduationYear: actStudent.graduationYear || state.registeredStudents[regIndex].graduationYear,
+              japaneseLevel: actStudent.japaneseLevel || state.registeredStudents[regIndex].japaneseLevel,
+              program: effectiveClass || state.registeredStudents[regIndex].program,
+              statusPendaftaran: actStudent.statusPendaftaran || state.registeredStudents[regIndex].statusPendaftaran,
+              docFoto: effectivePhoto || state.registeredStudents[regIndex].docFoto,
+              fiveSScore: actStudent.fiveSScore !== undefined ? actStudent.fiveSScore : state.registeredStudents[regIndex].fiveSScore,
+              ethicsScore: actStudent.ethicsScore !== undefined ? actStudent.ethicsScore : state.registeredStudents[regIndex].ethicsScore,
+              mathScore: actStudent.mathScore !== undefined ? actStudent.mathScore : state.registeredStudents[regIndex].mathScore,
+              japaneseScore: actStudent.japaneseScore !== undefined ? actStudent.japaneseScore : state.registeredStudents[regIndex].japaneseScore,
+              attendanceScore: actStudent.attendanceScore !== undefined ? actStudent.attendanceScore : state.registeredStudents[regIndex].attendanceScore,
+            };
+            if (password && password.trim() !== "") {
+              state.registeredStudents[regIndex].password = isHashedPassword(password)
+                ? password
+                : hashPassword(password);
             }
-            if (className !== undefined && state.users[userIndex].assignedClass !== className) {
-              state.users[userIndex].assignedClass = className;
-              userUpdated = true;
-            }
-            if (userUpdated) {
-              syncEntityToFirestore("users", state.users[userIndex].username, state.users[userIndex]);
-            }
+            syncEntityToFirestore(
+              "registeredStudents",
+              state.registeredStudents[regIndex].id,
+              state.registeredStudents[regIndex]
+            );
           }
 
-          syncEntityToFirestore("activeStudents", state.activeStudents[index].id, state.activeStudents[index]);
+          // Sync up to UserAccount!
+          const userIndex = state.users.findIndex(
+            (u: any) =>
+              !["Pengajar", "VVIP", "Admin", "Admin Super", "Admin Biasa"].includes(u.role) &&
+              ((u.studentId && u.studentId === id) ||
+                (u.name && u.name.trim().toLowerCase() === actStudent.name.trim().toLowerCase()) ||
+                (actStudent.email && u.email && u.email.trim().toLowerCase() === actStudent.email.trim().toLowerCase()) ||
+                (actStudent.email &&
+                  u.username &&
+                  u.username.trim().toLowerCase() === actStudent.email.trim().toLowerCase()) ||
+                (regIndex !== -1 &&
+                  u.email &&
+                  state.registeredStudents[regIndex].email &&
+                  u.email.trim().toLowerCase() === state.registeredStudents[regIndex].email.trim().toLowerCase()) ||
+                (regIndex !== -1 &&
+                  u.username &&
+                  state.registeredStudents[regIndex].email &&
+                  u.username.trim().toLowerCase() === state.registeredStudents[regIndex].email.trim().toLowerCase()))
+          );
+
+          if (userIndex !== -1) {
+            if (actStudent.name) state.users[userIndex].name = actStudent.name;
+            if (actStudent.email) state.users[userIndex].email = actStudent.email;
+            if (actStudent.phone) state.users[userIndex].phone = actStudent.phone;
+            if (actStudent.district) state.users[userIndex].district = actStudent.district;
+            if (effectivePhoto) state.users[userIndex].profilePicture = effectivePhoto;
+            if (effectiveClass !== undefined) state.users[userIndex].assignedClass = effectiveClass;
+            if (isAlumniStatus) state.users[userIndex].role = "Alumni";
+            if (password && password.trim() !== "") {
+              state.users[userIndex].password = isHashedPassword(password)
+                ? password
+                : hashPassword(password);
+            }
+            syncEntityToFirestore("users", state.users[userIndex].username, state.users[userIndex]);
+          }
+
+          await syncEntityToFirestoreAsync("activeStudents", state.activeStudents[index].id, state.activeStudents[index]);
+          if (typeof invalidateStateCache === "function") invalidateStateCache();
+          const activeId = state.activeStudents[index]?.id || "";
+          touchSyncMeta({ source: "activeStudents", ...(activeId ? { id: activeId } : {}), action: "update" }).catch(() => {});
           return res.json({ success: true, item: state.activeStudents[index] });
+        } else {
+          // If student was not found in activeStudents, check registeredStudents
+          const regIndex = state.registeredStudents.findIndex(
+            (rs: any) =>
+              (rs.id && id && String(rs.id).trim().toLowerCase() === String(id).trim().toLowerCase()) ||
+              (payload.name && rs.name && rs.name.trim().toLowerCase() === payload.name.trim().toLowerCase()) ||
+              (payload.email && rs.email && rs.email.trim().toLowerCase() === payload.email.trim().toLowerCase())
+          );
+          if (regIndex !== -1) {
+            state.registeredStudents[regIndex] = {
+              ...state.registeredStudents[regIndex],
+              ...payload,
+              name: payload.name ? payload.name.trim() : state.registeredStudents[regIndex].name,
+              program: effectiveClass || state.registeredStudents[regIndex].program,
+              docFoto: effectivePhoto || state.registeredStudents[regIndex].docFoto,
+              fiveSScore: payload.fiveSScore !== undefined ? Number(payload.fiveSScore) : state.registeredStudents[regIndex].fiveSScore,
+              ethicsScore: payload.ethicsScore !== undefined ? Number(payload.ethicsScore) : state.registeredStudents[regIndex].ethicsScore,
+              mathScore: payload.mathScore !== undefined ? Number(payload.mathScore) : state.registeredStudents[regIndex].mathScore,
+              japaneseScore: payload.japaneseScore !== undefined ? Number(payload.japaneseScore) : state.registeredStudents[regIndex].japaneseScore,
+              attendanceScore: payload.attendanceScore !== undefined ? Number(payload.attendanceScore) : state.registeredStudents[regIndex].attendanceScore,
+            };
+            if (password && password.trim() !== "") {
+              state.registeredStudents[regIndex].password = isHashedPassword(password)
+                ? password
+                : hashPassword(password);
+            }
+            await syncEntityToFirestoreAsync(
+              "registeredStudents",
+              state.registeredStudents[regIndex].id,
+              state.registeredStudents[regIndex]
+            );
+            if (typeof invalidateStateCache === "function") invalidateStateCache();
+            const regId = state.registeredStudents[regIndex]?.id || "";
+            touchSyncMeta({ source: "registeredStudents", ...(regId ? { id: regId } : {}), action: "update" }).catch(() => {});
+            return res.json({ success: true, item: state.registeredStudents[regIndex] });
+          }
+          return res.status(404).json({ error: "Student not found" });
         }
-        return res.status(404).json({ error: "Student not found" });
+      };
+
+      try {
+        await processUpdateStudent();
+      } catch (err) {
+        console.error("Error updating student:", err);
+        if (!res.headersSent) {
+          res.status(500).json({ error: "Failed to update student" });
+          return true;
+        }
       }
+      return true;
     }
+  }
   return false;
 }

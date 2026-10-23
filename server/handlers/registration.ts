@@ -1,13 +1,33 @@
 import type { Request, Response } from "express";
-import { syncEntityToFirestore, deleteEntityFromFirestore } from "../../src/db/firebase-adapter.ts";
+import { syncEntityToFirestore, deleteEntityFromFirestore, uploadBufferToFirebaseStorage, touchSyncMeta } from "../../src/db/firebase-adapter.ts";
 import { hashPassword, isHashedPassword } from "../auth-utils.ts";
+import { invalidateStateCache } from "../stateCache.ts";
+
+async function uploadBase64IfPresent(dataStr: string | undefined, prefix: string, folder: string): Promise<string> {
+  if (!dataStr || typeof dataStr !== "string" || !dataStr.startsWith("data:")) {
+    return dataStr || "";
+  }
+  try {
+    const commaIdx = dataStr.indexOf(",");
+    const semiIdx = dataStr.indexOf(";");
+    const mime = (semiIdx !== -1 && commaIdx !== -1) ? dataStr.substring(5, semiIdx) : "image/jpeg";
+    const b64 = commaIdx !== -1 ? dataStr.substring(commaIdx + 1) : dataStr;
+    const buf = Buffer.from(b64, "base64");
+    const ext = mime.includes("pdf") ? "pdf" : (mime.split("/")[1] || "jpg");
+    const filename = `${prefix}_${Date.now()}.${ext}`;
+    return await uploadBufferToFirebaseStorage(buf, filename, mime, folder);
+  } catch (err) {
+    console.warn(`[Firebase Storage] Note during ${folder} upload:`, err);
+    return dataStr;
+  }
+}
 
 // Registered student approval/rejection workflow
 // Extracted verbatim from the monolithic /api/state/update handler in server.ts.
 // Returns a truthy value (the Express Response) if this domain handled the
 // (dataType, action) combination and already sent a response; otherwise false,
 // so the caller (server/handlers/index.ts) can try the next domain in order.
-export function handleRegistrationState(req: Request, res: Response, dataType: string, action: string, payload: any, state: any) {
+export async function handleRegistrationState(req: Request, res: Response, dataType: string, action: string, payload: any, state: any): Promise<boolean> {
 
 
     if (dataType === "registeredStudents" && action === "approve") {
@@ -136,7 +156,8 @@ export function handleRegistrationState(req: Request, res: Response, dataType: s
         state.registeredStudents.splice(index, 1);
         deleteEntityFromFirestore("registeredStudents", approvedStudent.id);
 
-        return res.json({ success: true, updated: approvedStudent });
+        res.json({ success: true, updated: approvedStudent });
+        return true;
       }
     }
 
@@ -147,7 +168,8 @@ export function handleRegistrationState(req: Request, res: Response, dataType: s
       if (index !== -1) {
         state.registeredStudents[index].status = "Ditolak";
         syncEntityToFirestore("registeredStudents", state.registeredStudents[index].id, state.registeredStudents[index]);
-        return res.json({ success: true, updated: state.registeredStudents[index] });
+        res.json({ success: true, updated: state.registeredStudents[index] });
+        return true;
       }
     }
 
@@ -185,34 +207,100 @@ export function handleRegistrationState(req: Request, res: Response, dataType: s
         }
       }
       
-      return res.json({ success: true, id });
+      res.json({ success: true, id });
+      return true;
     }
 
 
-    if (dataType === "registeredStudents" && action === "update") {
-      const { id } = payload;
-      const index = state.registeredStudents.findIndex(s => s.id === id);
-      if (index !== -1) {
-        const oldDocFoto = state.registeredStudents[index].docFoto;
-        state.registeredStudents[index] = {
-          ...state.registeredStudents[index],
-          ...payload
-        };
-        const student = state.registeredStudents[index];
+    if (dataType === "registeredStudents" && action === "add") {
+      const newReg = {
+        id: payload.id || `REG-${Date.now()}`,
+        ...payload,
+      };
+      state.registeredStudents.unshift(newReg);
+      syncEntityToFirestore("registeredStudents", newReg.id, newReg);
+      res.json({ success: true, item: newReg });
+      return true;
+    }
 
-        // Force zero billing for alumni
-        if (student.statusPendaftaran === "Alumni") {
-          student.paymentAmount = 0;
-          student.paymentStatus = "Lunas";
+    if (dataType === "registeredStudents" && (action === "update" || action === "edit" || action === "update_status")) {
+      const { id } = payload;
+      let index = state.registeredStudents.findIndex(s => s.id === id);
+      if (index === -1 && payload.name) {
+        index = state.registeredStudents.findIndex(s => s.name && s.name.trim().toLowerCase() === payload.name.trim().toLowerCase());
+      }
+
+      const processUpdateReg = async () => {
+        let processedPayload = { ...payload };
+
+        // Process Base64 uploads if present
+        const docFields = [
+          "docFoto", "docAkta", "docIjazahSD", "docIjazahSMP", "docIjazahSMA",
+          "docKK", "docKTP", "docTranskip", "docPraMCU", "docVaksin",
+          "docCV1", "docCV2", "docCV3", "docCV4", "docCV5", "docMoU", "docKontrak", "proofOfPayment"
+        ];
+
+        for (const field of docFields) {
+          if (processedPayload[field] && typeof processedPayload[field] === "string" && processedPayload[field].startsWith("data:")) {
+            const folder = field === "docFoto" ? "profile_pictures" : field === "proofOfPayment" ? "payments" : "student_docs";
+            processedPayload[field] = await uploadBase64IfPresent(processedPayload[field], `${field}_${id || "student"}`, folder);
+          }
         }
 
-        // Sync to activeStudents and users if docFoto was updated or added!
-        if (student.docFoto && student.docFoto !== oldDocFoto) {
-          const actIndex = state.activeStudents.findIndex(s => s.id === id || s.name.trim().toLowerCase() === student.name.trim().toLowerCase());
+        if (index !== -1) {
+          state.registeredStudents[index] = {
+            ...state.registeredStudents[index],
+            ...processedPayload
+          };
+          const student = state.registeredStudents[index];
+
+          // Force zero billing for alumni
+          if (student.statusPendaftaran === "Alumni") {
+            student.paymentAmount = 0;
+            student.paymentStatus = "Lunas";
+          }
+
+          // Sync to activeStudents
+          const actIndex = state.activeStudents.findIndex(s => s.id === id || (s.name && student.name && s.name.trim().toLowerCase() === student.name.trim().toLowerCase()));
           if (actIndex !== -1) {
-            state.activeStudents[actIndex].profilePicture = student.docFoto.includes('|') ? student.docFoto.split('|')[1] : student.docFoto;
+            if (student.name) state.activeStudents[actIndex].name = student.name;
+            if (student.phone) state.activeStudents[actIndex].phone = student.phone;
+            if (student.email) state.activeStudents[actIndex].email = student.email;
+            if (student.district) state.activeStudents[actIndex].district = student.district;
+            if (student.birthDate) state.activeStudents[actIndex].birthDate = student.birthDate;
+            if (student.gender) state.activeStudents[actIndex].gender = student.gender;
+            if (student.education) state.activeStudents[actIndex].education = student.education;
+            if (student.school) state.activeStudents[actIndex].school = student.school;
+            if (student.graduationYear) state.activeStudents[actIndex].graduationYear = student.graduationYear;
+            if (student.japaneseLevel) state.activeStudents[actIndex].japaneseLevel = student.japaneseLevel;
+            if (student.program) state.activeStudents[actIndex].class = student.program;
+            if (student.docFoto) {
+              const pic = student.docFoto.includes('|') ? student.docFoto.split('|')[1] : student.docFoto;
+              state.activeStudents[actIndex].profilePicture = pic;
+              state.activeStudents[actIndex].docFoto = student.docFoto;
+            }
+            if (student.docAkta) state.activeStudents[actIndex].docAkta = student.docAkta;
+            if (student.docIjazahSD) state.activeStudents[actIndex].docIjazahSD = student.docIjazahSD;
+            if (student.docIjazahSMP) state.activeStudents[actIndex].docIjazahSMP = student.docIjazahSMP;
+            if (student.docIjazahSMA) state.activeStudents[actIndex].docIjazahSMA = student.docIjazahSMA;
+            if (student.docKK) state.activeStudents[actIndex].docKK = student.docKK;
+            if (student.docKTP) state.activeStudents[actIndex].docKTP = student.docKTP;
+            if (student.docTranskip) state.activeStudents[actIndex].docTranskip = student.docTranskip;
+            if (student.docPraMCU) state.activeStudents[actIndex].docPraMCU = student.docPraMCU;
+            if (student.docVaksin) state.activeStudents[actIndex].docVaksin = student.docVaksin;
+            if (student.docCV1) state.activeStudents[actIndex].docCV1 = student.docCV1;
+            if (student.docCV2) state.activeStudents[actIndex].docCV2 = student.docCV2;
+            if (student.docCV3) state.activeStudents[actIndex].docCV3 = student.docCV3;
+            if (student.docCV4) state.activeStudents[actIndex].docCV4 = student.docCV4;
+            if (student.docCV5) state.activeStudents[actIndex].docCV5 = student.docCV5;
+            if (student.docMoU) state.activeStudents[actIndex].docMoU = student.docMoU;
+            if (student.docKontrak) state.activeStudents[actIndex].docKontrak = student.docKontrak;
+            if (student.verifiedDocs) state.activeStudents[actIndex].verifiedDocs = student.verifiedDocs;
+
             syncEntityToFirestore("activeStudents", state.activeStudents[actIndex].id, state.activeStudents[actIndex]);
           }
+
+          // Sync to users
           const userIndex = state.users.findIndex(u => 
             !["Pengajar", "VVIP", "Admin", "Admin Super", "Admin Biasa"].includes(u.role) && (
               (u.studentId === id) || 
@@ -222,42 +310,73 @@ export function handleRegistrationState(req: Request, res: Response, dataType: s
             )
           );
           if (userIndex !== -1) {
-            state.users[userIndex].profilePicture = student.docFoto.includes('|') ? student.docFoto.split('|')[1] : student.docFoto;
+            if (student.name) state.users[userIndex].name = student.name;
+            if (student.email) state.users[userIndex].email = student.email;
+            if (student.phone) state.users[userIndex].phone = student.phone;
+            if (student.district) state.users[userIndex].district = student.district;
+            if (student.program) state.users[userIndex].assignedClass = student.program;
+            if (student.docFoto) {
+              state.users[userIndex].profilePicture = student.docFoto.includes('|') ? student.docFoto.split('|')[1] : student.docFoto;
+            }
             syncEntityToFirestore("users", state.users[userIndex].username, state.users[userIndex]);
           }
-        }
-        
-        // If marked as Lunas from admin panel, sync to payments and cash ledger
-        if (payload.paymentStatus === "Lunas") {
-          const student = state.registeredStudents[index];
-          const pIndex = state.payments.findIndex(p => p.studentName === student.name && p.category.includes("Pendaftaran"));
           
-          if (pIndex !== -1) {
-             state.payments[pIndex].status = "Lunas";
-             const payment = state.payments[pIndex];
-             
-             if (!state.cashLedger) state.cashLedger = [];
-             const exists = state.cashLedger.some(c => c.code === payment.id);
-             if (!exists) {
-               const newLedger = {
-                 id: `CAS-${Date.now().toString().slice(-4)}`,
-                 code: payment.id,
-                 date: new Date().toISOString().split("T")[0],
-                 description: `Pembayaran Pendaftaran - ${payment.studentName}`,
-                 inAmount: Number(payment.amount) || Number(student.paymentAmount) || 500000,
-                 outAmount: 0
-               };
-               state.cashLedger.push(newLedger);
-               syncEntityToFirestore('cashLedger', newLedger.id, newLedger);
-             }
-             syncEntityToFirestore('payments', payment.id, payment);
+          // If marked as Lunas from admin panel, sync to payments and cash ledger
+          if (payload.paymentStatus === "Lunas") {
+            const student = state.registeredStudents[index];
+            const pIndex = state.payments.findIndex(p => p.studentName === student.name && p.category.includes("Pendaftaran"));
+            
+            if (pIndex !== -1) {
+               state.payments[pIndex].status = "Lunas";
+               const payment = state.payments[pIndex];
+               
+               if (!state.cashLedger) state.cashLedger = [];
+               const exists = state.cashLedger.some(c => c.code === payment.id);
+               if (!exists) {
+                 const newLedger = {
+                   id: `CAS-${Date.now().toString().slice(-4)}`,
+                   code: payment.id,
+                   date: new Date().toISOString().split("T")[0],
+                   description: `Pembayaran Pendaftaran - ${payment.studentName}`,
+                   inAmount: Number(payment.amount) || Number(student.paymentAmount) || 500000,
+                   outAmount: 0
+                 };
+                 state.cashLedger.push(newLedger);
+                 syncEntityToFirestore('cashLedger', newLedger.id, newLedger);
+               }
+               syncEntityToFirestore('payments', payment.id, payment);
+            }
           }
+          
+          syncEntityToFirestore('registeredStudents', state.registeredStudents[index].id, state.registeredStudents[index]);
+          if (typeof invalidateStateCache === "function") invalidateStateCache();
+          const regId = state.registeredStudents[index]?.id || '';
+          touchSyncMeta({ source: 'registeredStudents', ...(regId ? { id: regId } : {}), action: 'update' }).catch(() => {});
+          return res.json({ success: true, updated: state.registeredStudents[index] });
+        } else {
+          const newReg = {
+            id: id || `REG-${Date.now()}`,
+            ...processedPayload
+          };
+          state.registeredStudents.unshift(newReg);
+          syncEntityToFirestore('registeredStudents', newReg.id, newReg);
+          if (typeof invalidateStateCache === "function") invalidateStateCache();
+          const newId = newReg?.id || '';
+          touchSyncMeta({ source: 'registeredStudents', ...(newId ? { id: newId } : {}), action: 'add' }).catch(() => {});
+          return res.json({ success: true, item: newReg });
         }
-        
-        syncEntityToFirestore('registeredStudents', state.registeredStudents[index].id, state.registeredStudents[index]);
-        return res.json({ success: true, updated: state.registeredStudents[index] });
+      };
+
+      try {
+        await processUpdateReg();
+      } catch (err) {
+        console.error("Error updating registered student:", err);
+        if (!res.headersSent) {
+          res.status(500).json({ error: "Failed to update registration record." });
+          return true;
+        }
       }
-      return res.status(404).json({ error: "Registered student not found to update." });
+      return true;
     }
   return false;
 }

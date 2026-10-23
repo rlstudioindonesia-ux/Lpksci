@@ -34,15 +34,22 @@ describe("categorizePaymentBucket", () => {
     expect(categorizePaymentBucket("Biaya Pendaftaran")).toBe("Administrasi Pendaftaran");
   });
 
-  it("buckets DP Biaya Belajar", () => {
-    expect(categorizePaymentBucket("DP Biaya Belajar (Persiapan Awal)")).toBe("DP Biaya Belajar");
-    expect(categorizePaymentBucket("Setoran Awal")).toBe("DP Biaya Belajar");
+  it("buckets DP Biaya Belajar / Tahap 1", () => {
+    expect(categorizePaymentBucket("DP Biaya Belajar (Persiapan Awal)")).toBe("Biaya Belajar Tahap 1");
+    expect(categorizePaymentBucket("Setoran Awal")).toBe("Biaya Belajar Tahap 1");
+    expect(categorizePaymentBucket("Biaya Belajar Tahap 1")).toBe("Biaya Belajar Tahap 1");
   });
 
-  it("buckets Pelunasan Biaya Belajar", () => {
-    expect(categorizePaymentBucket("Pelunasan Biaya Belajar (Max 1 Bulan)")).toBe("Pelunasan Biaya Belajar");
-    expect(categorizePaymentBucket("Cicilan Ke-2")).toBe("Pelunasan Biaya Belajar");
-    expect(categorizePaymentBucket("Bayar Satu Kali")).toBe("Pelunasan Biaya Belajar");
+  it("buckets Pelunasan Biaya Belajar / Tahap 2", () => {
+    expect(categorizePaymentBucket("Pelunasan Biaya Belajar (Max 1 Bulan)")).toBe("Biaya Belajar Tahap 2");
+    expect(categorizePaymentBucket("Cicilan Ke-2")).toBe("Biaya Belajar Tahap 2");
+    expect(categorizePaymentBucket("Bayar Satu Kali")).toBe("Biaya Belajar Tahap 2");
+    expect(categorizePaymentBucket("Biaya Belajar Tahap 2")).toBe("Biaya Belajar Tahap 2");
+  });
+
+  it("buckets Biaya Belajar Tahap 3 (N4)", () => {
+    expect(categorizePaymentBucket("Biaya Belajar Tahap 3 (Level Belajar N4)")).toBe("Biaya Belajar Tahap 3 (N4)");
+    expect(categorizePaymentBucket("Tahap 3")).toBe("Biaya Belajar Tahap 3 (N4)");
   });
 
   it("buckets Manajemen Fee", () => {

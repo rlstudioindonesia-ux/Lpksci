@@ -5,13 +5,16 @@
 
 import React, { useState, useMemo } from "react";
 import { createPortal } from "react-dom";
+import { db } from "../firebaseClient";
+import { doc, setDoc } from "firebase/firestore";
 import { ConfirmButton } from "./ConfirmButton";
-import { getSafePhotoUrl, createSvgAvatar, resolveAttendancePhotoUrl } from "../lib/storageHelper";
+import { MediaViewerModal } from "./MediaViewerModal";
+import { getSafePhotoUrl, createSvgAvatar, resolveAttendancePhotoUrl, uploadFileToFirebase } from "../lib/storageHelper";
+import { downloadStaffAttendanceDetailPdf } from "../lib/attendanceReportPdf";
 import { calculateAge } from "../lib/dateUtils";
 import { computeFinancialMetrics, computeMonthlyExpenseBreakdown } from "../lib/financeCalculations";
 import { isGradedAssessment } from "../lib/scoreAveraging";
 import { formatPayrollPeriodLabel, getCurrentPayrollPeriodKey, isTimestampInPayrollPeriod } from "../lib/staffAttendancePeriod";
-import { downloadStaffAttendanceDetailPdf } from "../lib/attendanceReportPdf";
 import {
   ResponsiveContainer,
   AreaChart,
@@ -139,8 +142,6 @@ export default function VvipView({
       onViewModeChange(currentViewMode);
     }
   }, [currentViewMode, onViewModeChange]);
-  const [aiReport, setAiReport] = useState<any>(null);
-  const [isLoadingAI, setIsLoadingAI] = useState(false);
   const [securityFilter, setSecurityFilter] = useState("all");
   const [lmsClassFilter, setLmsClassFilter] = useState("all");
   const [auditDateFilter, setAuditDateFilter] = useState("all");
@@ -175,21 +176,65 @@ export default function VvipView({
   };
 
   const [costRegistration, setCostRegistration] = useState(systemState.costConfig?.registration ?? 500000);
-  const [costDP, setCostDP] = useState(systemState.costConfig?.dp ?? 3500000);
+  const [costDP, setCostDP] = useState(systemState.costConfig?.dp ?? 5000000);
   const [costFullPayment, setCostFullPayment] = useState(systemState.costConfig?.fullPayment ?? 2000000);
-  const [costManagementFee, setCostManagementFee] = useState(systemState.costConfig?.managementFee ?? 5000000);
+  const [costStage3, setCostStage3] = useState(systemState.costConfig?.stage3 ?? 3000000);
+  const [costManagementFee, setCostManagementFee] = useState(systemState.costConfig?.managementFee ?? 0);
 
-  const handleSaveCostConfig = (e: React.FormEvent) => {
+  React.useEffect(() => {
+    if (systemState.costConfig) {
+      setCostRegistration(systemState.costConfig.registration ?? 500000);
+      setCostDP(systemState.costConfig.dp ?? 5000000);
+      setCostFullPayment(systemState.costConfig.fullPayment ?? 2000000);
+      setCostStage3(systemState.costConfig.stage3 ?? 3000000);
+      setCostManagementFee(systemState.costConfig.managementFee ?? 0);
+    }
+  }, [systemState.costConfig]);
+
+  const [isSavingCost, setIsSavingCost] = useState(false);
+  const [costSaveSuccess, setCostSaveSuccess] = useState(false);
+
+  const handleSaveCostConfig = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isReadOnly) return;
-    onUpdateState('costConfig', 'update', { 
-        registration: costRegistration,
-        dp: costDP,
-        fullPayment: costFullPayment,
-        managementFee: costManagementFee
-       });
-    alert("Konfigurasi SOP Biaya Resmi berhasil disimpan!");
-    setShowCostConfig(false);
+    setIsSavingCost(true);
+    setCostSaveSuccess(false);
+
+    const newConfig = { 
+      registration: Math.max(0, Number(costRegistration) || 0),
+      dp: Math.max(0, Number(costDP) || 0),
+      fullPayment: Math.max(0, Number(costFullPayment) || 0),
+      stage3: Math.max(0, Number(costStage3) || 0),
+      managementFee: Math.max(0, Number(costManagementFee) || 0),
+      updatedAt: Date.now()
+    };
+
+    try {
+      if (db) {
+        try {
+          await setDoc(doc(db, 'system', 'costConfig'), newConfig, { merge: true });
+          await setDoc(doc(db, 'system', 'sync_meta'), {
+            dataType: 'costConfig',
+            action: 'update',
+            source: 'vvip-modal',
+            updatedAt: Date.now()
+          }, { merge: true });
+        } catch (dbErr) {
+          console.warn("Direct Firestore write fallback:", dbErr);
+        }
+      }
+
+      await onUpdateState('costConfig', 'update', newConfig);
+      setCostSaveSuccess(true);
+      setTimeout(() => {
+        setCostSaveSuccess(false);
+        setShowCostConfig(false);
+      }, 2000);
+    } catch (err) {
+      console.error("Error saving costConfig:", err);
+    } finally {
+      setIsSavingCost(false);
+    }
   };
 
   const [selectedReferrer, setSelectedReferrer] = useState<string>("all");
@@ -306,32 +351,6 @@ export default function VvipView({
     }
   }, [initialMonitorTab]);
 
-  // Run the rule-based strategy engine automatically
-  React.useEffect(() => {
-    const runAudit = async () => {
-      setIsLoadingAI(true);
-      try {
-        const res = await fetch("/api/vvip/analyze", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-        });
-        
-        if (!res.ok) {
-          const text = await res.text();
-          throw new Error(text || `HTTP error ${res.status}`);
-        }
-        
-        const data = await res.json();
-        setAiReport(data);
-      } catch (err) {
-        console.error("Audit calculating error", err);
-        setAiReport({ error: String(err) });
-      } finally {
-        setIsLoadingAI(false);
-      }
-    };
-    runAudit();
-  }, [systemState]);
 
   // Parse prefectures for PieChart
   const prefCounts = activeStudents
@@ -347,34 +366,34 @@ export default function VvipView({
     const counts = {
       belajar: activeStudents.filter(s => !["Lulus", "Di Jepang", "Diklat SO", "On Proges Job", "On Progres JFT/JLPT/SSW"].includes(s.status || "")).length,
       job: activeStudents.filter(s => s.status === "On Proges Job").length,
-      jft: activeStudents.filter(s => s.status === "On Progres JFT/JLPT/SSW").length,
       diklat: activeStudents.filter(s => s.status === "Diklat SO").length,
-      lulus: activeStudents.filter(s => s.status === "Lulus").length,
       jepang: activeStudents.filter(s => s.status === "Di Jepang").length,
+      jft: activeStudents.filter(s => s.status === "On Progres JFT/JLPT/SSW" || s.status === "Lulus").length,
     };
 
     return [
       { id: "Belajar", label: `🇮🇩 1. BELAJAR (${counts.belajar})` },
       { id: "On Proges Job", label: `💼 2. ON PROGRES JOB (${counts.job})` },
-      { id: "On Progres JFT/JLPT/SSW", label: `📋 3. ON PROGRES JFT/JLPT/SSW (${counts.jft})` },
-      { id: "Diklat SO", label: `📘 4. DIKLAT SO (${counts.diklat})` },
-      { id: "Lulus", label: `🎓 5. LULUS (${counts.lulus})` },
-      { id: "Di Jepang", label: `🇯🇵 6. DI JEPANG (${counts.jepang})` },
+      { id: "Diklat SO", label: `📘 3. DIKLAT SO (${counts.diklat})` },
+      { id: "Di Jepang", label: `🇯🇵 4. DI JEPANG (${counts.jepang})` },
+      { id: "On Progres JFT/JLPT/SSW", label: `🎓 5. SERTIFIKASI JFT/JLPT/SSW (${counts.jft})` },
     ];
   }, [activeStudents]);
 
   const startVvipEditReg = (studentId: string) => {
+    const cleanStudentId = String(studentId || "").toLowerCase();
     let regMatch = systemState.registeredStudents?.find(
-      (rs) => rs.id === studentId || rs.name.toLowerCase() === studentId.toLowerCase()
+      (rs) => rs.id === studentId || (rs.name && String(rs.name).toLowerCase() === cleanStudentId)
     );
 
     const activeMatch = systemState.activeStudents?.find(
-      (s) => s.id === studentId || (regMatch && s.name.toLowerCase() === regMatch.name.toLowerCase()) || s.name.toLowerCase() === studentId.toLowerCase()
+      (s) => s.id === studentId || (regMatch?.name && s.name && String(s.name).toLowerCase() === String(regMatch.name).toLowerCase()) || (s.name && String(s.name).toLowerCase() === cleanStudentId)
     );
 
-    if (!regMatch && activeMatch) {
+    if (!regMatch && activeMatch?.name) {
+      const activeNameLower = String(activeMatch.name).toLowerCase();
       regMatch = systemState.registeredStudents?.find(
-        (rs) => rs.name.toLowerCase() === activeMatch.name.toLowerCase()
+        (rs) => rs.name && String(rs.name).toLowerCase() === activeNameLower
       );
     }
 
@@ -445,62 +464,86 @@ export default function VvipView({
     setVvipRegSuccess(false);
   };
 
-  const handleVvipSaveReg = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleVvipSaveReg = async (e?: React.FormEvent | React.MouseEvent) => {
+    if (e && e.preventDefault) e.preventDefault();
     setVvipRegError("");
     setVvipRegSuccess(false);
 
-    if (!vvipRegData.name || !vvipRegData.phone) {
-      setVvipRegError("Nama dan No HP wajib diisi.");
-      return;
-    }
+    try {
+      const targetStudentId = vvipEditingStudentId || vvipRegData.id;
+      const existingActive = (systemState.activeStudents || []).find((s) => s.id === targetStudentId);
+      const existingReg = (systemState.registeredStudents || []).find((s) => s.id === targetStudentId);
 
-    let success = false;
-    const regMatch = systemState.registeredStudents?.find(rs => rs.id === vvipRegData.id || rs.name.toLowerCase() === vvipRegData.name.toLowerCase());
-    if (regMatch) {
-      success = await onUpdateState(
-        "registeredStudents",
-        "update",
-        { ...vvipRegData, id: regMatch.id },
+      const safeName = vvipRegData.name?.trim() || existingActive?.name || existingReg?.name || "Siswa";
+      const safePhone = vvipRegData.phone?.trim() || existingActive?.phone || existingReg?.phone || "-";
+      const safeProgram = vvipRegData.program !== undefined ? vvipRegData.program : (existingActive?.class || existingReg?.program || "");
+
+      const payload = {
+        ...vvipRegData,
+        id: targetStudentId || vvipRegData.id || `REG-${Date.now()}`,
+        name: safeName,
+        phone: safePhone,
+        program: safeProgram,
+      };
+
+      let success = false;
+      const cleanPayloadName = (payload.name || "").trim().toLowerCase();
+      const regMatch = systemState.registeredStudents?.find(rs => rs.id === payload.id || (cleanPayloadName && rs.name && String(rs.name).trim().toLowerCase() === cleanPayloadName));
+      if (regMatch) {
+        const regSuccess = await onUpdateState(
+          "registeredStudents",
+          "update",
+          { ...payload, id: regMatch.id }
+        );
+        if (regSuccess) success = true;
+      }
+
+      const activeInfo = systemState.activeStudents?.find(
+        (s) => s.id === targetStudentId || s.id === payload.id || (cleanPayloadName && s.name && String(s.name).trim().toLowerCase() === cleanPayloadName)
       );
-    } else {
-      success = await onUpdateState(
-        "registeredStudents",
-        "add",
-        vvipRegData,
-      );
-    }
 
-    const activeInfo = systemState.activeStudents?.find(
-      (s) => s.id === vvipEditingStudentId || s.id === vvipRegData.id || s.name.toLowerCase() === vvipRegData.name.toLowerCase()
-    );
+      if (activeInfo) {
+        const activeSuccess = await onUpdateState("activeStudents", "update_status", {
+          id: activeInfo.id,
+          name: payload.name,
+          email: payload.email,
+          password: payload.password,
+          phone: payload.phone,
+          district: payload.district,
+          birthDate: payload.birthDate,
+          gender: payload.gender,
+          education: payload.education,
+          school: payload.school,
+          graduationYear: payload.graduationYear,
+          japaneseLevel: payload.japaneseLevel,
+          statusPendaftaran: payload.statusPendaftaran,
+          class: payload.program !== undefined ? payload.program : activeInfo.class,
+          status: payload.status || activeInfo.status,
+          prefecture: payload.prefecture !== undefined ? payload.prefecture : activeInfo.prefecture,
+          city: payload.city !== undefined ? payload.city : activeInfo.city,
+          company: payload.company !== undefined ? payload.company : activeInfo.company,
+          profilePicture: payload.profilePicture || payload.docFoto,
+          docFoto: payload.docFoto || payload.profilePicture,
+          batch: payload.batch || activeInfo.batch,
+        });
+        if (activeSuccess) success = true;
+      } else if (!regMatch) {
+        const activeSuccess = await onUpdateState("activeStudents", "add", payload);
+        if (activeSuccess) success = true;
+      }
 
-    if (activeInfo) {
-      const activeSuccess = await onUpdateState("activeStudents", "update_status", {
-        id: activeInfo.id,
-        name: vvipRegData.name,
-        phone: vvipRegData.phone,
-        district: vvipRegData.district,
-        birthDate: vvipRegData.birthDate,
-        gender: vvipRegData.gender,
-        education: vvipRegData.education,
-        school: vvipRegData.school,
-        graduationYear: vvipRegData.graduationYear,
-        japaneseLevel: vvipRegData.japaneseLevel,
-        statusPendaftaran: vvipRegData.statusPendaftaran,
-        class: vvipRegData.program || activeInfo.class,
-      });
-      if (activeSuccess) success = true;
-    }
-
-    if (success) {
-      setVvipRegSuccess(true);
-      setTimeout(() => {
-        setVvipRegSuccess(false);
-        setVvipEditingStudentId(null);
-      }, 1500);
-    } else {
-      setVvipRegError("Gagal menyimpan data.");
+      if (success) {
+        setVvipRegSuccess(true);
+        setTimeout(() => {
+          setVvipRegSuccess(false);
+          setVvipEditingStudentId(null);
+        }, 1200);
+      } else {
+        setVvipRegError("Gagal menyimpan data.");
+      }
+    } catch (err) {
+      console.error(err);
+      setVvipRegError("Terjadi kendala saat menyimpan data.");
     }
   };
 
@@ -629,9 +672,17 @@ export default function VvipView({
   };
 
   const paidPayments = useMemo(() => {
-  return (systemState.payments || []).filter(
-      (p) => p.status === "Lunas" || p.status === "Cicilan"
-    );
+    return (systemState.payments || [])
+      .filter((p) => p.status === "Lunas" || p.status === "Cicilan")
+      .sort((a, b) => {
+        const dateA = a.date || "";
+        const dateB = b.date || "";
+        if (dateA !== dateB) return dateB.localeCompare(dateA);
+        const timeA = (a as any).createdAt ? new Date((a as any).createdAt).getTime() : 0;
+        const timeB = (b as any).createdAt ? new Date((b as any).createdAt).getTime() : 0;
+        if (timeA && timeB && timeA !== timeB) return timeB - timeA;
+        return (b.id || "").toString().localeCompare((a.id || "").toString());
+      });
   }, [systemState.payments]);
 
   const monthlyExpenseBreakdown = useMemo(
@@ -1553,7 +1604,7 @@ export default function VvipView({
 
         return createPortal(
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4 overflow-y-auto overflow-x-hidden bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
-            <div className="bg-white rounded-3xl max-w-2xl w-full max-h-[90vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden text-left animate-in zoom-in-95 duration-150">
+            <div className="bg-white rounded-3xl max-w-2xl w-full max-h-[90vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden my-auto text-left animate-in zoom-in-95 duration-150">
               <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/50">
                 <div>
                   <h3 className="font-bold text-slate-800 flex items-center gap-2">
@@ -1697,11 +1748,23 @@ export default function VvipView({
                 
                 <div className="bg-slate-50 p-4 border border-slate-200 rounded-2xl flex items-start sm:items-center gap-4 flex-col sm:flex-row">
                    <div className="h-16 w-16 bg-white border border-slate-200 rounded-xl overflow-hidden shadow-3xs flex-shrink-0 flex items-center justify-center">
-                      {teacher.profilePicture ? (
-                        <img src={getSafePhotoUrl(teacher.profilePicture, teacher.name)} className="h-full w-full object-cover" alt="Profile" referrerPolicy="no-referrer" />
-                      ) : (
-                        <div className="h-full w-full flex items-center justify-center text-3xl">👤</div>
-                      )}
+                      {(() => {
+                        const pic = teacher.profilePicture || teacher.docFoto || (teacher.faceBiometricData && typeof teacher.faceBiometricData === 'string' && teacher.faceBiometricData.startsWith('data:image') ? teacher.faceBiometricData : '');
+                        return pic ? (
+                          <img 
+                            src={getSafePhotoUrl(pic, teacher.name)} 
+                            className="h-full w-full object-cover" 
+                            alt="Profile" 
+                            referrerPolicy="no-referrer"
+                            onError={(e) => {
+                              e.currentTarget.onerror = null;
+                              e.currentTarget.src = createSvgAvatar(teacher.name || 'Sensei');
+                            }} 
+                          />
+                        ) : (
+                          <div className="h-full w-full flex items-center justify-center text-3xl">👤</div>
+                        );
+                      })()}
                    </div>
                    <div className="space-y-1">
                      <h4 className="font-black text-slate-900 text-lg leading-none">{teacher.name}</h4>
@@ -1742,29 +1805,34 @@ export default function VvipView({
                   
                   <div className="space-y-3">
                     {[
-                      { key: "ijazah", name: "Ijazah Terakhir", docUrl: teacher.docIjazah },
-                      { key: "sertifikat", name: "Sertifikat JLPT / JFT / NAT / Mengajar", docUrl: teacher.docSertifikat },
-                      { key: "ktp", name: "KTP / Identitas Pribadi", docUrl: teacher.docKTP },
-                      { key: "cv", name: "Curriculum Vitae (CV) Sensei", docUrl: teacher.docCV }
+                      { key: "ijazah", fieldKey: "docIjazah", name: "Ijazah Terakhir", docUrl: teacher.docIjazah },
+                      { key: "sertifikat", fieldKey: "docSertifikat", name: "Sertifikat JLPT / JFT / NAT / Mengajar", docUrl: teacher.docSertifikat },
+                      { key: "ktp", fieldKey: "docKTP", name: "KTP / Identitas Pribadi", docUrl: teacher.docKTP },
+                      { key: "cv", fieldKey: "docCV", name: "Curriculum Vitae (CV) Sensei", docUrl: teacher.docCV }
                     ].map((doc) => {
                       const isVerified = verifiedDocsList.includes(doc.key);
+                      const rawDoc = doc.docUrl || "";
+                      const hasDoc = rawDoc && !rawDoc.includes("_default.") && (rawDoc.includes("|") || rawDoc.startsWith("http") || rawDoc.startsWith("data:"));
+                      const docUrl = rawDoc.includes("|") ? rawDoc.split("|")[1] : rawDoc;
+                      const docFileName = rawDoc.includes("|") ? rawDoc.split("|")[0] : `${doc.name}.pdf`;
+
                       return (
                         <div key={doc.key} className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-4 border border-slate-200 rounded-2xl bg-slate-50 gap-3">
                           <div className="text-left">
                             <p className="font-bold text-slate-800 text-xs">{doc.name}</p>
                             <div className="flex items-center gap-1.5 mt-1">
-                              <span className={`inline-block h-2 w-2 rounded-full ${doc.docUrl ? (isVerified ? "bg-emerald-500 animate-pulse" : "bg-amber-500") : "bg-slate-300"}`}></span>
+                              <span className={`inline-block h-2 w-2 rounded-full ${hasDoc ? (isVerified ? "bg-emerald-500 animate-pulse" : "bg-amber-500") : "bg-slate-300"}`}></span>
                               <span className="text-[10px] text-slate-500">
-                                {doc.docUrl ? (isVerified ? "Diverifikasi & Valid" : "Belum Diverifikasi") : "Belum Diunggah"}
+                                {hasDoc ? (isVerified ? "Diverifikasi & Valid (Tersimpan di Firebase)" : "Terunggah - Belum Diverifikasi") : "Belum Diunggah"}
                               </span>
                             </div>
                           </div>
-                          <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-                            {doc.docUrl ? (
+                          <div className="flex items-center gap-2 w-full sm:w-auto justify-end flex-wrap">
+                            {hasDoc ? (
                               <>
                                 <button
                                   type="button"
-                                  onClick={() => setViewingAttendancePhoto(doc.docUrl)}
+                                  onClick={() => setViewingAttendancePhoto(docUrl)}
                                   className="text-[10px] font-bold bg-white text-indigo-600 px-3 py-2 rounded-xl border border-slate-200 hover:bg-slate-50 hover:text-indigo-800 transition shadow-3xs flex items-center gap-1 cursor-pointer"
                                 >
                                   <span>👁️</span> Lihat
@@ -1789,9 +1857,28 @@ export default function VvipView({
                                   )}
                                 </button>
                               </>
-                            ) : (
-                              <span className="text-[10px] font-semibold text-slate-400 italic bg-slate-100/50 px-2.5 py-1 rounded-lg border border-slate-200/50">Tidak Tersedia</span>
-                            )}
+                            ) : null}
+
+                            <label className="text-[10px] font-bold bg-white hover:bg-indigo-50 text-indigo-700 px-3 py-2 rounded-xl border border-indigo-200 transition cursor-pointer flex items-center gap-1">
+                              <span>📤 {hasDoc ? "Ganti" : "Unggah"}</span>
+                              <input
+                                type="file"
+                                className="hidden"
+                                onChange={async (e) => {
+                                  const file = e.target.files?.[0];
+                                  if (!file) return;
+                                  try {
+                                    const downloadUrl = await uploadFileToFirebase(file, "sensei_docs");
+                                    await onUpdateState("users", "edit", {
+                                      ...teacher,
+                                      [doc.fieldKey]: `${file.name}|${downloadUrl}`,
+                                    });
+                                  } catch (err: any) {
+                                    alert("Gagal mengunggah berkas: " + (err.message || err));
+                                  }
+                                }}
+                              />
+                            </label>
                           </div>
                         </div>
                       );
@@ -1819,22 +1906,33 @@ export default function VvipView({
           const student = selectedStudentDetail;
 
           // Find corresponding registered details for biographical profile
-          const matchedReg = (systemState.registeredStudents.find(
+          const matchedRS = (systemState.registeredStudents || []).find(
             (reg) =>
-              reg.name.toLowerCase() === student.name.toLowerCase() ||
-              reg.id === student.id,
-          ) || {
-            id: `REG-${student.id.split("-")[1] || "000"}`,
-            name: student.name,
-            status: student.statusPendaftaran || (["Lulus", "Di Jepang"].includes(student.status) ? "Alumni" : "Siswa Aktif"),
-            email: student.email || "-",
-            phone: student.phone || "-",
-            birthDate: "-",
-            education: "-",
-            program: student.class || "-",
-            japaneseLevel: student.japaneseLevel || "N5",
-            verifiedDocs: [] as string[],
-          }) as RegisteredStudent;
+              reg.id === student.id ||
+              (reg?.name && student?.name && String(reg.name).trim().toLowerCase() === String(student.name).trim().toLowerCase()) ||
+              (reg?.email && student?.email && String(reg.email).trim().toLowerCase() === String(student.email).trim().toLowerCase())
+          );
+
+          const matchedReg = {
+            id: matchedRS?.id || student.id,
+            name: matchedRS?.name || student.name,
+            status: matchedRS?.status || student.statusPendaftaran || (["Lulus", "Di Jepang"].includes(student.status) ? "Alumni" : "Siswa Aktif"),
+            email: matchedRS?.email || student.email || "-",
+            phone: matchedRS?.phone || student.phone || "-",
+            birthDate: matchedRS?.birthDate || student.birthDate || "-",
+            education: matchedRS?.education || student.education || "-",
+            program: matchedRS?.program || student.class || "-",
+            japaneseLevel: matchedRS?.japaneseLevel || student.japaneseLevel || "N5",
+            verifiedDocs: (matchedRS?.verifiedDocs || student.verifiedDocs || []) as string[],
+            docAkta: matchedRS?.docAkta || student.docAkta,
+            docFoto: matchedRS?.docFoto || student.docFoto || student.profilePicture,
+            docIjazahSD: matchedRS?.docIjazahSD || student.docIjazahSD,
+            docIjazahSMP: matchedRS?.docIjazahSMP || student.docIjazahSMP,
+            docIjazahSMA: matchedRS?.docIjazahSMA || student.docIjazahSMA,
+            docKK: matchedRS?.docKK || student.docKK,
+            docKTP: matchedRS?.docKTP || student.docKTP,
+            docTranskip: matchedRS?.docTranskip || student.docTranskip,
+          };
 
           const requiredDocs = [
             { label: "Akte Kelahiran Asli", val: "docAkta" },
@@ -2039,57 +2137,137 @@ export default function VvipView({
                         <div className="grid gap-3 sm:grid-cols-2">
                           {requiredDocs.map((doc, idx) => {
                             const isVerified = (matchedReg.verifiedDocs || []).includes(doc.val);
+                            const rawDoc = (matchedReg as any)[doc.val] || (student as any)[doc.val] || "";
+                            const hasDoc = rawDoc && !rawDoc.includes("_default.") && (rawDoc.includes("|") || rawDoc.startsWith("http") || rawDoc.startsWith("data:"));
+                            const docUrl = rawDoc.includes("|") ? rawDoc.split("|")[1] : rawDoc;
+
                             return (
                               <div
                                 key={idx}
-                                onClick={async () => {
-                                  if (isReadOnly) return;
-                                  const currentVerified = matchedReg.verifiedDocs || [];
-                                  const newVerified = currentVerified.includes(doc.val)
-                                    ? currentVerified.filter(v => v !== doc.val)
-                                    : [...currentVerified, doc.val];
-                                  await onUpdateState("registeredStudents", "update", {
-                                    id: matchedReg.id,
-                                    verifiedDocs: newVerified,
-                                  });
-                                }}
-                                className={`flex items-center justify-between p-3 rounded-xl border transition shadow-3xs text-xs cursor-pointer select-none ${
+                                className={`flex flex-col p-3 rounded-xl border transition shadow-3xs text-xs space-y-2.5 ${
                                   isVerified
-                                    ? "bg-emerald-50/40 border-emerald-200 hover:bg-emerald-50"
-                                    : "bg-amber-50/40 border-amber-200 hover:bg-amber-50"
+                                    ? "bg-emerald-50/40 border-emerald-200"
+                                    : hasDoc
+                                    ? "bg-blue-50/30 border-blue-200"
+                                    : "bg-slate-50 border-slate-200"
                                 }`}
-                                title={isReadOnly ? "Mode Pantau (Hanya Baca)" : "Klik untuk mengubah status verifikasi"}
                               >
-                                <div className="flex items-center gap-2">
-                                  {isVerified ? (
-                                    <span className="h-5 w-5 rounded bg-emerald-100 text-emerald-700 flex items-center justify-center text-[10px] font-black shrink-0">
-                                      ✓
+                                <div className="flex items-center justify-between gap-2">
+                                  <div className="flex items-center gap-2 min-w-0">
+                                    {isVerified ? (
+                                      <span className="h-5 w-5 rounded bg-emerald-100 text-emerald-700 flex items-center justify-center text-[10px] font-black shrink-0">
+                                        ✓
+                                      </span>
+                                    ) : hasDoc ? (
+                                      <span className="h-5 w-5 rounded bg-blue-100 text-blue-700 flex items-center justify-center text-[10px] font-black shrink-0">
+                                        📄
+                                      </span>
+                                    ) : (
+                                      <span className="h-5 w-5 rounded bg-slate-200 text-slate-500 flex items-center justify-center text-[10px] font-black shrink-0">
+                                        -
+                                      </span>
+                                    )}
+                                    <span className="font-semibold text-slate-800 truncate">
+                                      {doc.label}
                                     </span>
-                                  ) : (
-                                    <span className="h-5 w-5 rounded bg-amber-100 text-amber-700 flex items-center justify-center text-[10px] font-black shrink-0">
-                                      ⚠
-                                    </span>
-                                  )}
-                                  <span className="font-semibold text-slate-700">
-                                    {doc.label}
+                                  </div>
+                                  <span
+                                    className={`text-[9px] font-extrabold px-2 py-0.5 rounded-md font-mono shrink-0 ${
+                                      isVerified
+                                        ? "text-emerald-700 bg-emerald-100"
+                                        : hasDoc
+                                        ? "text-blue-700 bg-blue-100"
+                                        : "text-slate-500 bg-slate-200"
+                                    }`}
+                                  >
+                                    {isVerified ? "VERIFIED" : hasDoc ? "TERUNGGAH" : "BELUM ADA"}
                                   </span>
                                 </div>
-                                <span
-                                  className={`text-[9.5px] font-extrabold px-2.5 py-0.5 rounded-md font-mono shrink-0 ${
-                                    isVerified
-                                      ? "text-emerald-700 bg-emerald-100"
-                                      : "text-amber-700 bg-amber-100"
-                                  }`}
-                                >
-                                  {isVerified ? "VERIFIED" : "UNVERIFIED"}
-                                </span>
+
+                                <div className="flex items-center justify-between gap-1.5 pt-1 border-t border-slate-200/60 flex-wrap">
+                                  <div className="flex items-center gap-1.5">
+                                    {hasDoc ? (
+                                      <button
+                                        type="button"
+                                        onClick={() => setViewingAttendancePhoto(docUrl)}
+                                        className="text-[10px] font-bold bg-white text-indigo-600 hover:text-indigo-800 px-2.5 py-1 rounded-lg border border-slate-200 hover:bg-slate-50 transition flex items-center gap-1 cursor-pointer shadow-3xs"
+                                      >
+                                        <span>👁️</span> Lihat
+                                      </button>
+                                    ) : null}
+
+                                    <button
+                                      type="button"
+                                      disabled={isReadOnly}
+                                      onClick={async () => {
+                                        if (isReadOnly) return;
+                                        const currentVerified = matchedReg.verifiedDocs || [];
+                                        const newVerified = currentVerified.includes(doc.val)
+                                          ? currentVerified.filter(v => v !== doc.val)
+                                          : [...currentVerified, doc.val];
+                                        
+                                        // Update active students
+                                        await onUpdateState("activeStudents", "update", {
+                                          id: student.id,
+                                          verifiedDocs: newVerified,
+                                        });
+
+                                        // Also update registered students if exists
+                                        if (matchedRS) {
+                                          await onUpdateState("registeredStudents", "update", {
+                                            id: matchedRS.id,
+                                            verifiedDocs: newVerified,
+                                          });
+                                        }
+                                      }}
+                                      className={`text-[10px] font-bold px-2.5 py-1 rounded-lg transition flex items-center gap-1 cursor-pointer shadow-3xs ${
+                                        isVerified
+                                          ? "bg-rose-50 text-rose-600 hover:bg-rose-100 border border-rose-200"
+                                          : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200"
+                                      }`}
+                                    >
+                                      {isVerified ? "Batal Verif" : "Verifikasi"}
+                                    </button>
+                                  </div>
+
+                                  <label className="text-[10px] font-bold bg-white hover:bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-lg border border-indigo-200 transition cursor-pointer flex items-center gap-1 shadow-3xs">
+                                    <span>📤 {hasDoc ? "Ganti" : "Unggah"}</span>
+                                    <input
+                                      type="file"
+                                      className="hidden"
+                                      onChange={async (e) => {
+                                        const file = e.target.files?.[0];
+                                        if (!file) return;
+                                        try {
+                                          const downloadUrl = await uploadFileToFirebase(file, "registrations");
+                                          const docPayload = `${file.name}|${downloadUrl}`;
+                                          
+                                          // Update active students
+                                          await onUpdateState("activeStudents", "update", {
+                                            id: student.id,
+                                            [doc.val]: docPayload,
+                                          });
+
+                                          // Also update registered students if exists
+                                          if (matchedRS) {
+                                            await onUpdateState("registeredStudents", "update", {
+                                              id: matchedRS.id,
+                                              [doc.val]: docPayload,
+                                            });
+                                          }
+                                        } catch (err: any) {
+                                          alert("Gagal mengunggah berkas: " + (err.message || err));
+                                        }
+                                      }}
+                                    />
+                                  </label>
+                                </div>
                               </div>
                             );
                           })}
                         </div>
                         <p className="text-[10px] text-slate-450 leading-relaxed italic pt-1">
-                          Klik berkas di atas untuk mengubah status verifikasi. Seluruh dokumen fisik dan scan resolusi tinggi harus
-                          diverifikasi langsung oleh Admin & Tim Pengajar LPK SCI.
+                          Klik tombol Verifikasi atau Unggah untuk mengelola dan memverifikasi dokumen siswa. Semua data dan berkas tersimpan aman di Firebase Firestore & Firebase Storage LPK SCI.
                         </p>
                       </div>
                     </div>
@@ -2747,8 +2925,8 @@ export default function VvipView({
                 Tutup
               </button>
               <button
-                type="submit"
-                form="vvipRegForm"
+                type="button"
+                onClick={handleVvipSaveReg}
                 className="px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-xs font-black hover:bg-indigo-700 transition shadow-sm cursor-pointer"
               >
                 Simpan Perubahan
@@ -2768,26 +2946,51 @@ export default function VvipView({
                   <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                 </button>
               </div>
-              <form onSubmit={handleSaveCostConfig} className="p-5 space-y-4 overflow-y-auto">
+              <form onSubmit={handleSaveCostConfig} className="p-5 space-y-3.5 overflow-y-auto">
                 <div>
-                  <label className="text-[10px] font-bold text-slate-500 uppercase">Administrasi Pendaftaran</label>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase">Administrasi Pendaftaran (Rp)</label>
                   <input type="number" required value={costRegistration} onChange={e => setCostRegistration(Number(e.target.value))} className="w-full border rounded-lg p-2 text-sm mt-1" />
                 </div>
                 <div>
-                  <label className="text-[10px] font-bold text-slate-500 uppercase">DP Biaya Belajar (Awal)</label>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase">Biaya Belajar Tahap 1 (Rp)</label>
                   <input type="number" required value={costDP} onChange={e => setCostDP(Number(e.target.value))} className="w-full border rounded-lg p-2 text-sm mt-1" />
                 </div>
                 <div>
-                  <label className="text-[10px] font-bold text-slate-500 uppercase">Pelunasan Biaya Belajar (Maks 1 Bln)</label>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase">Biaya Belajar Tahap 2 (Rp)</label>
                   <input type="number" required value={costFullPayment} onChange={e => setCostFullPayment(Number(e.target.value))} className="w-full border rounded-lg p-2 text-sm mt-1" />
                 </div>
                 <div>
-                  <label className="text-[10px] font-bold text-slate-500 uppercase">Management Fee (Pasca Lolos)</label>
-                  <input type="number" required value={costManagementFee} onChange={e => setCostManagementFee(Number(e.target.value))} className="w-full border rounded-lg p-2 text-sm mt-1" />
+                  <label className="text-[10px] font-bold text-slate-500 uppercase">Biaya Belajar Tahap 3 (Level Belajar N4) (Rp)</label>
+                  <input type="number" required value={costStage3} onChange={e => setCostStage3(Number(e.target.value))} className="w-full border rounded-lg p-2 text-sm mt-1" />
                 </div>
-                <div className="pt-4 flex justify-end gap-2">
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase">Management Fee (Pasca Lolos / Opsional) (Rp)</label>
+                  <input type="number" value={costManagementFee} onChange={e => setCostManagementFee(Number(e.target.value))} className="w-full border rounded-lg p-2 text-sm mt-1" />
+                </div>
+
+                <div className="p-3 bg-indigo-50/70 rounded-xl border border-indigo-100 flex justify-between items-center text-xs">
+                  <span className="font-bold text-indigo-950">Total Anggaran:</span>
+                  <span className="font-mono font-black text-indigo-700">
+                    Rp {(costRegistration + costDP + costFullPayment + costStage3 + costManagementFee).toLocaleString('id-ID')}
+                  </span>
+                </div>
+
+                {costSaveSuccess && (
+                  <div className="p-2.5 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs font-semibold flex items-center gap-2">
+                    <span className="text-emerald-600">✓</span>
+                    <span>SOP Biaya berhasil diperbarui secara real-time!</span>
+                  </div>
+                )}
+
+                <div className="pt-2 flex justify-end gap-2">
                   <button type="button" onClick={() => setShowCostConfig(false)} className="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl text-xs font-bold">Batal</button>
-                  <button type="submit" className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold cursor-pointer">Simpan</button>
+                  <button 
+                    type="submit" 
+                    disabled={isSavingCost}
+                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white rounded-xl text-xs font-bold cursor-pointer transition flex items-center gap-1.5"
+                  >
+                    {isSavingCost ? "Menyimpan..." : costSaveSuccess ? "Tersimpan!" : "Simpan Real-Time"}
+                  </button>
                 </div>
               </form>
             </div>
@@ -3179,68 +3382,12 @@ export default function VvipView({
       )}
 
       {/* PHOTO PREVIEW MODAL */}
-      {viewingAttendancePhoto && createPortal(
-        <div
-          className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-md animate-in fade-in duration-200"
-          onClick={() => setViewingAttendancePhoto(null)}
-        >
-          <div
-            className="bg-white rounded-3xl max-w-3xl w-full max-h-[90vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden text-left animate-in zoom-in-95 duration-150"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
-              <div className="flex items-center gap-2">
-                <span className="text-lg">📷</span>
-                <h3 className="text-sm font-bold text-slate-800">Foto Bukti Presensi / Dokumen</h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => setViewingAttendancePhoto(null)}
-                className="p-1.5 hover:bg-slate-200 rounded-full transition cursor-pointer text-slate-500 font-bold"
-              >
-                ✕
-              </button>
-            </div>
-            <div className="p-6 overflow-y-auto flex flex-col items-center justify-center bg-slate-900/5 min-h-[300px]">
-              <img
-                src={viewingAttendancePhoto}
-                alt="Bukti Foto"
-                className="max-h-[70vh] w-auto max-w-full rounded-2xl object-contain shadow-md border border-slate-200"
-                referrerPolicy="no-referrer"
-                onError={(e) => {
-                  e.currentTarget.onerror = null;
-                  e.currentTarget.src = "https://images.unsplash.com/photo-1584697964400-2ae6a2f620aa?auto=format&fit=crop&w=800&q=80";
-                }}
-              />
-            </div>
-            <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-between items-center">
-              <button
-                type="button"
-                onClick={() => {
-                  if (viewingAttendancePhoto.startsWith("data:")) {
-                    const a = document.createElement("a");
-                    a.href = viewingAttendancePhoto;
-                    a.download = "bukti_presensi.jpg";
-                    a.click();
-                  } else {
-                    window.open(viewingAttendancePhoto, "_blank");
-                  }
-                }}
-                className="px-4 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
-              >
-                ⬇️ Unduh / Buka Foto
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewingAttendancePhoto(null)}
-                className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition shadow-sm cursor-pointer"
-              >
-                Tutup
-              </button>
-            </div>
-          </div>
-        </div>,
-        document.body
+      {viewingAttendancePhoto && (
+        <MediaViewerModal
+          url={viewingAttendancePhoto}
+          title="Foto Bukti Presensi / Dokumen"
+          onClose={() => setViewingAttendancePhoto(null)}
+        />
       )}
     </div>
   );

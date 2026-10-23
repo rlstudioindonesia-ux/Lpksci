@@ -78,6 +78,28 @@ export function handleJobOrdersState(req: Request, res: Response, dataType: stri
         }
 
         syncEntityToFirestore("jobOrders", newJob.id, newJob);
+
+        // Also publish to broadcast_notifications in Firestore and state
+        const broadcastItem = {
+          id: `notif_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+          title: `💼 Lowongan Kerja Baru: ${occupation || "Job Order LPK SCI"}`,
+          body: `Lowongan baru oleh ${partnerName || "Mitra Kerja"} untuk posisi ${occupation || "Peluang Kerja"} (${location || "Jepang"}). Gaji: ${salary || "-"}`,
+          type: "job_order",
+          url: "/?tab=jobs",
+          createdAt: Date.now(),
+          timestamp: new Date().toISOString()
+        };
+        if (!state.broadcastNotifications) state.broadcastNotifications = [];
+        state.broadcastNotifications.unshift(broadcastItem);
+        if (state.broadcastNotifications.length > 50) {
+          state.broadcastNotifications = state.broadcastNotifications.slice(0, 50);
+        }
+        try {
+          syncEntityToFirestore("broadcast_notifications", broadcastItem.id, broadcastItem);
+        } catch (e) {
+          console.error("Failed to sync broadcast notification for job order:", e);
+        }
+
         return res.json({ success: true, item: newJob });
       }
 

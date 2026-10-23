@@ -4,6 +4,10 @@
  */
 
 import React, { useState, useMemo, useEffect } from "react";
+import { sendBroadcastNotification } from "../lib/notifications";
+import { DEFAULT_GALLERY_ITEMS } from "../data/defaultGallery";
+import { db } from "../firebaseClient";
+import { doc, setDoc } from "firebase/firestore";
 import { createPortal } from "react-dom";
 import {
   Users,
@@ -77,6 +81,7 @@ import {
   CartesianGrid
 } from "recharts";
 import { uploadFileToFirebase, getEmbeddablePdfUrl, getSafePhotoUrl, createSvgAvatar } from "../lib/storageHelper";
+import { MediaViewerModal } from "./MediaViewerModal";
 import {
   SystemState,
   RegisteredStudent,
@@ -105,6 +110,9 @@ import AdminSiswaSegment from "./admin/AdminSiswaSegment";
 import AdminGajiSegment from "./admin/AdminGajiSegment";
 import AdminKustomisasiSegment from "./admin/AdminKustomisasiSegment";
 import AdminGaleriSegment from "./admin/AdminGaleriSegment";
+import VvipFullEvalSegment from "./vvip/VvipFullEvalSegment";
+import StudentRaporModal from "./StudentRaporModal";
+import { getCurrentPayrollPeriodKey } from "../lib/staffAttendancePeriod";
 import CalendarView from "./CalendarView";
 import AccountSettingsView from "./AccountSettingsView";
 import { StudentDocsManager } from "./admin/StudentDocsManager";
@@ -215,6 +223,7 @@ export default function AdminView({
 }: AdminViewProps) {
   const [activeSegment, setActiveSegment] = useState<
     | "siswa"
+    | "monitoringBelajar"
     | "pembayaran"
     | "inventaris"
     | "pajak"
@@ -398,20 +407,64 @@ export default function AdminView({
   };
 
   const [costRegistration, setCostRegistration] = useState(systemState.costConfig?.registration ?? 500000);
-  const [costDP, setCostDP] = useState(systemState.costConfig?.dp ?? 3500000);
+  const [costDP, setCostDP] = useState(systemState.costConfig?.dp ?? 5000000);
   const [costFullPayment, setCostFullPayment] = useState(systemState.costConfig?.fullPayment ?? 2000000);
-  const [costManagementFee, setCostManagementFee] = useState(systemState.costConfig?.managementFee ?? 5000000);
+  const [costStage3, setCostStage3] = useState(systemState.costConfig?.stage3 ?? 3000000);
+  const [costManagementFee, setCostManagementFee] = useState(systemState.costConfig?.managementFee ?? 0);
 
-  const handleSaveCostConfig = (e: React.FormEvent) => {
+  React.useEffect(() => {
+    if (systemState.costConfig) {
+      setCostRegistration(systemState.costConfig.registration ?? 500000);
+      setCostDP(systemState.costConfig.dp ?? 5000000);
+      setCostFullPayment(systemState.costConfig.fullPayment ?? 2000000);
+      setCostStage3(systemState.costConfig.stage3 ?? 3000000);
+      setCostManagementFee(systemState.costConfig.managementFee ?? 0);
+    }
+  }, [systemState.costConfig]);
+
+  const [isSavingCost, setIsSavingCost] = useState(false);
+  const [costSaveSuccess, setCostSaveSuccess] = useState(false);
+
+  const handleSaveCostConfig = async (e: React.FormEvent) => {
     e.preventDefault();
-    onUpdateState('costConfig', 'update', { 
-        registration: costRegistration,
-        dp: costDP,
-        fullPayment: costFullPayment,
-        managementFee: costManagementFee
-       });
-    alert("Konfigurasi SOP Biaya Resmi berhasil disimpan!");
-    setShowCostConfig(false);
+    setIsSavingCost(true);
+    setCostSaveSuccess(false);
+
+    const newConfig = { 
+      registration: Math.max(0, Number(costRegistration) || 0),
+      dp: Math.max(0, Number(costDP) || 0),
+      fullPayment: Math.max(0, Number(costFullPayment) || 0),
+      stage3: Math.max(0, Number(costStage3) || 0),
+      managementFee: Math.max(0, Number(costManagementFee) || 0),
+      updatedAt: Date.now()
+    };
+
+    try {
+      if (db) {
+        try {
+          await setDoc(doc(db, 'system', 'costConfig'), newConfig, { merge: true });
+          await setDoc(doc(db, 'system', 'sync_meta'), {
+            dataType: 'costConfig',
+            action: 'update',
+            source: 'admin-modal',
+            updatedAt: Date.now()
+          }, { merge: true });
+        } catch (dbErr) {
+          console.warn("Direct Firestore write fallback:", dbErr);
+        }
+      }
+
+      await onUpdateState('costConfig', 'update', newConfig);
+      setCostSaveSuccess(true);
+      setTimeout(() => {
+        setCostSaveSuccess(false);
+        setShowCostConfig(false);
+      }, 2000);
+    } catch (err) {
+      console.error("Error saving costConfig:", err);
+    } finally {
+      setIsSavingCost(false);
+    }
   };
 
 
@@ -469,6 +522,7 @@ export default function AdminView({
   const [jobNoReg, setJobNoReg] = useState("");
   const [jobOccupation, setJobOccupation] = useState("");
   const [jobType, setJobType] = useState("Tokutei ginou");
+  const [jobTargetAudience, setJobTargetAudience] = useState("Semua");
   const [jobLocation, setJobLocation] = useState("");
   const [activeKeuanganFeature, setActiveKeuanganFeature] = useState<string | null>('riwayat-dana');
   const [jobSalary, setJobSalary] = useState("");
@@ -512,7 +566,7 @@ export default function AdminView({
     }
     const user = systemState.users?.find((u: any) => 
       (u.studentId && u.studentId === s.id) || 
-      (u.name && u.name.trim().toLowerCase() === s.name.trim().toLowerCase())
+      (u?.name && s?.name && String(u.name).trim().toLowerCase() === String(s.name).trim().toLowerCase())
     );
     if (user && ["Admin", "Pengajar", "Admin Biasa", "Admin Super", "VVIP"].includes(user.role)) {
       return false;
@@ -535,9 +589,9 @@ export default function AdminView({
     const ghostActive = (systemState.activeStudents || []).filter(student => {
       const hasUser = allUsers.some(u => 
         (u.studentId && u.studentId === student.id) ||
-        (u.name && student.name && u.name.trim().toLowerCase() === student.name.trim().toLowerCase()) ||
-        (u.email && student.email && u.email.trim().toLowerCase() === student.email.trim().toLowerCase()) ||
-        (u.username && student.email && u.username.trim().toLowerCase() === student.email.trim().toLowerCase())
+        (u?.name && student?.name && String(u.name).trim().toLowerCase() === String(student.name).trim().toLowerCase()) ||
+        (u?.email && student?.email && String(u.email).trim().toLowerCase() === String(student.email).trim().toLowerCase()) ||
+        (u?.username && student?.email && String(u.username).trim().toLowerCase() === String(student.email).trim().toLowerCase())
       );
       return !hasUser;
     });
@@ -547,9 +601,9 @@ export default function AdminView({
       if (student.status !== "Disetujui") return false;
       const hasUser = allUsers.some(u => 
         (u.studentId && u.studentId === student.id) ||
-        (u.name && student.name && u.name.trim().toLowerCase() === student.name.trim().toLowerCase()) ||
-        (u.email && student.email && u.email.trim().toLowerCase() === student.email.trim().toLowerCase()) ||
-        (u.username && student.email && u.username.trim().toLowerCase() === student.email.trim().toLowerCase())
+        (u?.name && student?.name && String(u.name).trim().toLowerCase() === String(student.name).trim().toLowerCase()) ||
+        (u?.email && student?.email && String(u.email).trim().toLowerCase() === String(student.email).trim().toLowerCase()) ||
+        (u?.username && student?.email && String(u.username).trim().toLowerCase() === String(student.email).trim().toLowerCase())
       );
       return !hasUser;
     });
@@ -581,6 +635,47 @@ export default function AdminView({
     } finally {
       setSyncingStudents(false);
     }
+  };
+
+  // Super Admin Check
+  const isSuperAdminOrVvip = ["Admin Super", "Super Admin", "VVIP"].includes(currentUser?.role || "");
+
+  // Monitoring Belajar (Super Admin) States
+  const [selectedStudentDetail, setSelectedStudentDetail] = useState<any | null>(null);
+  const [selectedClassTab, setSelectedClassTab] = useState<string>("Belajar");
+  const [studentSearch, setStudentSearch] = useState<string>("");
+  const [classFilter, setClassFilter] = useState<string>("all");
+  const [studentListMode, setStudentListMode] = useState<"table" | "grid">("table");
+  const [lmsClassFilter, setLmsClassFilter] = useState<string>("all");
+  const [monitorTab, setMonitorTab] = useState<"siswa" | "sensei" | "gaji" | "afiliasi" | "rekap_siswa" | "materi" | "hr">("siswa");
+  const [hrAttendancePeriod, setHrAttendancePeriod] = useState<string>(() => getCurrentPayrollPeriodKey());
+  const [selectedSenseiDetail, setSelectedSenseiDetail] = useState<any | null>(null);
+  const [selectedHrAttendanceStaff, setSelectedHrAttendanceStaff] = useState<any | null>(null);
+
+  const activeStudents = useMemo(() => systemState.activeStudents || [], [systemState.activeStudents]);
+
+  const classTabs = useMemo(() => {
+    const counts = {
+      belajar: activeStudents.filter((s: any) => !["Lulus", "Di Jepang", "Diklat SO", "On Proges Job", "On Progres JFT/JLPT/SSW"].includes(s.status || "")).length,
+      job: activeStudents.filter((s: any) => s.status === "On Proges Job").length,
+      diklat: activeStudents.filter((s: any) => s.status === "Diklat SO").length,
+      jepang: activeStudents.filter((s: any) => s.status === "Di Jepang").length,
+      jft: activeStudents.filter((s: any) => s.status === "On Progres JFT/JLPT/SSW" || s.status === "Lulus").length,
+    };
+
+    return [
+      { id: "Belajar", label: `🇮🇩 1. BELAJAR (${counts.belajar})` },
+      { id: "On Proges Job", label: `💼 2. ON PROGES JOB (${counts.job})` },
+      { id: "Diklat SO", label: `📘 3. DIKLAT SO (${counts.diklat})` },
+      { id: "Di Jepang", label: `🇯🇵 4. DI JEPANG (${counts.jepang})` },
+      { id: "On Progres JFT/JLPT/SSW", label: `🎓 5. SERTIFIKASI JFT/JLPT/SSW (${counts.jft})` },
+    ];
+  }, [activeStudents]);
+
+  const getClassMaxBab = (cls: string) => {
+    const classDef = systemState.customization?.lmsClasses?.find((c: any) => c.name === cls);
+    const chapters = classDef?.chapters || CHAPTERS_LIST;
+    return chapters.filter((ch: any) => ch.isActive !== false).length;
   };
 
   // Affiliate / Referral dashboard local states
@@ -631,37 +726,35 @@ export default function AdminView({
   const [selectedGalleryId, setSelectedGalleryId] = useState<number | null>(null);
   React.useEffect(() => {
     if (systemState?.customization) {
-      setCustLogoText(
-        (prev) =>
-          prev || systemState.customization?.logoText || "LPK Source Course",
-      );
-      setCustLogoIcon(
-        (prev) =>
-          prev || systemState.customization?.logoIcon || "GraduationCap",
-      );
-      setCustThemeColor(
-        (prev) => prev || systemState.customization?.themeColor || "blue",
-      );
-      setCustLogoUrl(
-        (prev) => prev || systemState.customization?.logoUrl || "",
-      );
-      setCustFaviconUrl(
-        (prev) => prev || systemState.customization?.faviconUrl || "",
-      );
-      setCustSlides((prev) => {
-        // Only update from systemState if local state is empty
-        // We avoid overwriting while user is actively in the admin panel to prevent data loss during sync
-        if (prev.length === 0) {
-          return systemState.slideshows || [];
-        }
-        return prev;
-      });
-      setCustGallery((prev) => {
-        if (prev.length > 0) return prev;
-        return systemState.galleries || [];
-      });
+      if (systemState.customization.logoText) {
+        setCustLogoText(systemState.customization.logoText);
+      }
+      if (systemState.customization.logoIcon) {
+        setCustLogoIcon(systemState.customization.logoIcon);
+      }
+      if (systemState.customization.themeColor) {
+        setCustThemeColor(systemState.customization.themeColor);
+      }
+      if (systemState.customization.logoUrl) {
+        setCustLogoUrl(systemState.customization.logoUrl);
+      }
+      if (systemState.customization.faviconUrl) {
+        setCustFaviconUrl(systemState.customization.faviconUrl);
+      }
+      if (Array.isArray(systemState.slideshows) && systemState.slideshows.length > 0) {
+        setCustSlides(systemState.slideshows);
+      } else {
+        setCustSlides((prev) => (prev && prev.length > 0 ? prev : systemState.slideshows || []));
+      }
+      if (Array.isArray(systemState.galleries) && systemState.galleries.length > 0) {
+        setCustGallery(systemState.galleries);
+      } else if (Array.isArray(systemState.customization?.gallery) && systemState.customization.gallery.length > 0) {
+        setCustGallery(systemState.customization.gallery);
+      } else {
+        setCustGallery((prev) => (prev && prev.length > 0 ? prev : DEFAULT_GALLERY_ITEMS));
+      }
       setCustRunningText(
-        (prev) => prev || systemState.customization?.runningText || "",
+        (prev) => (prev !== "" ? prev : systemState.customization?.runningText ?? "")
       );
       setCustLatestApkVersion(
         (prev) => prev || (systemState.customization as any)?.latestApkVersion || "",
@@ -792,7 +885,8 @@ export default function AdminView({
       setOfficeRadius(prev => prev || String(loc.radius ?? 200));
       setOfficeEnforce(prev => prev !== null ? prev : (loc.enforce === true));
     }
-  }, [systemState?.customization]);
+  }, [systemState?.customization, systemState?.galleries, systemState?.slideshows]);
+
 
   const [custLogoDragActive, setCustLogoDragActive] = useState(false);
   const [custFaviconDragActive, setCustFaviconDragActive] = useState(false);
@@ -800,7 +894,7 @@ export default function AdminView({
   const handleLogoFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      uploadFileToFirebase(file, "customization").then(url => setCustLogoUrl(url)).catch(err => { console.error(err); alert("Gagal upload logo"); });
+      uploadFileToFirebase(file, "branding").then(url => setCustLogoUrl(url)).catch(err => { console.error(err); alert("Gagal upload logo"); });
     }
   };
 
@@ -821,7 +915,7 @@ export default function AdminView({
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
       const file = e.dataTransfer.files[0];
       if (file.type.startsWith("image/")) {
-        uploadFileToFirebase(file, "customization").then(url => setCustLogoUrl(url)).catch(err => { console.error(err); alert("Gagal upload logo"); });
+        uploadFileToFirebase(file, "branding").then(url => setCustLogoUrl(url)).catch(err => { console.error(err); alert("Gagal upload logo"); });
       }
     }
   };
@@ -829,7 +923,7 @@ export default function AdminView({
   const handleFaviconFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      uploadFileToFirebase(file, "customization").then(url => setCustFaviconUrl(url)).catch(err => { console.error(err); alert("Gagal upload favicon"); });
+      uploadFileToFirebase(file, "branding").then(url => setCustFaviconUrl(url)).catch(err => { console.error(err); alert("Gagal upload favicon"); });
     }
   };
 
@@ -850,7 +944,7 @@ export default function AdminView({
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
       const file = e.dataTransfer.files[0];
       if (file.type.startsWith("image/")) {
-        uploadFileToFirebase(file, "customization").then(url => setCustFaviconUrl(url)).catch(err => { console.error(err); alert("Gagal upload favicon"); });
+        uploadFileToFirebase(file, "branding").then(url => setCustFaviconUrl(url)).catch(err => { console.error(err); alert("Gagal upload favicon"); });
       }
     }
   };
@@ -876,13 +970,16 @@ export default function AdminView({
   React.useEffect(() => {
     if (activeSegment !== "petasebaran") return;
 
+    let isMounted = true;
+    let retryTimer: any = null;
+    let retryCount = 0;
+
     const linkId = "leaflet-css-pkg-admin";
     if (!document.getElementById(linkId)) {
       const link = document.createElement("link");
       link.id = linkId;
       link.rel = "stylesheet";
       link.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
-      link.integrity = "sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=";
       link.crossOrigin = "";
       document.head.appendChild(link);
     }
@@ -892,114 +989,146 @@ export default function AdminView({
       script = document.createElement("script");
       script.id = scriptId;
       script.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
-      script.integrity = "sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=";
       script.crossOrigin = "";
       document.body.appendChild(script);
     }
 
     const loadAdminRadarMap = () => {
+      if (!isMounted) return;
       const L = (window as any).L;
-      if (!L || !adminMapRef.current) return;
-
-      if (adminMapInstanceRef.current) {
-        adminMapInstanceRef.current.remove();
-        adminMapInstanceRef.current = null;
+      if (!L || !adminMapRef.current) {
+        if (retryCount < 15 && isMounted) {
+          retryCount++;
+          retryTimer = setTimeout(loadAdminRadarMap, 100);
+        }
+        return;
       }
 
-      const map = L.map(adminMapRef.current, {
-        center: [36.2048, 138.2529],
-        zoom: 5,
-        zoomControl: true,
-        scrollWheelZoom: false,
-        attributionControl: false,
-      });
-
-      adminMapInstanceRef.current = map;
-      setTimeout(() => { try { if (map && map._container) map.invalidateSize(); } catch (e) {} }, 250);
-
-      L.tileLayer(
-        "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
-      ).addTo(map);
-
-      const defaultCoordinates = ALL_48_PREFECTURES_COORDINATES;
-      const expatriates =
-        systemState.activeStudents?.filter((s) => s.status === "Di Jepang") ||
-        [];
-
-      const groups: Record<
-        string,
-        {
-          cityName: string;
-          lat: number;
-          lng: number;
-          alumni: typeof expatriates;
+      try {
+        if (adminMapInstanceRef.current) {
+          try {
+            adminMapInstanceRef.current.remove();
+          } catch (e) {}
+          adminMapInstanceRef.current = null;
         }
-      > = {};
 
-      expatriates.forEach((student) => {
-        const pref = student.prefecture || "Tokyo";
-        const lat =
-          student.latitude !== undefined && student.latitude !== null
-            ? Number(student.latitude)
-            : defaultCoordinates[pref]
-              ? defaultCoordinates[pref][0]
-              : 35.6762;
-        const lng =
-          student.longitude !== undefined && student.longitude !== null
-            ? Number(student.longitude)
-            : defaultCoordinates[pref]
-              ? defaultCoordinates[pref][1]
-              : 139.6503;
-
-        const key = `${lat.toFixed(4)}_${lng.toFixed(4)}`;
-        if (!groups[key]) {
-          groups[key] = {
-            cityName: pref,
-            lat,
-            lng,
-            alumni: [],
-          };
+        if (adminMapRef.current) {
+          delete (adminMapRef.current as any)._leaflet_id;
         }
-        groups[key].alumni.push(student);
-      });
 
-      Object.keys(groups).forEach((key) => {
-        const group = groups[key];
-        const numAlumni = group.alumni.length;
-        const marker = L.circleMarker([group.lat, group.lng], {
-          radius: 12 + Math.min(numAlumni, 8),
-          fillColor: "#ef4444",
-          color: "#ffffff",
-          weight: 2,
-          opacity: 1,
-          fillOpacity: 0.95,
-        }).addTo(map);
-
-        const popupContent = `
-          <div style="font-family: system-ui, -apple-system, sans-serif; font-size: 11px; max-width: 250px; color: #1e293b;">
-            <div style="font-weight: 800; font-size: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; text-align: center;">
-              <span>🇯🇵 KOTA/PREF: ${group.cityName.toUpperCase()}</span>
-              <span style="background-color: #ef4444; color: white; padding: 4px 8px; border-radius: 9999px; font-size: 10px; font-weight: 900;">${numAlumni} ALUMNI</span>
-            </div>
-          </div>
-        `;
-        marker.bindPopup(popupContent, {
-          closeButton: true,
-          closeOnEscapeKey: true,
+        const map = L.map(adminMapRef.current, {
+          center: [36.2048, 138.2529],
+          zoom: 5,
+          zoomControl: true,
+          scrollWheelZoom: false,
+          attributionControl: false,
         });
 
-        marker.on("click", (e: any) => {
-          if (e.originalEvent) {
-            e.originalEvent.stopPropagation();
+        adminMapInstanceRef.current = map;
+        setTimeout(() => {
+          try {
+            if (map && map._container) map.invalidateSize();
+          } catch (e) {}
+        }, 250);
+
+        // Standard OpenStreetMap tiles (free, no API key required)
+        L.tileLayer(
+          "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+          {
+            subdomains: ["a", "b", "c"],
+            maxZoom: 19,
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           }
-          setSelectedMapPref(group.cityName);
-          map.setView([group.lat, group.lng], 10, { animate: false });
-        });
-      });
+        ).addTo(map);
 
-      map.on("click", () => {
-        setSelectedMapPref(null);
-      });
+        const defaultCoordinates = ALL_48_PREFECTURES_COORDINATES || {};
+        const expatriates =
+          systemState.activeStudents?.filter((s) => s.status === "Di Jepang") ||
+          [];
+
+        const groups: Record<
+          string,
+          {
+            cityName: string;
+            lat: number;
+            lng: number;
+            alumni: typeof expatriates;
+          }
+        > = {};
+
+        expatriates.forEach((student) => {
+          const pref = student.prefecture || "Tokyo";
+          const parsedLat =
+            student.latitude !== undefined &&
+            student.latitude !== null &&
+            String(student.latitude).trim() !== ""
+              ? Number(student.latitude)
+              : NaN;
+          const parsedLng =
+            student.longitude !== undefined &&
+            student.longitude !== null &&
+            String(student.longitude).trim() !== ""
+              ? Number(student.longitude)
+              : NaN;
+
+          const defCoord = defaultCoordinates[pref] || [35.6762, 139.6503];
+          const lat = !isNaN(parsedLat) && isFinite(parsedLat) ? parsedLat : defCoord[0];
+          const lng = !isNaN(parsedLng) && isFinite(parsedLng) ? parsedLng : defCoord[1];
+
+          const key = `${lat.toFixed(4)}_${lng.toFixed(4)}`;
+          if (!groups[key]) {
+            groups[key] = {
+              cityName: pref,
+              lat,
+              lng,
+              alumni: [],
+            };
+          }
+          groups[key].alumni.push(student);
+        });
+
+        Object.keys(groups).forEach((key) => {
+          const group = groups[key];
+          if (isNaN(group.lat) || isNaN(group.lng)) return;
+
+          const numAlumni = group.alumni.length;
+          const marker = L.circleMarker([group.lat, group.lng], {
+            radius: 12 + Math.min(numAlumni, 8),
+            fillColor: "#ef4444",
+            color: "#ffffff",
+            weight: 2,
+            opacity: 1,
+            fillOpacity: 0.95,
+          }).addTo(map);
+
+          const popupContent = `
+            <div style="font-family: system-ui, -apple-system, sans-serif; font-size: 11px; max-width: 250px; color: #1e293b;">
+              <div style="font-weight: 800; font-size: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; text-align: center;">
+                <span>🇯🇵 KOTA/PREF: ${group.cityName.toUpperCase()}</span>
+                <span style="background-color: #ef4444; color: white; padding: 4px 8px; border-radius: 9999px; font-size: 10px; font-weight: 900;">${numAlumni} ALUMNI</span>
+              </div>
+            </div>
+          `;
+          marker.bindPopup(popupContent, {
+            closeButton: true,
+            closeOnEscapeKey: true,
+          });
+
+          marker.on("click", (e: any) => {
+            if (e.originalEvent) {
+              e.originalEvent.stopPropagation();
+            }
+            setSelectedMapPref(group.cityName);
+            map.setView([group.lat, group.lng], 10, { animate: false });
+          });
+        });
+
+        map.on("click", () => {
+          setSelectedMapPref(null);
+        });
+      } catch (err) {
+        console.error("Error loading Admin Leaflet Radar Map:", err);
+      }
     };
 
     if ((window as any).L) {
@@ -1009,9 +1138,16 @@ export default function AdminView({
     }
 
     return () => {
+      isMounted = false;
+      if (retryTimer) clearTimeout(retryTimer);
       if (adminMapInstanceRef.current) {
-        adminMapInstanceRef.current.remove();
+        try {
+          adminMapInstanceRef.current.remove();
+        } catch (e) {}
         adminMapInstanceRef.current = null;
+      }
+      if (adminMapRef.current) {
+        delete (adminMapRef.current as any)._leaflet_id;
       }
     };
   }, [activeSegment, systemState.activeStudents]);
@@ -1205,6 +1341,7 @@ export default function AdminView({
   const [showAdminRegPassword, setShowAdminRegPassword] = useState(false);
   const [adminRegError, setAdminRegError] = useState("");
   const [adminRegSuccess, setAdminRegSuccess] = useState(false);
+  const [isAdminRegSaving, setIsAdminRegSaving] = useState(false);
 
   const filterByMonthYear = (dateStr: string | undefined) => {
     if (!dateStr) return true;
@@ -1253,17 +1390,19 @@ export default function AdminView({
   };
 
   const startAdminEditReg = (studentId: string) => {
+    const cleanStudentId = String(studentId || "").toLowerCase();
     let regMatch = systemState.registeredStudents?.find(
-      (rs) => rs.id === studentId || rs.name.toLowerCase() === studentId.toLowerCase()
+      (rs) => rs.id === studentId || (rs.name && String(rs.name).toLowerCase() === cleanStudentId)
     );
 
     const activeMatch = systemState.activeStudents?.find(
-      (s) => s.id === studentId || (regMatch && s.name.toLowerCase() === regMatch.name.toLowerCase()) || s.name.toLowerCase() === studentId.toLowerCase()
+      (s) => s.id === studentId || (regMatch?.name && s.name && String(s.name).toLowerCase() === String(regMatch.name).toLowerCase()) || (s.name && String(s.name).toLowerCase() === cleanStudentId)
     );
 
-    if (!regMatch && activeMatch) {
+    if (!regMatch && activeMatch?.name) {
+      const activeNameLower = String(activeMatch.name).toLowerCase();
       regMatch = systemState.registeredStudents?.find(
-        (rs) => rs.name.toLowerCase() === activeMatch.name.toLowerCase()
+        (rs) => rs.name && String(rs.name).toLowerCase() === activeNameLower
       );
     }
 
@@ -1352,81 +1491,106 @@ export default function AdminView({
     setAdminRegSuccess(false);
   };
 
-  const handleAdminSaveReg = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleAdminSaveReg = async (e?: React.FormEvent | React.MouseEvent) => {
+    if (e && e.preventDefault) e.preventDefault();
     setAdminRegError("");
     setAdminRegSuccess(false);
+    setIsAdminRegSaving(true);
 
-    if (!adminRegData.name || !adminRegData.phone) {
-      setAdminRegError("Nama dan No HP wajib diisi.");
-      return;
-    }
+    try {
+      const targetStudentId = adminEditingStudentId || adminRegData.id;
+      const existingActive = (systemState.activeStudents || []).find((s) => s.id === targetStudentId);
+      const existingReg = (systemState.registeredStudents || []).find((s) => s.id === targetStudentId);
 
-    let success = false;
-    
-    // Update or add registered student record
-    const regMatch = systemState.registeredStudents?.find(rs => rs.id === adminRegData.id || rs.name.toLowerCase() === adminRegData.name.toLowerCase());
-    if (regMatch) {
-      success = await onUpdateState(
-        "registeredStudents",
-        "update",
-        { ...adminRegData, id: regMatch.id },
+      const safeName = adminRegData.name?.trim() || existingActive?.name || existingReg?.name || "Siswa";
+      const safePhone = adminRegData.phone?.trim() || existingActive?.phone || existingReg?.phone || "-";
+      const safeProgram = adminRegData.program !== undefined ? adminRegData.program : (existingActive?.class || existingReg?.program || "");
+
+      const payload = {
+        ...adminRegData,
+        id: targetStudentId || adminRegData.id || `REG-${Date.now()}`,
+        name: safeName,
+        phone: safePhone,
+        program: safeProgram,
+      };
+
+      let success = false;
+      
+      const cleanPayloadName = (payload.name || "").trim().toLowerCase();
+      // Update registered student record if it exists
+      const regMatch = systemState.registeredStudents?.find(rs => rs.id === payload.id || (cleanPayloadName && rs.name && String(rs.name).trim().toLowerCase() === cleanPayloadName));
+      if (regMatch) {
+        const regSuccess = await onUpdateState(
+          "registeredStudents",
+          "update",
+          { ...payload, id: regMatch.id }
+        );
+        if (regSuccess) success = true;
+      }
+
+      // Update active student if it exists (or if no registered match)
+      const activeInfo = systemState.activeStudents?.find(
+        (s) => s.id === targetStudentId || s.id === payload.id || (cleanPayloadName && s.name && String(s.name).trim().toLowerCase() === cleanPayloadName)
       );
-    } else {
-      success = await onUpdateState(
-        "registeredStudents",
-        "add",
-        adminRegData,
-      );
-    }
 
-    // Update active student if it exists
-    const activeInfo = systemState.activeStudents?.find(
-      (s) => s.id === adminEditingStudentId || s.id === adminRegData.id || s.name.toLowerCase() === adminRegData.name.toLowerCase()
-    );
+      if (activeInfo) {
+        const activeSuccess = await onUpdateState("activeStudents", "update_status", {
+          id: activeInfo.id,
+          name: payload.name,
+          email: payload.email,
+          password: payload.password,
+          batch: payload.batch,
+          phone: payload.phone,
+          district: payload.district,
+          birthDate: payload.birthDate,
+          gender: payload.gender,
+          education: payload.education,
+          school: payload.school,
+          graduationYear: payload.graduationYear,
+          japaneseLevel: payload.japaneseLevel,
+          statusPendaftaran: payload.statusPendaftaran,
+          class: payload.program !== undefined ? payload.program : activeInfo.class,
+          status: payload.status || activeInfo.status,
+          prefecture: payload.prefecture !== undefined ? payload.prefecture : activeInfo.prefecture,
+          city: payload.city !== undefined ? payload.city : activeInfo.city,
+          company: payload.company !== undefined ? payload.company : activeInfo.company,
+          profilePicture: payload.profilePicture || payload.docFoto,
+          docFoto: payload.docFoto || payload.profilePicture,
+          keterangan: payload.keterangan,
+          mitraSO: payload.mitraSO,
+          jobKeterangan: payload.jobKeterangan,
+          job1Bidang: payload.job1Bidang,
+          job1TanggalMensetsu: payload.job1TanggalMensetsu,
+          job1Lokasi: payload.job1Lokasi,
+          job2Bidang: payload.job2Bidang,
+          job2TanggalMensetsu: payload.job2TanggalMensetsu,
+          job2Lokasi: payload.job2Lokasi,
+          bulanKelulusan: payload.bulanKelulusan,
+          attitudeScore: payload.attitudeScore === "" ? null : payload.attitudeScore,
+          kaiwaScore: payload.kaiwaScore === "" ? null : payload.kaiwaScore,
+          bobotNilaiRekomendasi: payload.bobotNilaiRekomendasi === "" ? null : payload.bobotNilaiRekomendasi,
+        });
+        if (activeSuccess) success = true;
+      } else if (!regMatch) {
+        // If neither exists yet, create active student or registered record
+        const activeSuccess = await onUpdateState("activeStudents", "add", payload);
+        if (activeSuccess) success = true;
+      }
 
-    if (activeInfo) {
-      const activeSuccess = await onUpdateState("activeStudents", "update_status", {
-        id: activeInfo.id,
-        name: adminRegData.name,
-        batch: adminRegData.batch,
-        phone: adminRegData.phone,
-        district: adminRegData.district,
-        birthDate: adminRegData.birthDate,
-        gender: adminRegData.gender,
-        education: adminRegData.education,
-        school: adminRegData.school,
-        graduationYear: adminRegData.graduationYear,
-        japaneseLevel: adminRegData.japaneseLevel,
-        statusPendaftaran: adminRegData.statusPendaftaran,
-        class: adminRegData.program || activeInfo.class,
-        profilePicture: adminRegData.profilePicture || adminRegData.docFoto,
-        docFoto: adminRegData.docFoto || adminRegData.profilePicture,
-        keterangan: adminRegData.keterangan,
-        mitraSO: adminRegData.mitraSO,
-        jobKeterangan: adminRegData.jobKeterangan,
-        job1Bidang: adminRegData.job1Bidang,
-        job1TanggalMensetsu: adminRegData.job1TanggalMensetsu,
-        job1Lokasi: adminRegData.job1Lokasi,
-        job2Bidang: adminRegData.job2Bidang,
-        job2TanggalMensetsu: adminRegData.job2TanggalMensetsu,
-        job2Lokasi: adminRegData.job2Lokasi,
-        bulanKelulusan: adminRegData.bulanKelulusan,
-        attitudeScore: adminRegData.attitudeScore === "" ? null : adminRegData.attitudeScore,
-        kaiwaScore: adminRegData.kaiwaScore === "" ? null : adminRegData.kaiwaScore,
-        bobotNilaiRekomendasi: adminRegData.bobotNilaiRekomendasi === "" ? null : adminRegData.bobotNilaiRekomendasi,
-      });
-      if (activeSuccess) success = true;
-    }
-
-    if (success) {
-      setAdminRegSuccess(true);
-      setTimeout(() => {
-        setAdminRegSuccess(false);
-        setAdminEditingStudentId(null);
-      }, 1500);
-    } else {
-      setAdminRegError("Gagal menyimpan data.");
+      if (success) {
+        setAdminRegSuccess(true);
+        setTimeout(() => {
+          setAdminRegSuccess(false);
+          setAdminEditingStudentId(null);
+        }, 1200);
+      } else {
+        setAdminRegError("Gagal menyimpan data.");
+      }
+    } catch (err) {
+      console.error(err);
+      setAdminRegError("Terjadi kendala saat menyimpan.");
+    } finally {
+      setIsAdminRegSaving(false);
     }
   };
 
@@ -1565,6 +1729,25 @@ export default function AdminView({
     ? [...(systemState.registeredStudents || [])]
         .filter((s) => s.status !== "Disetujui" && filterByMonthYear(s.date) && isStudentRoleOnly(s))
         .sort(sortStudentsByDateDesc)
+    : siswaTab === "sensei"
+    ? (systemState.users || [])
+        .filter((u) => u.role === "Pengajar")
+        .filter((u) => {
+          if (filterClass !== "All") {
+            if (filterClass === "Belum Diplot") {
+              if (u.assignedClass) return false;
+            } else if ((u.assignedClass || "").toLowerCase() !== filterClass.toLowerCase()) {
+              return false;
+            }
+          }
+          if (filterStatus !== "All") {
+            // Only apply status filter to Sensei if it matches account status values, not student progression stages
+            if (filterStatus === "Active" || filterStatus === "Suspended" || filterStatus === "Nonaktif") {
+              if (u.status !== filterStatus) return false;
+            }
+          }
+          return true;
+        })
     : systemState.activeStudents
         ?.filter((s) => filterByMonthYear(s.date) && isStudentRoleOnly(s))
         ?.filter((s) => {
@@ -1590,11 +1773,11 @@ export default function AdminView({
     if (!siswaSearch.trim()) return true;
     const query = siswaSearch.toLowerCase().trim();
     const nameMatch = (s.name || "").toLowerCase().includes(query);
-    const idMatch = (s.id || "").toLowerCase().includes(query);
+    const idMatch = (s.id || s.username || "").toLowerCase().includes(query);
     const emailMatch = (s.email || "").toLowerCase().includes(query);
     const phoneMatch = (s.phone || "").toLowerCase().includes(query);
-    const classMatch = (s.class || s.program || "").toLowerCase().includes(query);
-    const districtMatch = (s.district || "").toLowerCase().includes(query);
+    const classMatch = (s.class || s.assignedClass || s.program || "").toLowerCase().includes(query);
+    const districtMatch = (s.district || s.japaneseLevel || "").toLowerCase().includes(query);
     return nameMatch || idMatch || emailMatch || phoneMatch || classMatch || districtMatch;
   });
 
@@ -1629,11 +1812,12 @@ export default function AdminView({
           </div>
           {[
             { id: "siswa", name: "Administrasi Siswa", ic: Users },
+            { id: "monitoringBelajar", name: "Monitoring Belajar Siswa", ic: TrendingUp, superAdminOnly: true },
             { id: "kelas", name: "Manajemen Kelas", ic: GraduationCap },
             { id: "kalender", name: "Jadwal LPK", ic: Calendar },
             { id: "dataCV", name: "Data CV", ic: BookOpen },
             { id: "joborders", name: "Job Order", ic: Landmark },
-            { id: "pembayaran", name: currentUser?.role === "VVIP" ? "Pembayaran Siswa" : "HR & Personalia", ic: DollarSign },
+            { id: "pembayaran", name: "Keuangan Siswa", ic: DollarSign },
             { id: "inventaris", name: "Inventaris", ic: Package },
             { id: "pajak", name: "Pajak & Keu", ic: FileText },
             { id: "gaji", name: "Buku Kas & Gaji", ic: Receipt },
@@ -1645,6 +1829,9 @@ export default function AdminView({
             { id: "informasi", name: "Informasi", ic: Bell },
             { id: "manajemen", name: "Manajemen Akun & Sensei", ic: Users },
           ].filter((tab) => {
+            if ((tab as any).superAdminOnly && !isSuperAdminOrVvip) {
+              return false;
+            }
             if (currentUser?.role === "Admin Biasa") {
               return tab.id !== "pembayaran" && tab.id !== "pajak" && tab.id !== "gaji";
             }
@@ -1690,6 +1877,7 @@ export default function AdminView({
               {activeSegment ? (() => {
                 const titles: Record<string, string> = {
                   siswa: "Administrasi Siswa",
+                  monitoringBelajar: "Monitoring & Evaluasi Belajar Siswa",
                   kelas: "Manajemen Kelas",
                   kalender: "Jadwal LPK",
                   dataCV: "Data CV & Biodata",
@@ -1735,11 +1923,12 @@ export default function AdminView({
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 px-1">
               {[
                 { id: "siswa", name: "Adm Siswa", ic: Users, color: "blue" },
+                { id: "monitoringBelajar", name: "Monitoring Belajar", ic: TrendingUp, color: "emerald", superAdminOnly: true },
                 { id: "kelas", name: "Manajemen Kelas", ic: GraduationCap, color: "indigo" },
                 { id: "kalender", name: "Jadwal LPK", ic: Calendar, color: "emerald" },
                 { id: "dataCV", name: "Database CV", ic: BookOpen, color: "sky" },
                 { id: "joborders", name: "Job Order", ic: Landmark, color: "amber" },
-                { id: "pembayaran", name: currentUser?.role === "VVIP" ? "Pembayaran Siswa" : "HR & Personalia", ic: DollarSign, color: "rose", restricted: true },
+                { id: "pembayaran", name: "Keuangan Siswa", ic: DollarSign, color: "rose", restricted: true },
                 { id: "inventaris", name: "Inventaris", ic: Package, color: "slate" },
                 { id: "pajak", name: "Pajak & Keu", ic: FileText, color: "orange", restricted: true },
                 { id: "gaji", name: "Buku Kas & Gaji", ic: Receipt, color: "violet", restricted: true },
@@ -1751,6 +1940,9 @@ export default function AdminView({
                 { id: "informasi", name: "Informasi", ic: Bell, color: "red" },
                 { id: "manajemen", name: "Manajemen Akun & Sensei", ic: Users, color: "slate" },
               ].filter((tab) => {
+                if ((tab as any).superAdminOnly && !isSuperAdminOrVvip) {
+                  return false;
+                }
                 if (currentUser?.role === "Admin Biasa" && tab.restricted) {
                   return false;
                 }
@@ -1794,6 +1986,59 @@ export default function AdminView({
 
         {/* 2. SISWA AKTIF */}
         {activeSegment === "siswa" && <AdminSiswaSegment checkSyncStatus={checkSyncStatus} filterClass={filterClass} filterMonth={filterMonth} filterStatus={filterStatus} filterYear={filterYear} filteredSiswaItems={filteredSiswaItems} handleReject={handleReject} isAlumniClass={isAlumniClass} isStudentRoleOnly={isStudentRoleOnly} onUpdateState={onUpdateState} paginatedSiswaItems={paginatedSiswaItems} setFilterClass={setFilterClass} setFilterMonth={setFilterMonth} setFilterStatus={setFilterStatus} setFilterYear={setFilterYear} setSiswaPage={setSiswaPage} setSiswaSearch={setSiswaSearch} setSiswaTab={setSiswaTab} setStatCardMode={setStatCardMode} setVerifyingDocsStudent={setVerifyingDocsStudent} setViewingCvStudentId={setViewingCvStudentId} siswaItemsPerPage={siswaItemsPerPage} siswaPage={siswaPage} siswaSearch={siswaSearch} siswaTab={siswaTab} siswaTotalPages={siswaTotalPages} startAdminEditReg={startAdminEditReg} statCardMode={statCardMode} systemState={systemState} />}
+
+        {/* 2.1 MONITORING BELAJAR SISWA (SUPER ADMIN & VVIP ONLY) */}
+        {activeSegment === "monitoringBelajar" && isSuperAdminOrVvip && (
+          <div className="space-y-6 animate-fade-in" id="monitoring-belajar-section">
+            <VvipFullEvalSegment
+              activeStudents={activeStudents}
+              classFilter={classFilter}
+              classTabs={classTabs}
+              filterMonth={filterMonth}
+              filterStatus={filterStatus}
+              filterYear={filterYear}
+              getClassMaxBab={getClassMaxBab}
+              hrAttendancePeriod={hrAttendancePeriod}
+              isReadOnly={false}
+              lmsClassFilter={lmsClassFilter}
+              monitorTab={monitorTab}
+              officeEnforce={systemState.customization?.officeLocation?.enforce !== false}
+              officeLat={String(systemState.customization?.officeLocation?.latitude ?? "")}
+              officeLon={String(systemState.customization?.officeLocation?.longitude ?? "")}
+              officeRadius={String(systemState.customization?.officeLocation?.radius ?? 200)}
+              onNavigateToAdmin={() => {}}
+              onUpdateState={onUpdateState}
+              selectedClassTab={selectedClassTab}
+              setClassFilter={setClassFilter}
+              setCurrentViewMode={() => {}}
+              setFilterMonth={setFilterMonth}
+              setFilterStatus={setFilterStatus}
+              setFilterYear={setFilterYear}
+              setHrAttendancePeriod={setHrAttendancePeriod}
+              setLmsClassFilter={setLmsClassFilter}
+              setMonitorTab={setMonitorTab}
+              setOfficeLat={() => {}}
+              setOfficeLon={() => {}}
+              setOfficeRadius={() => {}}
+              setSelectedClassTab={setSelectedClassTab}
+              setSelectedHrAttendanceStaff={setSelectedHrAttendanceStaff}
+              setSelectedSenseiDetail={setSelectedSenseiDetail}
+              setSelectedStudentDetail={setSelectedStudentDetail}
+              setSiswaPage={setSiswaPage}
+              setSiswaTab={setSiswaTab}
+              setStatCardMode={setStatCardMode}
+              setStudentListMode={setStudentListMode}
+              setStudentSearch={setStudentSearch}
+              siswaPage={siswaPage}
+              siswaTab={siswaTab}
+              startVvipEditReg={startAdminEditReg}
+              statCardMode={statCardMode}
+              studentListMode={studentListMode}
+              studentSearch={studentSearch}
+              systemState={systemState}
+            />
+          </div>
+        )}
 
         {/* 2.5 DATA CV KANDIDAT */}
         {activeSegment === "dataCV" && <AdminDataCvSegment onUpdateState={onUpdateState} setViewingCvStudentId={setViewingCvStudentId} systemState={systemState} viewingCvStudentId={viewingCvStudentId} />}
@@ -2974,6 +3219,7 @@ export default function AdminView({
                       partnerName: jobPartnerName,
                       noReg: jobNoReg,
                       jobType: jobType,
+                      targetAudience: jobTargetAudience,
                       occupation: jobOccupation,
                       location: jobLocation,
                       salary: jobSalary,
@@ -2999,10 +3245,12 @@ export default function AdminView({
                       minEthicsScore: jobMinEthicsScore,
                     });
                     if (ok) {
+                      const audience = jobTargetAudience;
                       setJobPartnerName("");
                       setJobNoReg("");
                       setJobOccupation("");
                       setJobType("Tokutei ginou");
+                      setJobTargetAudience("Semua");
                       setJobLocation("");
                       setJobSalary("");
                       setJobOvertime("");
@@ -3026,7 +3274,21 @@ export default function AdminView({
                       setJobMinMathScore("");
                       setJobMinEthicsScore("");
                       setIsCreateJobOrderModalOpen(false);
-                      alert("Job Order sukses terdaftar di sistem!");
+                      sendBroadcastNotification(
+                        audience === "Alumni"
+                          ? "💼 Job Order Baru untuk Alumni LPK SCI"
+                          : audience === "Siswa"
+                          ? "💼 Job Order Baru untuk Siswa LPK SCI"
+                          : "💼 Job Order Baru LPK SCI",
+                        `Lowongan kerja baru telah dibuka: ${jobOccupation || jobType || "Peluang Kerja"} - ${jobPartnerName || "LPK SCI Pati"} (${jobLocation || "Jepang"}).`,
+                        {
+                          type: "job_order",
+                          url: "/?tab=jobs",
+                          targetAudience: audience,
+                          jobType: jobType
+                        }
+                      );
+                      alert("Job Order sukses terdaftar di sistem & notifikasi suara disebarkan ke target!");
                     }
                   }}
                   className="space-y-4"
@@ -3073,6 +3335,29 @@ export default function AdminView({
                         <option value="Engineering">Engineering</option>
                       </select>
                     </div>
+                  </div>
+
+                  <div className="space-y-1 bg-amber-50/70 p-3 rounded-2xl border border-amber-200/70">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-black uppercase text-amber-900 block">
+                        Target Notifikasi & Sasaran Lowongan (Wajib)
+                      </label>
+                      <span className="text-[10px] font-bold text-amber-700 bg-amber-200/60 px-2 py-0.5 rounded-full">
+                        Bunyi Suara Otomatis
+                      </span>
+                    </div>
+                    <select
+                      value={jobTargetAudience}
+                      onChange={(e) => setJobTargetAudience(e.target.value)}
+                      className="w-full text-sm font-semibold rounded-xl border border-amber-300 bg-white px-3 py-2.5 text-slate-800 focus:border-amber-500 focus:ring-2 focus:ring-amber-200 outline-none transition"
+                    >
+                      <option value="Semua">🌐 Semua Akun (Siswa Reguler & Alumni Lulusan)</option>
+                      <option value="Siswa">🎓 Khusus Siswa Reguler (Persiapan Magang / Ginou Jisshusei)</option>
+                      <option value="Alumni">💼 Khusus Alumni (Ex-Japan / Tokutei Ginou / Karir Jepang)</option>
+                    </select>
+                    <p className="text-[10px] text-amber-700 leading-normal">
+                      Sistem akan membunyikan notifikasi audio khusus pada aplikasi saat akun target (Siswa atau Alumni) masuk/login sesuai sasaran yang Anda pilih.
+                    </p>
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
@@ -3277,6 +3562,18 @@ export default function AdminView({
                           placeholder="Contoh: 30"
                           value={jobAgeRequirement}
                           onChange={(e) => setJobAgeRequirement(e.target.value)}
+                          className="w-full text-xs rounded-lg border border-slate-200 bg-white px-3 py-2 outline-none focus:border-indigo-500"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold uppercase text-slate-500">
+                          Siswa Dibutuhkan
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="Contoh: 5"
+                          value={jobRecruitCount}
+                          onChange={(e) => setJobRecruitCount(e.target.value)}
                           className="w-full text-xs rounded-lg border border-slate-200 bg-white px-3 py-2 outline-none focus:border-indigo-500"
                         />
                       </div>
@@ -3514,7 +3811,7 @@ export default function AdminView({
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                     <div className="space-y-1">
                       <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider block">
-                        Nama Lengkap *
+                        Nama Lengkap
                       </label>
                       <input
                         type="text"
@@ -3563,7 +3860,7 @@ export default function AdminView({
                     </div>
                     <div className="space-y-1">
                       <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider block">
-                        No WhatsApp *
+                        No WhatsApp
                       </label>
                       <input
                         type="text"
@@ -3713,7 +4010,7 @@ export default function AdminView({
                     </div>
                     <div className="space-y-1">
                       <label className="text-[10px] font-black text-slate-500 uppercase tracking-wider block">
-                        Email Pendaftaran *
+                        Email Pendaftaran
                       </label>
                       <input
                         type="email"
@@ -3934,11 +4231,19 @@ export default function AdminView({
                   Tutup
                 </button>
                 <button
-                  type="submit"
-                  form="adminRegForm"
-                  className="px-5 py-2.5 bg-indigo-600 text-white rounded-xl text-xs font-black hover:bg-indigo-700 transition shadow-sm cursor-pointer"
+                  type="button"
+                  onClick={handleAdminSaveReg}
+                  disabled={isAdminRegSaving}
+                  className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl text-xs font-black transition shadow-sm cursor-pointer flex items-center gap-2"
                 >
-                  Simpan Perubahan
+                  {isAdminRegSaving ? (
+                    <>
+                      <RefreshCw className="h-3.5 w-3.5 animate-spin" />
+                      <span>Menyimpan...</span>
+                    </>
+                  ) : (
+                    <span>Simpan Perubahan</span>
+                  )}
                 </button>
               </div>
             </div>
@@ -4221,142 +4526,23 @@ export default function AdminView({
         )}
 
         {/* Document Viewer Modal */}
-        {viewingDocUrl && createPortal(
-          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-4 overflow-y-auto overflow-x-hidden">
-            <div className="bg-white rounded-3xl max-w-3xl w-full overflow-hidden shadow-2xl border border-slate-100 flex flex-col max-h-[90vh]">
-              <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
-                <h4 className="font-bold text-slate-800 text-sm">
-                  {viewingDocUrl.title || "Lihat Dokumen"}
-                </h4>
-                <button
-                  onClick={() => setViewingDocUrl(null)}
-                  className="p-1.5 hover:bg-slate-200 rounded-full transition text-slate-500 hover:text-slate-800 cursor-pointer"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-              <div className="p-6 bg-slate-900 flex flex-col items-center justify-center min-h-[50vh] max-h-[75vh] overflow-y-auto gap-4">
-                {!viewingDocUrl.url || (!viewingDocUrl.url.startsWith('http') && !viewingDocUrl.url.startsWith('data:')) ? (
-                  <div className="text-center p-8 bg-slate-800 rounded-2xl border border-slate-700 max-w-sm">
-                    <div className="text-amber-500 text-3xl mb-2">⚠️</div>
-                    <p className="text-sm font-bold text-slate-200">Berkas tidak tersedia</p>
-                    <p className="text-xs text-slate-400 mt-1">Pendaftar belum mengunggah dokumen {viewingDocUrl.title || "ini"}.</p>
-                  </div>
-                ) : viewingDocUrl.url.includes("application/pdf") || viewingDocUrl.url.toLowerCase().includes(".pdf") ? (
-                  <div className="w-full flex flex-col items-center gap-4">
-                    <div className="bg-slate-800 p-6 rounded-2xl border border-slate-700 text-center max-w-md w-full">
-                      <p className="text-sm text-slate-300 font-bold mb-3 font-sans">
-                        Dokumen ini adalah format PDF.
-                      </p>
-                      <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                        <a
-                          href={viewingDocUrl.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs transition shadow-sm text-center cursor-pointer flex items-center justify-center gap-2"
-                        >
-                          <Eye className="h-4 w-4" />
-                          <span>Buka PDF di Tab Baru</span>
-                        </a>
-                        <a
-                          href={viewingDocUrl.url}
-                          download={viewingDocUrl.title ? `${viewingDocUrl.title}.pdf` : "dokumen.pdf"}
-                          className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs transition shadow-sm text-center cursor-pointer flex items-center justify-center gap-2"
-                        >
-                          <FileText className="h-4 w-4" />
-                          <span>Unduh / Simpan PDF</span>
-                        </a>
-                      </div>
-                    </div>
-                    <object
-                      data={getEmbeddablePdfUrl(viewingDocUrl.url)}
-                      type="application/pdf"
-                      className="w-full h-[50vh] bg-white rounded-lg shadow-md border border-slate-200"
-                    >
-                      <iframe
-                        src={getEmbeddablePdfUrl(viewingDocUrl.url)}
-                        title="PDF Viewer"
-                        className="w-full h-full bg-white rounded-lg border-0"
-                      />
-                    </object>
-                  </div>
-                ) : (
-                  <div className="w-full flex flex-col items-center gap-4">
-                    <div className="flex flex-wrap gap-3 justify-center items-center w-full">
-                      {viewingDocUrl.url.startsWith('data:') && (
-                        <a
-                          href={viewingDocUrl.url}
-                          download={viewingDocUrl.title ? `${viewingDocUrl.title}.jpg` : "gambar.jpg"}
-                          className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs transition shadow-sm text-center cursor-pointer flex items-center justify-center gap-2"
-                        >
-                          <FileText className="h-4 w-4" />
-                          <span>Unduh / Simpan Gambar</span>
-                        </a>
-                      )}
+        {viewingDocUrl && (
+          <MediaViewerModal
+            url={viewingDocUrl.url}
+            title={viewingDocUrl.title || "Lihat Dokumen"}
+            onClose={() => setViewingDocUrl(null)}
+          />
+        )}
 
-                      {/* Zoom & Rotation Controls */}
-                      <div className="flex items-center gap-2 bg-slate-800/90 backdrop-blur-md px-4 py-2 rounded-2xl border border-slate-700 shadow-lg text-white">
-                        <button
-                          onClick={() => setDocZoom(prev => Math.max(0.5, prev - 0.25))}
-                          disabled={docZoom <= 0.5}
-                          className="p-1 hover:bg-slate-700 disabled:opacity-30 rounded transition text-slate-300 hover:text-white cursor-pointer"
-                          title="Perkecil (Zoom Out)"
-                        >
-                          <ZoomOut className="h-4 w-4" />
-                        </button>
-                        <span className="text-xs font-mono font-bold select-none min-w-[40px] text-center text-slate-200">
-                          {Math.round(docZoom * 100)}%
-                        </span>
-                        <button
-                          onClick={() => setDocZoom(prev => Math.min(4, prev + 0.25))}
-                          disabled={docZoom >= 4}
-                          className="p-1 hover:bg-slate-700 disabled:opacity-30 rounded transition text-slate-300 hover:text-white cursor-pointer"
-                          title="Perbesar (Zoom In)"
-                        >
-                          <ZoomIn className="h-4 w-4" />
-                        </button>
-                        <div className="h-4 w-[1px] bg-slate-700 mx-1"></div>
-                        <button
-                          onClick={() => setDocRotation(prev => (prev + 90) % 360)}
-                          className="p-1 hover:bg-slate-700 rounded transition text-slate-300 hover:text-white cursor-pointer"
-                          title="Putar 90° (Rotate)"
-                        >
-                          <RotateCw className="h-4 w-4" />
-                        </button>
-                        <div className="h-4 w-[1px] bg-slate-700 mx-1"></div>
-                        <button
-                          onClick={() => { setDocZoom(1); setDocRotation(0); }}
-                          className="px-2 py-0.5 text-[10px] font-bold hover:bg-slate-700 rounded transition text-slate-300 hover:text-white cursor-pointer"
-                        >
-                          Reset
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="w-full overflow-auto flex items-center justify-center p-4 bg-slate-950/40 rounded-2xl border border-slate-800 min-h-[40vh] max-h-[60vh]">
-                      <div className="transition-all duration-200 ease-out flex items-center justify-center" style={{ transform: `scale(${docZoom}) rotate(${docRotation}deg)` }}>
-                        <img
-                          src={viewingDocUrl.url}
-                          alt="Dokumen"
-                          referrerPolicy="no-referrer"
-                          className="max-w-full max-h-[45vh] object-contain rounded-lg shadow-md"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                )}
-              </div>
-              <div className="p-4 border-t border-slate-100 flex justify-end bg-slate-50">
-                <button
-                  onClick={() => setViewingDocUrl(null)}
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition shadow-sm cursor-pointer"
-                >
-                  Tutup Dokumen
-                </button>
-              </div>
-            </div>
-          </div>,
-          document.body
+        {/* Student Rapor & Evaluation Modal */}
+        {selectedStudentDetail && (
+          <StudentRaporModal
+            student={selectedStudentDetail}
+            onClose={() => setSelectedStudentDetail(null)}
+            systemState={systemState}
+            onUpdateState={onUpdateState}
+            getClassMaxBab={getClassMaxBab}
+          />
         )}
 
         {/* CV Viewer Modal */}
@@ -4404,26 +4590,51 @@ export default function AdminView({
                   <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                 </button>
               </div>
-              <form onSubmit={handleSaveCostConfig} className="p-5 space-y-4 overflow-y-auto">
+              <form onSubmit={handleSaveCostConfig} className="p-5 space-y-3.5 overflow-y-auto">
                 <div>
-                  <label className="text-[10px] font-bold text-slate-500 uppercase">Administrasi Pendaftaran</label>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase">Administrasi Pendaftaran (Rp)</label>
                   <input type="number" required value={costRegistration} onChange={e => setCostRegistration(Number(e.target.value))} className="w-full border rounded-lg p-2 text-sm mt-1" />
                 </div>
                 <div>
-                  <label className="text-[10px] font-bold text-slate-500 uppercase">DP Biaya Belajar (Awal)</label>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase">Biaya Belajar Tahap 1 (Rp)</label>
                   <input type="number" required value={costDP} onChange={e => setCostDP(Number(e.target.value))} className="w-full border rounded-lg p-2 text-sm mt-1" />
                 </div>
                 <div>
-                  <label className="text-[10px] font-bold text-slate-500 uppercase">Pelunasan Biaya Belajar (Maks 1 Bln)</label>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase">Biaya Belajar Tahap 2 (Rp)</label>
                   <input type="number" required value={costFullPayment} onChange={e => setCostFullPayment(Number(e.target.value))} className="w-full border rounded-lg p-2 text-sm mt-1" />
                 </div>
                 <div>
-                  <label className="text-[10px] font-bold text-slate-500 uppercase">Management Fee (Pasca Lolos)</label>
-                  <input type="number" required value={costManagementFee} onChange={e => setCostManagementFee(Number(e.target.value))} className="w-full border rounded-lg p-2 text-sm mt-1" />
+                  <label className="text-[10px] font-bold text-slate-500 uppercase">Biaya Belajar Tahap 3 (Level Belajar N4) (Rp)</label>
+                  <input type="number" required value={costStage3} onChange={e => setCostStage3(Number(e.target.value))} className="w-full border rounded-lg p-2 text-sm mt-1" />
                 </div>
-                <div className="pt-4 flex justify-end gap-2">
+                <div>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase">Management Fee (Pasca Lolos / Opsional) (Rp)</label>
+                  <input type="number" value={costManagementFee} onChange={e => setCostManagementFee(Number(e.target.value))} className="w-full border rounded-lg p-2 text-sm mt-1" />
+                </div>
+
+                <div className="p-3 bg-indigo-50/70 rounded-xl border border-indigo-100 flex justify-between items-center text-xs">
+                  <span className="font-bold text-indigo-950">Total Anggaran:</span>
+                  <span className="font-mono font-black text-indigo-700">
+                    Rp {(costRegistration + costDP + costFullPayment + costStage3 + costManagementFee).toLocaleString('id-ID')}
+                  </span>
+                </div>
+
+                {costSaveSuccess && (
+                  <div className="p-2.5 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs font-semibold flex items-center gap-2">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                    <span>SOP Biaya berhasil diperbarui secara real-time!</span>
+                  </div>
+                )}
+
+                <div className="pt-2 flex justify-end gap-2">
                   <button type="button" onClick={() => setShowCostConfig(false)} className="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl text-xs font-bold">Batal</button>
-                  <button type="submit" className="px-4 py-2 bg-indigo-600 text-white rounded-xl text-xs font-bold cursor-pointer">Simpan</button>
+                  <button 
+                    type="submit" 
+                    disabled={isSavingCost}
+                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white rounded-xl text-xs font-bold cursor-pointer transition flex items-center gap-1.5"
+                  >
+                    {isSavingCost ? "Menyimpan..." : costSaveSuccess ? "Tersimpan!" : "Simpan Real-Time"}
+                  </button>
                 </div>
               </form>
             </div>
@@ -4743,6 +4954,7 @@ function EditJobOrderModal({ job, onClose, onUpdateState }: EditJobOrderModalPro
   const [partnerName, setPartnerName] = useState(job.partnerName || "");
   const [noReg, setNoReg] = useState(job.noReg || "");
   const [jobType, setJobType] = useState(job.jobType || "Tokutei ginou");
+  const [targetAudience, setTargetAudience] = useState(job.targetAudience || "Semua");
   const [occupation, setOccupation] = useState(job.occupation || "");
   const [location, setLocation] = useState(job.location || "");
   const [salary, setSalary] = useState(job.salary || "");
@@ -4781,6 +4993,7 @@ function EditJobOrderModal({ job, onClose, onUpdateState }: EditJobOrderModalPro
         partnerName,
         noReg,
         jobType,
+        targetAudience,
         occupation,
         location,
         salary,
@@ -4885,6 +5098,26 @@ function EditJobOrderModal({ job, onClose, onUpdateState }: EditJobOrderModalPro
                   <option value="Engineering">Engineering</option>
                 </select>
               </div>
+            </div>
+
+            <div className="space-y-1 bg-amber-50/70 p-3 rounded-2xl border border-amber-200/70">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-black uppercase text-amber-900 block">
+                  Target Notifikasi & Sasaran Lowongan
+                </label>
+                <span className="text-[10px] font-bold text-amber-700 bg-amber-200/60 px-2 py-0.5 rounded-full">
+                  Bunyi Suara Otomatis
+                </span>
+              </div>
+              <select
+                value={targetAudience}
+                onChange={(e) => setTargetAudience(e.target.value)}
+                className="w-full text-sm font-semibold rounded-xl border border-amber-300 bg-white px-3 py-2.5 text-slate-800 focus:border-amber-500 focus:ring-2 focus:ring-amber-200 outline-none transition"
+              >
+                <option value="Semua">🌐 Semua Akun (Siswa Reguler & Alumni Lulusan)</option>
+                <option value="Siswa">🎓 Khusus Siswa Reguler (Persiapan Magang / Ginou Jisshusei)</option>
+                <option value="Alumni">💼 Khusus Alumni (Ex-Japan / Tokutei Ginou / Karir Jepang)</option>
+              </select>
             </div>
 
             <div className="grid grid-cols-2 gap-4">

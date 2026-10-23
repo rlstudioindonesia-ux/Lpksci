@@ -1,12 +1,12 @@
 import React from "react";
-import { Activity, Award, BookOpen, Calculator, CheckCircle, ChevronRight, Clock, DollarSign, Download, Edit, FileText, Filter, Globe, GraduationCap, History, RefreshCw, RotateCcw, Search, ShieldCheck, TrendingUp, Users } from "lucide-react";
+import { Activity, AlertCircle, Award, BookOpen, Calculator, Calendar, CheckCheck, CheckCircle, ChevronDown, ChevronRight, Clock, DollarSign, Download, Edit, Eye, FileText, Filter, Globe, GraduationCap, History, Laptop, LogIn, RefreshCw, RotateCcw, Search, Shield, ShieldCheck, Smartphone, TrendingUp, UserCheck, Users, UserX } from "lucide-react";
 import { createSvgAvatar, getSafePhotoUrl } from "../../lib/storageHelper";
 import { calculateAge } from "../../lib/dateUtils";
 import { computeAttendanceRate } from "../../lib/attendanceMetrics";
 import { isGradedAssessment } from "../../lib/scoreAveraging";
 import { hasStaffOversight } from "../../lib/permissions";
 import { countWorkingDaysInPayrollPeriod, formatPayrollPeriodLabel, generateRecentPayrollPeriods, isTimestampInPayrollPeriod } from "../../lib/staffAttendancePeriod";
-import { downloadHrAttendanceSummaryPdf } from "../../lib/attendanceReportPdf";
+import { downloadHrAttendanceSummaryPdf, downloadDailyLoginLogsPdf } from "../../lib/attendanceReportPdf";
 import { Bar, BarChart, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 
 interface VvipFullEvalSegmentProps {
@@ -98,6 +98,186 @@ export default function VvipFullEvalSegment({ activeStudents, classFilter, class
       formatPayrollPeriodLabel(hrAttendancePeriod),
     );
   };
+
+  // Staff & Sensei Daily Login Log States
+  const [staffLoginDateMode, setStaffLoginDateMode] = React.useState<"today" | "yesterday" | "7days" | "custom">("today");
+  const [staffLoginCustomDate, setStaffLoginCustomDate] = React.useState<string>(() => new Date().toISOString().split("T")[0]);
+  const [staffLoginRoleFilter, setStaffLoginRoleFilter] = React.useState<string>("all");
+  const [staffLoginSearchQuery, setStaffLoginSearchQuery] = React.useState<string>("");
+  const [staffLoginStatusFilter, setStaffLoginStatusFilter] = React.useState<string>("all");
+  const [selectedStaffLoginDetail, setSelectedStaffLoginDetail] = React.useState<any | null>(null);
+  const [showRecentLoginFeed, setShowRecentLoginFeed] = React.useState<boolean>(false);
+
+  const staffUsers = React.useMemo(() => {
+    return (systemState.users || []).filter((u: any) => hasStaffOversight(u.role));
+  }, [systemState.users]);
+
+  // Determine target date range
+  const targetDateInfo = React.useMemo(() => {
+    const now = new Date();
+    let targetDateStr = now.toISOString().split("T")[0];
+    let label = `Hari Ini (${now.toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })})`;
+
+    if (staffLoginDateMode === "yesterday") {
+      const y = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+      targetDateStr = y.toISOString().split("T")[0];
+      label = `Kemarin (${y.toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })})`;
+    } else if (staffLoginDateMode === "custom" && staffLoginCustomDate) {
+      targetDateStr = staffLoginCustomDate;
+      const cDate = new Date(staffLoginCustomDate + "T12:00:00");
+      label = isNaN(cDate.getTime()) ? staffLoginCustomDate : cDate.toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" });
+    } else if (staffLoginDateMode === "7days") {
+      label = "7 Hari Terakhir";
+    }
+
+    return { targetDateStr, label };
+  }, [staffLoginDateMode, staffLoginCustomDate]);
+
+  // Aggregate daily login logs for each staff/sensei
+  const staffDailyLoginRows = React.useMemo(() => {
+    const rawLogs = systemState.logs || [];
+    const now = new Date();
+    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+    return staffUsers.map((u: any) => {
+      // Find all login logs for this user
+      const userLogs = rawLogs.filter((l: any) => {
+        const isLogin = l.type === "LOGIN" || (l.action && l.action.toLowerCase().includes("login"));
+        const matchesUser = l.user === u.name || l.user === u.username || l.username === u.username || (l.target && l.target === u.username);
+        return isLogin && matchesUser;
+      });
+
+      // Filter logs by selected date criteria
+      const dateLogs = userLogs.filter((l: any) => {
+        const ts = l.timestamp || l.time;
+        if (!ts) return false;
+        if (staffLoginDateMode === "7days") {
+          const logD = new Date(ts);
+          return logD >= sevenDaysAgo && logD <= now;
+        } else {
+          return ts.startsWith(targetDateInfo.targetDateStr);
+        }
+      });
+
+      // Also incorporate user's lastActive if no explicit log entry was captured on that date
+      if (u.lastActive) {
+        const lastActiveTs = u.lastActive;
+        const matchesActive = staffLoginDateMode === "7days"
+          ? (new Date(lastActiveTs) >= sevenDaysAgo && new Date(lastActiveTs) <= now)
+          : lastActiveTs.startsWith(targetDateInfo.targetDateStr);
+
+        const alreadyExists = dateLogs.some((l: any) => {
+          const ts = l.timestamp || l.time;
+          return ts && Math.abs(new Date(ts).getTime() - new Date(lastActiveTs).getTime()) < 60000;
+        });
+
+        if (matchesActive && !alreadyExists) {
+          dateLogs.push({
+            id: `synth-${u.username}-${lastActiveTs}`,
+            user: u.name,
+            username: u.username,
+            role: u.role,
+            type: "LOGIN",
+            action: `Sesi Terakhir Tercatat (@${u.username})`,
+            details: `Aktivitas terakhir tercatat pada ${new Date(lastActiveTs).toLocaleTimeString("id-ID")}`,
+            time: lastActiveTs,
+            timestamp: lastActiveTs,
+            device: u.role === "Pengajar" ? "Aplikasi Pengajar / Web" : "Web Portal",
+            location: "Tersinkron",
+            ip: "-",
+            status: "Berhasil"
+          });
+        }
+      }
+
+      // Sort logs newest first
+      dateLogs.sort((a: any, b: any) => new Date(b.timestamp || b.time || 0).getTime() - new Date(a.timestamp || a.time || 0).getTime());
+
+      const latestLog = dateLogs[0];
+      const latestTimestamp = latestLog ? (latestLog.timestamp || latestLog.time) : null;
+      const sessionCount = dateLogs.length;
+
+      // Online status: last active within 30 minutes
+      const isOnline = latestTimestamp ? (now.getTime() - new Date(latestTimestamp).getTime() < 30 * 60 * 1000) : false;
+      const hasLoggedIn = sessionCount > 0 || !!latestTimestamp;
+
+      return {
+        user: u,
+        username: u.username,
+        name: u.name,
+        role: u.role,
+        avatar: u.profilePicture,
+        hasLoggedIn,
+        isOnline,
+        sessionCount,
+        latestTimestamp,
+        latestLog,
+        allSessions: dateLogs,
+        device: latestLog?.device || (u.role === "Pengajar" ? "Aplikasi Pengajar" : "Browser Web"),
+        ip: latestLog?.ip || latestLog?.location || "-",
+      };
+    });
+  }, [staffUsers, systemState.logs, targetDateInfo, staffLoginDateMode]);
+
+  // Filtered rows for display
+  const filteredStaffLoginRows = React.useMemo(() => {
+    return staffDailyLoginRows.filter((row: any) => {
+      // Role filter
+      if (staffLoginRoleFilter === "sensei" && row.role !== "Pengajar") return false;
+      if (staffLoginRoleFilter === "admin" && !(row.role === "Admin" || row.role === "Admin Super" || row.role === "Admin Biasa")) return false;
+      if (staffLoginRoleFilter === "vvip" && row.role !== "VVIP") return false;
+
+      // Status filter
+      if (staffLoginStatusFilter === "logged_in" && !row.hasLoggedIn) return false;
+      if (staffLoginStatusFilter === "not_logged_in" && row.hasLoggedIn) return false;
+      if (staffLoginStatusFilter === "online" && !row.isOnline) return false;
+
+      // Search query
+      if (staffLoginSearchQuery) {
+        const q = staffLoginSearchQuery.toLowerCase();
+        const matchesName = (row.name || "").toLowerCase().includes(q);
+        const matchesUsername = (row.username || "").toLowerCase().includes(q);
+        const matchesRole = (row.role || "").toLowerCase().includes(q);
+        const matchesDevice = (row.device || "").toLowerCase().includes(q);
+        const matchesIp = (row.ip || "").toLowerCase().includes(q);
+        if (!matchesName && !matchesUsername && !matchesRole && !matchesDevice && !matchesIp) return false;
+      }
+
+      return true;
+    }).sort((a: any, b: any) => {
+      if (a.hasLoggedIn && !b.hasLoggedIn) return -1;
+      if (!a.hasLoggedIn && b.hasLoggedIn) return 1;
+      const tA = a.latestTimestamp ? new Date(a.latestTimestamp).getTime() : 0;
+      const tB = b.latestTimestamp ? new Date(b.latestTimestamp).getTime() : 0;
+      return tB - tA;
+    });
+  }, [staffDailyLoginRows, staffLoginRoleFilter, staffLoginStatusFilter, staffLoginSearchQuery]);
+
+  // Login metrics
+  const totalStaffCount = staffUsers.length;
+  const loggedInCount = staffDailyLoginRows.filter(r => r.hasLoggedIn).length;
+  const onlineCount = staffDailyLoginRows.filter(r => r.isOnline).length;
+  const senseiLoggedInCount = staffDailyLoginRows.filter(r => r.role === "Pengajar" && r.hasLoggedIn).length;
+  const totalSenseiCount = staffUsers.filter(u => u.role === "Pengajar").length;
+  const adminLoggedInCount = staffDailyLoginRows.filter(r => (r.role === "Admin" || r.role === "Admin Super" || r.role === "Admin Biasa") && r.hasLoggedIn).length;
+  const totalAdminCount = staffUsers.filter(u => u.role === "Admin" || u.role === "Admin Super" || u.role === "Admin Biasa").length;
+
+  const handleDownloadDailyLoginPdf = () => {
+    downloadDailyLoginLogsPdf(
+      filteredStaffLoginRows.map(r => ({
+        name: r.name,
+        username: r.username,
+        role: r.role,
+        lastLoginTime: r.latestTimestamp ? `${new Date(r.latestTimestamp).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", second: "2-digit" })} WIB (${new Date(r.latestTimestamp).toLocaleDateString("id-ID")})` : "Belum Login",
+        sessionCount: r.sessionCount,
+        device: r.device,
+        ip: r.ip,
+        status: r.isOnline ? "Online (Aktif)" : r.hasLoggedIn ? "Telah Login" : "Belum Login"
+      })),
+      targetDateInfo.label
+    );
+  };
+
 
   return (
     <section
@@ -425,7 +605,7 @@ export default function VvipFullEvalSegment({ activeStudents, classFilter, class
                               <th className="px-3 py-3 text-center">Siswa</th>
                               <th className="px-3 py-3">🇮🇩 Belajar</th>
                               <th className="px-3 py-3">💼 Job</th>
-                              <th className="px-3 py-3">📋 JFT/JLPT</th>
+                              <th className="px-3 py-3">📋 Sertifikasi JFT/jlpt/SSW</th>
                               <th className="px-3 py-3">📘 Diklat SO</th>
                               <th className="px-3 py-3">🇯🇵 Jepang</th>
                               <th className="px-3 py-3 text-right">Aksi</th>
@@ -485,7 +665,7 @@ export default function VvipFullEvalSegment({ activeStudents, classFilter, class
                                   >
                                     <td className="px-3 sm:px-4 py-3 whitespace-nowrap">
                                       <span className={`${colorClass} font-black uppercase tracking-wide text-[11px]`}>
-                                        Kelas {className}
+                                        {className.toLowerCase().startsWith("kelas") || className.toLowerCase().startsWith("sertifikasi") ? className : `Kelas ${className}`}
                                       </span>
                                       {isSelected && (
                                         <span className="ml-2 text-[8px] font-black bg-indigo-500 text-white px-1.5 py-0.5 rounded-full">
@@ -498,7 +678,7 @@ export default function VvipFullEvalSegment({ activeStudents, classFilter, class
                                     </td>
                                     <td className="px-3 py-3"><Badge count={belajarCount} label="Belajar" cls="bg-blue-500/20 text-blue-300" /></td>
                                     <td className="px-3 py-3"><Badge count={jobCount} label="Job" cls="bg-amber-500/20 text-amber-300" /></td>
-                                    <td className="px-3 py-3"><Badge count={jftCount} label="JFT" cls="bg-sky-500/20 text-sky-300" /></td>
+                                    <td className="px-3 py-3"><Badge count={jftCount} label="Sertifikasi JFT/jlpt/SSW" cls="bg-sky-500/20 text-sky-300" /></td>
                                     <td className="px-3 py-3"><Badge count={diklatCount} label="Diklat" cls="bg-indigo-500/20 text-indigo-300" /></td>
                                     <td className="px-3 py-3"><Badge count={jepangCount} label="Jepang" cls="bg-emerald-500/20 text-emerald-300" /></td>
                                     <td className="px-3 py-3 text-right">
@@ -530,16 +710,15 @@ export default function VvipFullEvalSegment({ activeStudents, classFilter, class
                             {[
                               { id: "Belajar", label: "1. Belajar", icon: "🇮🇩", color: "text-blue-400" },
                               { id: "On Proges Job", label: "2. On Proges Job", icon: "💼", color: "text-amber-400" },
-                              { id: "On Progres JFT/JLPT/SSW", label: "3. On Progres JFT", icon: "📋", color: "text-sky-400" },
-                              { id: "Diklat SO", label: "4. Diklat SO", icon: "📘", color: "text-indigo-400" },
-                              { id: "Lulus", label: "5. Lulus", icon: "🎓", color: "text-purple-400" },
-                              { id: "Di Jepang", label: "6. Di Jepang", icon: "🇯🇵", color: "text-emerald-400" },
-                              { id: "Dikeluarkan", label: "7. Dikeluarkan", icon: "❌", color: "text-rose-400" },
+                              { id: "Diklat SO", label: "3. Diklat SO", icon: "📘", color: "text-indigo-400" },
+                              { id: "Di Jepang", label: "4. Di Jepang", icon: "🇯🇵", color: "text-emerald-400" },
+                              { id: "On Progres JFT/JLPT/SSW", label: "5. Sertifikasi JFT/JLPT/SSW", icon: "🎓", color: "text-purple-400" },
+                              { id: "Dikeluarkan", label: "6. Dikeluarkan", icon: "❌", color: "text-rose-400" },
                             ].map((st) => {
                               const isSelected = filterStatus === st.id;
                               const count = activeStudents.filter((s: any) => {
                                 if (classFilter !== "all" && s.class !== classFilter) return false;
-                                return s.status === st.id;
+                                return s.status === st.id || (st.id === "On Progres JFT/JLPT/SSW" && s.status === "Lulus");
                               }).length;
     
                               return (
@@ -1650,11 +1829,23 @@ export default function VvipFullEvalSegment({ activeStudents, classFilter, class
                             <td className="px-4 py-3">
                               <div className="flex items-center gap-2.5">
                                 <div className="h-8 w-8 shrink-0 bg-white border border-slate-200 rounded-lg overflow-hidden flex items-center justify-center shadow-3xs">
-                                  {teacher.profilePicture ? (
-                                    <img src={getSafePhotoUrl(teacher.profilePicture, teacher.name)} className="h-full w-full object-cover" alt={teacher.name} referrerPolicy="no-referrer"></img>
-                                  ) : (
-                                    <span className="text-base">👤</span>
-                                  )}
+                                  {(() => {
+                                    const pic = teacher.profilePicture || teacher.docFoto || (teacher.faceBiometricData && typeof teacher.faceBiometricData === 'string' && teacher.faceBiometricData.startsWith('data:image') ? teacher.faceBiometricData : '');
+                                    return pic ? (
+                                      <img 
+                                        src={getSafePhotoUrl(pic, teacher.name)} 
+                                        className="h-full w-full object-cover" 
+                                        alt={teacher.name} 
+                                        referrerPolicy="no-referrer"
+                                        onError={(e) => {
+                                          e.currentTarget.onerror = null;
+                                          e.currentTarget.src = createSvgAvatar(teacher.name || 'Sensei');
+                                        }}
+                                      />
+                                    ) : (
+                                      <span className="text-base">👤</span>
+                                    );
+                                  })()}
                                 </div>
                                 <div className="min-w-0">
                                   <h5 className="font-black text-slate-900 text-[11px] leading-tight truncate">{teacher.name}</h5>
@@ -1953,12 +2144,523 @@ export default function VvipFullEvalSegment({ activeStudents, classFilter, class
     
             {monitorTab === ("hr" as any) && (
               <div className="space-y-6 animate-fade-in text-left">
-                <h3 className="font-bold text-slate-800">Pemantauan Absensi & HR (Pengajar & Staf)</h3> 
-                <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <h3 className="font-extrabold text-slate-800 text-lg sm:text-xl flex items-center gap-2">
+                      <span className="bg-indigo-600 text-white p-2 rounded-xl shadow-xs">
+                        <Users className="w-5 h-5" />
+                      </span>
+                      Pemantauan Absensi & Kehadiran Staff & Sensei
+                    </h3>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Monitoring real-time log login harian, aktivitas sesi sistem, dan rekapitulasi presensi pengajar & staf LPK.
+                    </p>
+                  </div>
+                </div>
+
+                {/* KPI Summary Cards */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+                  <div className="bg-gradient-to-br from-indigo-50/80 to-white p-4 rounded-2xl border border-indigo-100 shadow-3xs">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-black text-indigo-500 uppercase tracking-wider">Total Staf & Sensei</span>
+                      <Users className="w-4 h-4 text-indigo-500" />
+                    </div>
+                    <p className="text-2xl font-black text-slate-800 mt-1">{totalStaffCount}</p>
+                    <p className="text-[10px] text-slate-400 font-medium mt-0.5">Pengajar & Manajemen</p>
+                  </div>
+
+                  <div className="bg-gradient-to-br from-emerald-50/80 to-white p-4 rounded-2xl border border-emerald-100 shadow-3xs">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-black text-emerald-600 uppercase tracking-wider">Login {staffLoginDateMode === "today" ? "Hari Ini" : "Terpilih"}</span>
+                      <UserCheck className="w-4 h-4 text-emerald-600" />
+                    </div>
+                    <div className="flex items-baseline gap-2 mt-1">
+                      <p className="text-2xl font-black text-emerald-700">{loggedInCount}</p>
+                      <span className="text-xs font-bold text-slate-400">/ {totalStaffCount} staf</span>
+                    </div>
+                    <p className="text-[10px] text-emerald-600 font-semibold mt-0.5">
+                      {totalStaffCount > 0 ? Math.round((loggedInCount / totalStaffCount) * 100) : 0}% tingkat login
+                    </p>
+                  </div>
+
+                  <div className="bg-gradient-to-br from-purple-50/80 to-white p-4 rounded-2xl border border-purple-100 shadow-3xs">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-black text-purple-600 uppercase tracking-wider">Sensei Login</span>
+                      <GraduationCap className="w-4 h-4 text-purple-600" />
+                    </div>
+                    <div className="flex items-baseline gap-2 mt-1">
+                      <p className="text-2xl font-black text-purple-700">{senseiLoggedInCount}</p>
+                      <span className="text-xs font-bold text-slate-400">/ {totalSenseiCount} sensei</span>
+                    </div>
+                    <p className="text-[10px] text-purple-600 font-semibold mt-0.5">Pengajar aktif login</p>
+                  </div>
+
+                  <div className="bg-gradient-to-br from-blue-50/80 to-white p-4 rounded-2xl border border-blue-100 shadow-3xs">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-black text-blue-600 uppercase tracking-wider">Admin & Kantor Login</span>
+                      <ShieldCheck className="w-4 h-4 text-blue-600" />
+                    </div>
+                    <div className="flex items-baseline gap-2 mt-1">
+                      <p className="text-2xl font-black text-blue-700">{adminLoggedInCount}</p>
+                      <span className="text-xs font-bold text-slate-400">/ {totalAdminCount} admin</span>
+                    </div>
+                    <p className="text-[10px] text-blue-600 font-semibold mt-0.5">Staf operasional</p>
+                  </div>
+                </div>
+
+                {/* SECTION 1: LOG LOGIN HARIAN STAFF & SENSEI */}
+                <div className="bg-white rounded-3xl p-5 sm:p-6 shadow-xs border border-slate-200/90 space-y-4">
+                  <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+                    <div className="flex items-center gap-3">
+                      <div className="p-2.5 bg-indigo-50 text-indigo-700 rounded-2xl border border-indigo-100">
+                        <LogIn className="w-5 h-5" />
+                      </div>
+                      <div>
+                        <h4 className="font-extrabold text-slate-800 text-base flex items-center gap-2">
+                          Log Login Harian Staff & Sensei
+                          <span className="bg-indigo-100 text-indigo-700 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                            {filteredStaffLoginRows.length} Terdata
+                          </span>
+                        </h4>
+                        <p className="text-[11px] text-slate-500 font-medium">
+                          Rekam jejak sesi login harian siapa saja yang mengakses sistem LPK · {targetDateInfo.label}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={handleDownloadDailyLoginPdf}
+                        className="flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-bold px-3 py-1.5 rounded-xl transition active:scale-95 cursor-pointer shadow-3xs"
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                        <span>Unduh PDF Log Login</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setShowRecentLoginFeed(!showRecentLoginFeed)}
+                        className={`flex items-center gap-1.5 text-[11px] font-bold px-3 py-1.5 rounded-xl border transition cursor-pointer ${showRecentLoginFeed ? "bg-slate-800 text-white border-slate-800" : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"}`}
+                      >
+                        <History className="w-3.5 h-3.5" />
+                        <span>{showRecentLoginFeed ? "Tutup Feed Live" : "Feed Sesi Terkini"}</span>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Filter Date Bar */}
+                  <div className="flex flex-wrap items-center justify-between gap-2.5 bg-slate-50/80 p-3 rounded-2xl border border-slate-200/70">
+                    {/* Date Presets */}
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="text-[10px] font-black text-slate-400 uppercase tracking-wider mr-1">Tanggal:</span>
+                      <button
+                        type="button"
+                        onClick={() => setStaffLoginDateMode("today")}
+                        className={`px-3 py-1 text-xs font-bold rounded-xl transition cursor-pointer ${staffLoginDateMode === "today" ? "bg-indigo-600 text-white shadow-3xs" : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-100"}`}
+                      >
+                        Hari Ini
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setStaffLoginDateMode("yesterday")}
+                        className={`px-3 py-1 text-xs font-bold rounded-xl transition cursor-pointer ${staffLoginDateMode === "yesterday" ? "bg-indigo-600 text-white shadow-3xs" : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-100"}`}
+                      >
+                        Kemarin
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setStaffLoginDateMode("7days")}
+                        className={`px-3 py-1 text-xs font-bold rounded-xl transition cursor-pointer ${staffLoginDateMode === "7days" ? "bg-indigo-600 text-white shadow-3xs" : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-100"}`}
+                      >
+                        7 Hari Terakhir
+                      </button>
+                    </div>
+
+                    {/* Custom Calendar Date Input */}
+                    <div className="flex items-center gap-1.5">
+                      <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                      <span className="text-[10px] font-bold text-slate-500">Pilih Tanggal:</span>
+                      <input
+                        type="date"
+                        value={staffLoginCustomDate}
+                        onChange={(e) => {
+                          setStaffLoginCustomDate(e.target.value);
+                          setStaffLoginDateMode("custom");
+                        }}
+                        className={`text-xs font-bold px-2 py-1 bg-white border rounded-xl outline-none cursor-pointer ${staffLoginDateMode === "custom" ? "border-indigo-500 ring-2 ring-indigo-500/20 text-indigo-700" : "border-slate-200 text-slate-700"}`}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Filter and Search Bar */}
+                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5">
+                    {/* Search */}
+                    <div className="sm:col-span-6 relative">
+                      <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                      <input
+                        type="text"
+                        placeholder="Cari nama staf, @username, perangkat, atau IP..."
+                        value={staffLoginSearchQuery}
+                        onChange={(e) => setStaffLoginSearchQuery(e.target.value)}
+                        className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-8 pr-3 py-1.5 text-xs text-slate-700 placeholder-slate-400 outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 font-medium"
+                      />
+                    </div>
+
+                    {/* Role Filter */}
+                    <div className="sm:col-span-3">
+                      <select
+                        value={staffLoginRoleFilter}
+                        onChange={(e) => setStaffLoginRoleFilter(e.target.value)}
+                        className="w-full text-xs font-bold text-slate-700 bg-slate-50 border border-slate-200 px-2.5 py-1.5 rounded-xl outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 cursor-pointer"
+                      >
+                        <option value="all">👥 Semua Staf & Sensei</option>
+                        <option value="sensei">🎓 Pengajar / Sensei Saja</option>
+                        <option value="admin">🏢 Admin & Manajemen</option>
+                        <option value="vvip">👑 VVIP Eksekutif</option>
+                      </select>
+                    </div>
+
+                    {/* Status Filter */}
+                    <div className="sm:col-span-3">
+                      <select
+                        value={staffLoginStatusFilter}
+                        onChange={(e) => setStaffLoginStatusFilter(e.target.value)}
+                        className="w-full text-xs font-bold text-slate-700 bg-slate-50 border border-slate-200 px-2.5 py-1.5 rounded-xl outline-none focus:bg-white focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 cursor-pointer"
+                      >
+                        <option value="all">⚡ Semua Status</option>
+                        <option value="logged_in">🟢 Sudah Login Hari Ini</option>
+                        <option value="online">📶 Sedang Online (Aktif)</option>
+                        <option value="not_logged_in">⚪ Belum Login</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Optional Live Recent Login Feed Accordion */}
+                  {showRecentLoginFeed && (
+                    <div className="p-4 bg-slate-900 text-slate-100 rounded-2xl border border-slate-800 space-y-3 animate-in fade-in duration-150">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="h-2 w-2 rounded-full bg-emerald-400 animate-ping" />
+                          <h5 className="font-bold text-xs text-white">Live Feed: 10 Sesi Login Terakhir Staff & Sensei</h5>
+                        </div>
+                        <span className="text-[10px] text-slate-400 font-mono">Real-time Stream</span>
+                      </div>
+                      <div className="space-y-2 max-h-48 overflow-y-auto custom-scrollbar pr-1">
+                        {(() => {
+                          const recentStaffLogins = (systemState.logs || [])
+                            .filter((l: any) => (l.type === "LOGIN" || (l.action && l.action.toLowerCase().includes("login"))) && staffUsers.some((u: any) => u.name === l.user || u.username === l.user || u.username === l.username))
+                            .slice(0, 10);
+
+                          if (recentStaffLogins.length === 0) {
+                            return <p className="text-xs text-slate-400 italic py-2">Belum ada aktivitas login baru yang terekam.</p>;
+                          }
+
+                          return recentStaffLogins.map((log: any, idx: number) => {
+                            const ts = log.timestamp || log.time;
+                            const d = ts ? new Date(ts) : null;
+                            return (
+                              <div key={log.id || idx} className="flex items-center justify-between text-[11px] p-2 bg-slate-800/80 rounded-xl border border-slate-700/60">
+                                <div className="flex items-center gap-2">
+                                  <span className="font-bold text-indigo-300">@{log.username || log.user}</span>
+                                  <span className="text-slate-400">· {log.action || log.description || "Login"}</span>
+                                  {log.device && (
+                                    <span className="text-[9px] bg-slate-700 text-slate-300 px-1.5 py-0.5 rounded font-mono">
+                                      {log.device}
+                                    </span>
+                                  )}
+                                </div>
+                                <span className="text-[10px] font-mono text-slate-400">
+                                  {d ? d.toLocaleTimeString("id-ID") + " WIB" : "-"}
+                                </span>
+                              </div>
+                            );
+                          });
+                        })()}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Daily Login Log Table */}
+                  <div className="overflow-x-auto -mx-5 px-5 sm:mx-0 sm:px-0">
+                    <table className="w-full text-left text-xs min-w-[700px]">
+                      <thead className="bg-slate-50/90 text-slate-500 text-[10px] uppercase tracking-wider border-b border-slate-100">
+                        <tr>
+                          <th className="p-3.5 rounded-l-xl">Nama & Akun Staf</th>
+                          <th className="p-3.5">Waktu Login Terakhir</th>
+                          <th className="p-3.5 text-center">Total Sesi</th>
+                          <th className="p-3.5">Perangkat & IP</th>
+                          <th className="p-3.5 text-center">Status Sesi</th>
+                          <th className="p-3.5 rounded-r-xl text-right">Aksi</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {filteredStaffLoginRows.length === 0 ? (
+                          <tr>
+                            <td colSpan={6} className="text-center py-8 text-slate-400 italic text-xs">
+                              Tidak ada data staf atau sensei yang sesuai dengan filter pencarian.
+                            </td>
+                          </tr>
+                        ) : (
+                          filteredStaffLoginRows.map((row: any) => {
+                            const dateObj = row.latestTimestamp ? new Date(row.latestTimestamp) : null;
+                            const isSensei = row.role === "Pengajar";
+                            const isAdmin = row.role === "Admin" || row.role === "Admin Super" || row.role === "Admin Biasa";
+                            const isVvip = row.role === "VVIP";
+
+                            return (
+                              <tr
+                                key={row.username}
+                                className="hover:bg-indigo-50/30 transition duration-100 group"
+                              >
+                                {/* Staff User Column */}
+                                <td className="p-3.5">
+                                  <div className="flex items-center gap-3">
+                                    <div className="relative shrink-0">
+                                      {row.avatar ? (
+                                        <img
+                                          src={getSafePhotoUrl(row.avatar, row.name)}
+                                          alt={row.name}
+                                          className="w-9 h-9 rounded-xl object-cover border border-slate-200 shadow-3xs"
+                                          referrerPolicy="no-referrer"
+                                        />
+                                      ) : (
+                                        <div className="w-9 h-9 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center font-bold text-xs border border-slate-200">
+                                          {row.name ? row.name.slice(0, 2).toUpperCase() : "ST"}
+                                        </div>
+                                      )}
+                                      {row.isOnline ? (
+                                        <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                                          <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500 border-2 border-white" />
+                                        </span>
+                                      ) : row.hasLoggedIn ? (
+                                        <span className="absolute -bottom-1 -right-1 inline-flex rounded-full h-2.5 w-2.5 bg-indigo-500 border border-white" />
+                                      ) : null}
+                                    </div>
+                                    <div>
+                                      <p className="font-bold text-slate-800 group-hover:text-indigo-600 transition-colors">
+                                        {row.name}
+                                      </p>
+                                      <div className="flex items-center gap-1.5 mt-0.5">
+                                        <span className="text-[10px] text-slate-400 font-mono">@{row.username}</span>
+                                        <span
+                                          className={`text-[9px] font-extrabold uppercase px-1.5 py-0.2 rounded-md ${
+                                            isSensei
+                                              ? "bg-purple-50 text-purple-700 border border-purple-100"
+                                              : isVvip
+                                              ? "bg-emerald-50 text-emerald-700 border border-emerald-100"
+                                              : isAdmin
+                                              ? "bg-amber-50 text-amber-700 border border-amber-100"
+                                              : "bg-slate-100 text-slate-600"
+                                          }`}
+                                        >
+                                          {row.role}
+                                        </span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                </td>
+
+                                {/* Last Login Time */}
+                                <td className="p-3.5">
+                                  {dateObj ? (
+                                    <div>
+                                      <div className="flex items-center gap-1 text-slate-800 font-bold font-mono">
+                                        <Clock className="w-3.5 h-3.5 text-indigo-500" />
+                                        <span>{dateObj.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", second: "2-digit" })} WIB</span>
+                                      </div>
+                                      <span className="text-[10px] text-slate-400 font-medium">
+                                        {dateObj.toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" })}
+                                      </span>
+                                    </div>
+                                  ) : (
+                                    <span className="text-slate-400 italic text-[11px] font-medium">Belum ada log login</span>
+                                  )}
+                                </td>
+
+                                {/* Session Count */}
+                                <td className="p-3.5 text-center">
+                                  {row.sessionCount > 0 ? (
+                                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-100">
+                                      {row.sessionCount}x Sesi
+                                    </span>
+                                  ) : (
+                                    <span className="text-slate-300 font-medium">-</span>
+                                  )}
+                                </td>
+
+                                {/* Device & IP */}
+                                <td className="p-3.5">
+                                  <div className="space-y-0.5">
+                                    <div className="flex items-center gap-1.5 text-slate-700 font-medium text-[11px]">
+                                      {row.device.toLowerCase().includes("android") || row.device.toLowerCase().includes("ios") || row.device.toLowerCase().includes("mobile") ? (
+                                        <Smartphone className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                      ) : (
+                                        <Laptop className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                                      )}
+                                      <span className="truncate max-w-[150px]">{row.device}</span>
+                                    </div>
+                                    {row.ip && row.ip !== "-" && (
+                                      <p className="text-[9.5px] text-slate-400 font-mono">IP: {row.ip}</p>
+                                    )}
+                                  </div>
+                                </td>
+
+                                {/* Status Sesi */}
+                                <td className="p-3.5 text-center">
+                                  {row.isOnline ? (
+                                    <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-extrabold bg-emerald-100 text-emerald-800 border border-emerald-200 shadow-3xs">
+                                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                      Online (Aktif)
+                                    </span>
+                                  ) : row.hasLoggedIn ? (
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-100">
+                                      <CheckCircle className="w-3 h-3 text-indigo-600" />
+                                      Telah Login
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 text-slate-500 border border-slate-200">
+                                      <UserX className="w-3 h-3 text-slate-400" />
+                                      Belum Login
+                                    </span>
+                                  )}
+                                </td>
+
+                                {/* Action Buttons */}
+                                <td className="p-3.5 text-right">
+                                  <div className="flex items-center justify-end gap-1.5">
+                                    <button
+                                      type="button"
+                                      onClick={() => setSelectedStaffLoginDetail(row)}
+                                      className="px-2.5 py-1 text-[10.5px] font-bold text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition active:scale-95 cursor-pointer whitespace-nowrap border border-indigo-100"
+                                      title="Lihat riwayat sesi login staf ini"
+                                    >
+                                      Riwayat Sesi
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setSelectedHrAttendanceStaff(row.user)}
+                                      className="px-2 py-1 text-[10.5px] font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition active:scale-95 cursor-pointer whitespace-nowrap"
+                                      title="Lihat detail presensi mengajar"
+                                    >
+                                      Absensi →
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* MODAL: DETAIL RIWAYAT SESI LOGIN STAF/SENSEI */}
+                {selectedStaffLoginDetail && (() => {
+                  const staff = selectedStaffLoginDetail;
+                  return (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200">
+                      <div className="bg-white rounded-3xl max-w-xl w-full max-h-[85vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden text-left animate-in zoom-in-95 duration-150">
+                        <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/60">
+                          <div className="flex items-center gap-3">
+                            <div className="p-2 bg-indigo-100 text-indigo-700 rounded-xl">
+                              <LogIn className="w-5 h-5" />
+                            </div>
+                            <div>
+                              <h4 className="font-bold text-slate-800 text-sm">
+                                Riwayat Log Login: {staff.name}
+                              </h4>
+                              <p className="text-[10.5px] text-slate-500 font-mono">
+                                @{staff.username} · Role: {staff.role} · {targetDateInfo.label}
+                              </p>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => setSelectedStaffLoginDetail(null)}
+                            className="p-1.5 hover:bg-slate-200 rounded-full transition cursor-pointer text-slate-400 hover:text-slate-600"
+                          >
+                            ✕
+                          </button>
+                        </div>
+
+                        <div className="p-6 overflow-y-auto space-y-3">
+                          {staff.allSessions.length === 0 ? (
+                            <div className="text-center py-8">
+                              <p className="text-xs text-slate-500 italic">
+                                Belum ada log sesi login yang tercatat untuk {staff.name} pada periode {targetDateInfo.label}.
+                              </p>
+                            </div>
+                          ) : (
+                            staff.allSessions.map((session: any, sIdx: number) => {
+                              const sTs = session.timestamp || session.time;
+                              const sDate = sTs ? new Date(sTs) : null;
+                              return (
+                                <div
+                                  key={session.id || sIdx}
+                                  className="p-3.5 bg-slate-50 border border-slate-200/80 rounded-2xl space-y-1.5"
+                                >
+                                  <div className="flex items-center justify-between gap-2">
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-[10px] font-black text-indigo-700 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded-md font-mono">
+                                        {sDate ? sDate.toLocaleTimeString("id-ID") + " WIB" : "-"}
+                                      </span>
+                                      <span className="text-[10px] text-slate-500 font-bold">
+                                        {sDate ? sDate.toLocaleDateString("id-ID", { day: "2-digit", month: "short", year: "numeric" }) : "-"}
+                                      </span>
+                                    </div>
+                                    <span className="text-[9px] font-bold uppercase px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                      {session.status || "Berhasil"}
+                                    </span>
+                                  </div>
+
+                                  <p className="text-xs font-semibold text-slate-800">
+                                    {session.action || session.description || "Login ke sistem"}
+                                  </p>
+
+                                  <div className="flex flex-wrap items-center gap-3 pt-1 text-[10px] text-slate-500 font-medium">
+                                    {session.device && (
+                                      <span>💻 Perangkat: {session.device}</span>
+                                    )}
+                                    {session.ip && session.ip !== "-" && (
+                                      <span className="font-mono">📍 IP: {session.ip}</span>
+                                    )}
+                                    {session.location && session.location !== "-" && (
+                                      <span>🌐 Lokasi: {session.location}</span>
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            })
+                          )}
+                        </div>
+
+                        <div className="p-4 border-t border-slate-100 bg-slate-50/50 flex justify-end">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedStaffLoginDetail(null)}
+                            className="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold transition cursor-pointer"
+                          >
+                            Tutup
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* SECTION 2: REKAPITULASI KEHADIRAN (ABSENSI) PENGAJAR & STAF */}
+                <div className="bg-white rounded-3xl p-5 sm:p-6 shadow-xs border border-slate-200/90 space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                     <div>
-                      <h4 className="font-bold text-slate-800 text-sm">Kehadiran (Absensi) Pengajar & Staf</h4>
-                      <span className="text-[9px] text-slate-400 font-medium hidden sm:block">Klik baris untuk lihat detail log · Diurutkan dari yang paling rajin</span>
+                      <h4 className="font-bold text-slate-800 text-sm flex items-center gap-2">
+                        <Clock className="w-4 h-4 text-emerald-600" />
+                        Rekapitulasi Kehadiran (Absensi) Pengajar & Staf
+                      </h4>
+                      <span className="text-[10px] text-slate-400 font-medium hidden sm:block">
+                        Klik baris staf untuk memeriksa detail presensi jam masuk/pulang, foto bukti GPS & log harian.
+                      </span>
                     </div>
                     <div className="flex items-center gap-1.5 shrink-0">
                       <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wide">Periode:</span>
@@ -2033,8 +2735,10 @@ export default function VvipFullEvalSegment({ activeStudents, classFilter, class
                     </table>
                   </div>
                 </div>
-                <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200">
-                  <h4 className="font-bold text-slate-800 text-sm mb-3">Rekening Gaji Pengajar & Staf</h4>
+
+                {/* SECTION 3: REKENING GAJI PENGAJAR & STAF */}
+                <div className="bg-white rounded-3xl p-5 sm:p-6 shadow-xs border border-slate-200/90"> 
+                  <h4 className="font-bold text-slate-800 text-sm mb-3">Rekening Gaji Pengajar & Staf</h4> 
                   <div className="overflow-x-auto"> 
                     <table className="w-full text-left text-xs"> 
                       <thead className="bg-slate-50 text-slate-500"> 
@@ -2054,7 +2758,9 @@ export default function VvipFullEvalSegment({ activeStudents, classFilter, class
                     </table> 
                   </div> 
                 </div> 
-                <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-200"> 
+
+                {/* SECTION 4: PENGAJUAN CUTI & IZIN */}
+                <div className="bg-white rounded-3xl p-5 sm:p-6 shadow-xs border border-slate-200/90"> 
                   <h4 className="font-bold text-slate-800 text-sm mb-3">Pengajuan Cuti & Izin</h4> 
                   <div className="space-y-3"> 
                     {!(systemState.teacherLeaves?.length) && ( 

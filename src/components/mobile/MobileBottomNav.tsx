@@ -42,7 +42,8 @@ import {
   Star,
   Camera,
   Bell,
-  FolderOpen
+  FolderOpen,
+  UserCheck
 } from "lucide-react";
 
 interface MobileBottomNavProps {
@@ -122,7 +123,17 @@ export default function MobileBottomNav({
     if (currentUser?.role !== "Alumni") {
       mainMenus.push(
         { id: "ebenkyou", name: "E-Benkyou", icon: BookOpen },
-        { id: "pembayaran", name: currentUser?.role === "VVIP" ? "Pembayaran Siswa" : (currentUser?.role === "Pengajar" || currentUser?.role?.startsWith("Admin")) ? "HR & Personalia" : "Pembayaran", icon: CreditCard }
+        {
+          id: "pembayaran",
+          name: currentUser?.role === "VVIP"
+            ? "Pembayaran Siswa"
+            : (currentUser?.role === "Pengajar" || currentUser?.role?.startsWith("Admin"))
+            ? "Absen Staff"
+            : (isUserSiswa ? "Tagihan" : "Pembayaran"),
+          icon: (currentUser?.role === "Pengajar" || currentUser?.role?.startsWith("Admin"))
+            ? UserCheck
+            : CreditCard
+        }
       );
     }
 
@@ -171,7 +182,7 @@ export default function MobileBottomNav({
 
 
   return (
-    <div className="fixed bottom-0 inset-x-0 bg-white/90 backdrop-blur-2xl border-t border-slate-200 z-40 pb-safe font-sans overflow-hidden shadow-[0_-8px_30px_rgba(0,0,0,0.05)]">
+    <div className="fixed bottom-0 inset-x-0 w-full bg-white/95 backdrop-blur-2xl border-t border-slate-200 z-40 pb-safe font-sans overflow-hidden shadow-[0_-8px_30px_rgba(0,0,0,0.08)]">
       
       <svg width="0" height="0" className="absolute">
         <defs>

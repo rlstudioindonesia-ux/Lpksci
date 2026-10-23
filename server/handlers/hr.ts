@@ -1,5 +1,5 @@
 import type { Request, Response } from "express";
-import { syncEntityToFirestore, deleteEntityFromFirestore } from "../../src/db/firebase-adapter.ts";
+import { syncEntityToFirestore, deleteEntityFromFirestore, uploadBufferToFirebaseStorage } from "../../src/db/firebase-adapter.ts";
 
 // Attendance, salaries, and teacher leave/report/contract records
 // Extracted verbatim from the monolithic /api/state/update handler in server.ts.
@@ -10,75 +10,127 @@ export function handleHrState(req: Request, res: Response, dataType: string, act
 
 
     if (dataType === "attendance" && action === "add") {
-      const newAtt = {
-        id: `ATT-${Date.now().toString().slice(-4)}`,
-        studentId: payload.studentId,
-        studentName: payload.studentName,
-        date: payload.date || new Date().toISOString().split("T")[0],
-        status: payload.status,
-        subject: payload.subject,
-        notes: payload.notes || "",
-        class: payload.class || "",
-        sensei: payload.sensei || "",
-        type: payload.type || "",
-        location: payload.location || "",
-        photo: payload.photo || "",
-        year: payload.year || "",
-        role: payload.role || "",
-        time: payload.time || "",
-        hasPermission: !!payload.hasPermission
-      };
-      state.attendance.unshift(newAtt);
-      syncEntityToFirestore("attendance", newAtt.id, newAtt);
+      let photoUrl = payload.photo || payload.photoUrl || payload.proof || "";
 
-      // Update student's attendanceScore dynamically
-      if (payload.studentId) {
-        const student = state.activeStudents.find(s => s.id === payload.studentId);
-        if (student) {
-          const stRecords = state.attendance.filter(a => a.studentId === payload.studentId);
-          const presentCount = stRecords.filter(a => a.status === "Hadir").length;
-          const totalRecords = stRecords.length;
-          student.attendanceScore = totalRecords > 0 ? Math.round((presentCount / totalRecords) * 100) : 0;
-
-          // Also sync to firestore if using firebase
-          if (typeof syncEntityToFirestore !== "undefined") {
-            syncEntityToFirestore("activeStudents", student.id, student);
+      const processAttendance = async () => {
+        if (photoUrl && typeof photoUrl === "string" && photoUrl.startsWith("data:image")) {
+          try {
+            const commaIdx = photoUrl.indexOf(",");
+            const semiIdx = photoUrl.indexOf(";");
+            const mime = (semiIdx !== -1 && commaIdx !== -1) ? photoUrl.substring(5, semiIdx) : "image/jpeg";
+            const b64 = commaIdx !== -1 ? photoUrl.substring(commaIdx + 1) : photoUrl;
+            const buf = Buffer.from(b64, "base64");
+            const filename = `student_absen_${payload.studentId || "siswa"}_${Date.now()}.jpg`;
+            photoUrl = await uploadBufferToFirebaseStorage(buf, filename, mime, "attendance_photos");
+          } catch (storageErr) {
+            console.warn("[Firebase Storage] Note during student attendance photo upload:", storageErr);
           }
         }
-      }
-      return res.json({ success: true, item: newAtt });
+
+        const newAtt = {
+          id: `ATT-${Date.now().toString().slice(-4)}`,
+          studentId: payload.studentId,
+          studentName: payload.studentName,
+          date: payload.date || new Date().toISOString().split("T")[0],
+          status: payload.status,
+          subject: payload.subject,
+          notes: payload.notes || "",
+          class: payload.class || "",
+          sensei: payload.sensei || "",
+          type: payload.type || "",
+          location: payload.location || "",
+          photo: photoUrl,
+          photoUrl: photoUrl,
+          year: payload.year || "",
+          role: payload.role || "",
+          time: payload.time || "",
+          hasPermission: !!payload.hasPermission
+        };
+        state.attendance.unshift(newAtt);
+        syncEntityToFirestore("attendance", newAtt.id, newAtt);
+
+        // Update student's attendanceScore dynamically
+        if (payload.studentId) {
+          const student = state.activeStudents.find((s: any) => s.id === payload.studentId);
+          if (student) {
+            const stRecords = state.attendance.filter((a: any) => a.studentId === payload.studentId);
+            const presentCount = stRecords.filter((a: any) => a.status === "Hadir").length;
+            const totalRecords = stRecords.length;
+            student.attendanceScore = totalRecords > 0 ? Math.round((presentCount / totalRecords) * 100) : 0;
+
+            // Also sync to firestore if using firebase
+            if (typeof syncEntityToFirestore !== "undefined") {
+              syncEntityToFirestore("activeStudents", student.id, student);
+            }
+          }
+        }
+        return res.json({ success: true, item: newAtt });
+      };
+
+      processAttendance().catch((err) => {
+        console.error("Error saving attendance:", err);
+        return res.status(500).json({ error: "Failed to save attendance" });
+      });
+      return true;
     }
 
 
-    if (dataType === "attendance" && action === "delete") {
+    if ((dataType === "attendance" || dataType === "attendanceRecords") && action === "delete") {
       const { id } = payload;
+      const attRecord = state.attendance.find((a: any) => a.id === id);
+      const studentId = attRecord?.studentId;
       state.attendance = state.attendance.filter((a: any) => a.id !== id);
       if (id) deleteEntityFromFirestore("attendance", id);
+      if (studentId) {
+        const student = state.activeStudents.find(s => s.id === studentId);
+        if (student) {
+          const stRecords = state.attendance.filter(a => a.studentId === studentId);
+          const presentCount = stRecords.filter(a => a.status === "Hadir").length;
+          const totalRecords = stRecords.length;
+          student.attendanceScore = totalRecords > 0 ? Math.round((presentCount / totalRecords) * 100) : 0;
+          syncEntityToFirestore("activeStudents", student.id, student);
+        }
+      }
       return res.json({ success: true, id });
     }
 
 
-    if (dataType === "attendance" && action === "edit") {
+    if ((dataType === "attendance" || dataType === "attendanceRecords") && (action === "bulk" || action === "bulkSync")) {
+      const items = Array.isArray(payload) ? payload : (payload.items || []);
+      if (!state.attendance) state.attendance = [];
+      const idMap = new Set(state.attendance.map((a: any) => a.id));
+      for (const item of items) {
+        if (!idMap.has(item.id)) {
+          state.attendance.push(item);
+          idMap.add(item.id);
+        }
+      }
+      return res.json({ success: true, count: state.attendance.length });
+    }
+
+    if ((dataType === "attendance" || dataType === "attendanceRecords") && (action === "edit" || action === "upsert" || action === "sync")) {
       const index = state.attendance.findIndex((a: any) => a.id === payload.id);
       if (index !== -1) {
         state.attendance[index] = { ...state.attendance[index], ...payload };
         syncEntityToFirestore("attendance", state.attendance[index].id, state.attendance[index]);
-
-        // Recompute the student's attendanceScore in case status changed.
-        const studentId = state.attendance[index].studentId;
-        if (studentId) {
-          const student = state.activeStudents.find(s => s.id === studentId);
-          if (student) {
-            const stRecords = state.attendance.filter(a => a.studentId === studentId);
-            const presentCount = stRecords.filter(a => a.status === "Hadir").length;
-            const totalRecords = stRecords.length;
-            student.attendanceScore = totalRecords > 0 ? Math.round((presentCount / totalRecords) * 100) : 0;
-            syncEntityToFirestore("activeStudents", student.id, student);
-          }
-        }
-        return res.json({ success: true, item: state.attendance[index] });
+      } else {
+        state.attendance.push(payload);
+        syncEntityToFirestore("attendance", payload.id, payload);
       }
-      return res.status(404).json({ error: "Attendance record not found" });
+
+      // Recompute the student's attendanceScore in case status changed.
+      const studentId = payload.studentId;
+      if (studentId) {
+        const student = state.activeStudents.find((s: any) => s.id === studentId);
+        if (student) {
+          const stRecords = state.attendance.filter((a: any) => a.studentId === studentId);
+          const presentCount = stRecords.filter((a: any) => a.status === "Hadir").length;
+          const totalRecords = stRecords.length;
+          student.attendanceScore = totalRecords > 0 ? Math.round((presentCount / totalRecords) * 100) : 0;
+          syncEntityToFirestore("activeStudents", student.id, student);
+        }
+      }
+      return res.json({ success: true, item: payload });
     }
 
 

@@ -4,6 +4,8 @@ import { SystemState, UserAccount, PaymentRecord } from "../types";
 import { uploadFileToFirebase } from "../lib/storageHelper";
 import { isStudentAlumni } from "../lib/alumniStatus";
 import { matchesPaymentCategory, categorizePaymentBucket } from "../lib/paymentCategoryMatching";
+import { db } from "../firebaseClient";
+import { doc, setDoc } from "firebase/firestore";
 import { isAdminOrVvip as isAdminOrVvipRole, isAdminTier } from "../lib/permissions";
 import { 
   CreditCard, Search, CheckCircle, AlertCircle, TrendingUp, 
@@ -27,8 +29,8 @@ import {
   CartesianGrid
 } from "recharts";
 import PaymentDetailModal from "./PaymentDetailModal";
-import { TeacherDashboardPanel } from "./TeacherDashboardPanel";
 import { ConfirmButton } from "./ConfirmButton";
+import { TeacherDashboardPanel } from "./TeacherDashboardPanel";
 
 function parsePrice(priceStr: string | number | undefined): number {
   if (!priceStr) return 1000000;
@@ -132,9 +134,12 @@ export function getStudentPayments(
 
   const defaultCategories = [
     { idSuffix: "1", category: "Administrasi Pendaftaran", amount: (costConfig?.registration ?? 500000), defaultStatus: "Belum Bayar" as const, defaultMethod: "" },
-    { idSuffix: "2", category: "DP Biaya Belajar (Persiapan Awal)", amount: (costConfig?.dp ?? 3500000), defaultStatus: "Belum Bayar" as const, defaultMethod: "" },
-    { idSuffix: "3", category: "Pelunasan Biaya Belajar (Max 1 Bulan)", amount: (costConfig?.fullPayment ?? 2000000), defaultStatus: "Belum Bayar" as const, defaultMethod: "" },
-    { idSuffix: "4", category: "Pembayaran Manajemen Fee", amount: (costConfig?.managementFee ?? 5000000), defaultStatus: "Belum Bayar" as const, defaultMethod: "" }
+    { idSuffix: "2", category: "Biaya Belajar Tahap 1", amount: (costConfig?.dp ?? 5000000), defaultStatus: "Belum Bayar" as const, defaultMethod: "" },
+    { idSuffix: "3", category: "Biaya Belajar Tahap 2", amount: (costConfig?.fullPayment ?? 2000000), defaultStatus: "Belum Bayar" as const, defaultMethod: "" },
+    { idSuffix: "5", category: "Biaya Belajar Tahap 3 (Level Belajar N4)", amount: (costConfig?.stage3 ?? 3000000), defaultStatus: "Belum Bayar" as const, defaultMethod: "" },
+    ...(costConfig?.managementFee && costConfig.managementFee > 0 ? [
+      { idSuffix: "4", category: "Pembayaran Manajemen Fee", amount: costConfig.managementFee, defaultStatus: "Belum Bayar" as const, defaultMethod: "" }
+    ] : [])
   ];
 
   const result: PaymentRecord[] = [];
@@ -218,7 +223,7 @@ export default function PembayaranSiswaView({
   const [activePaymentDetail, setActivePaymentDetail] = useState<PaymentRecord | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedStudent, setSelectedStudent] = useState<string>("");
-  const [adminActiveTab, setAdminActiveTab] = useState<"dashboard" | "manajemen" | "settings" | "grafik">("dashboard");
+  const [adminActiveTab, setAdminActiveTab] = useState<"dashboard" | "manajemen" | "settings" | "grafik" | "absen_staff">("dashboard");
   const [sidebarFilter, setSidebarFilter] = useState<"siswa" | "alumni">("siswa");
   const [sidebarPage, setSidebarPage] = useState(1);
 
@@ -229,9 +234,21 @@ export default function PembayaranSiswaView({
   // Cost configs
   const [showCostConfig, setShowCostConfig] = useState(false);
   const [costRegistration, setCostRegistration] = useState(systemState.costConfig?.registration ?? 500000);
-  const [costDP, setCostDP] = useState(systemState.costConfig?.dp ?? 3500000);
+  const [costDP, setCostDP] = useState(systemState.costConfig?.dp ?? 5000000);
   const [costFullPayment, setCostFullPayment] = useState(systemState.costConfig?.fullPayment ?? 2000000);
-  const [costManagementFee, setCostManagementFee] = useState(systemState.costConfig?.managementFee ?? 5000000);
+  const [costStage3, setCostStage3] = useState(systemState.costConfig?.stage3 ?? 3000000);
+  const [costManagementFee, setCostManagementFee] = useState(systemState.costConfig?.managementFee ?? 0);
+
+  // Sync inputs dynamically whenever costConfig updates from real-time database
+  React.useEffect(() => {
+    if (systemState.costConfig) {
+      setCostRegistration(systemState.costConfig.registration ?? 500000);
+      setCostDP(systemState.costConfig.dp ?? 5000000);
+      setCostFullPayment(systemState.costConfig.fullPayment ?? 2000000);
+      setCostStage3(systemState.costConfig.stage3 ?? 3000000);
+      setCostManagementFee(systemState.costConfig.managementFee ?? 0);
+    }
+  }, [systemState.costConfig]);
 
   // Manual payment creation / editing
   const [showAddPaymentModal, setShowAddPaymentModal] = useState(false);
@@ -266,16 +283,52 @@ export default function PembayaranSiswaView({
   const [syncMode, setSyncMode] = useState<"create" | "merge">("create");
   const [syncTargetStudent, setSyncTargetStudent] = useState("");
 
+  const [isSavingCost, setIsSavingCost] = useState(false);
+  const [costSaveSuccess, setCostSaveSuccess] = useState(false);
+
   const handleSaveCostConfig = async (e: React.FormEvent) => {
     e.preventDefault();
-    await onUpdateState('costConfig', 'update', { 
-      registration: costRegistration,
-      dp: costDP,
-      fullPayment: costFullPayment,
-      managementFee: costManagementFee
-    });
-    alert("Konfigurasi SOP Biaya Resmi berhasil disimpan!");
-    setShowCostConfig(false);
+    setIsSavingCost(true);
+    setCostSaveSuccess(false);
+
+    const newConfig = { 
+      registration: Math.max(0, Number(costRegistration) || 0),
+      dp: Math.max(0, Number(costDP) || 0),
+      fullPayment: Math.max(0, Number(costFullPayment) || 0),
+      stage3: Math.max(0, Number(costStage3) || 0),
+      managementFee: Math.max(0, Number(costManagementFee) || 0),
+      updatedAt: Date.now()
+    };
+
+    try {
+      // 1. Direct write to Firestore for instant sub-second propagation
+      if (db) {
+        try {
+          await setDoc(doc(db, 'system', 'costConfig'), newConfig, { merge: true });
+          await setDoc(doc(db, 'system', 'sync_meta'), {
+            dataType: 'costConfig',
+            action: 'update',
+            source: 'pembayaran-admin',
+            updatedAt: Date.now()
+          }, { merge: true });
+        } catch (dbErr) {
+          console.warn("Direct Firestore costConfig write fallback:", dbErr);
+        }
+      }
+
+      // 2. Call backend state update API for in-memory sync and cache invalidation
+      await onUpdateState('costConfig', 'update', newConfig);
+
+      setCostSaveSuccess(true);
+      setTimeout(() => {
+        setCostSaveSuccess(false);
+        setShowCostConfig(false);
+      }, 3000);
+    } catch (err) {
+      console.error("Error saving costConfig:", err);
+    } finally {
+      setIsSavingCost(false);
+    }
   };
 
   const handleDeletePayment = async (paymentId: string, paymentRecord?: PaymentRecord) => {
@@ -288,9 +341,9 @@ export default function PembayaranSiswaView({
       p.id === paymentId || 
       (
         targetStudent && targetCategory &&
-        (p.studentName || "").trim().toLowerCase() === targetStudent.trim().toLowerCase() &&
+        (p.studentName || "").trim().toLowerCase() === String(targetStudent).trim().toLowerCase() &&
         (
-          (p.category || "").trim().toLowerCase() === targetCategory.trim().toLowerCase() ||
+          (p.category || "").trim().toLowerCase() === String(targetCategory).trim().toLowerCase() ||
           (targetCategory.includes("Pendaftaran") && (p.category || "").toLowerCase().includes("pendaftaran")) ||
           (targetCategory.includes("DP Biaya") && ((p.category || "").toLowerCase().includes("dp") || (p.category || "").toLowerCase().includes("pelatihan") || (p.category || "").toLowerCase().includes("asrama"))) ||
           (targetCategory.includes("Pelunasan") && (p.category || "").toLowerCase().includes("pelunasan")) ||
@@ -431,26 +484,6 @@ export default function PembayaranSiswaView({
     );
   }
 
-  // Check if teacher/staff is redirected to TeacherDashboardPanel for their
-  // own personal attendance/salary/leave. Admin-tier staff (Admin, Admin
-  // Super, Admin Biasa) need this too - they clock in daily just like
-  // Pengajar - so they're included here. VVIP is the business owner, not
-  // day-to-day staff, so they keep the full financial oversight view below
-  // instead. Alumni are NOT staff either - they fall through to the
-  // personal "Portal Tagihan Mandiri" like any other student.
-  const isPersonalStaff = currentUser.role === "Pengajar" || isAdminTier(currentUser.role);
-
-  if (isPersonalStaff) {
-    return (
-      <TeacherDashboardPanel 
-        currentUser={currentUser} 
-        systemState={systemState} 
-        onUpdateState={onUpdateState} 
-        setActiveTab={setActiveTab} 
-      />
-    );
-  }
-
   const isAdminOrVvip = isAdminOrVvipRole(currentUser.role);
 
   // Registered Student Names Set (from official accounts & active registration records)
@@ -482,7 +515,7 @@ export default function PembayaranSiswaView({
 
   const activeStudentNames = allStudentNames.filter(name => !alumniStudentNames.includes(name));
 
-  const isSelectedStudentManual = Boolean(selectedStudent) && !registeredStudentNamesSet.has(selectedStudent.trim());
+  const isSelectedStudentManual = Boolean(selectedStudent) && typeof selectedStudent === "string" && !registeredStudentNamesSet.has(selectedStudent.trim());
 
   const handleOpenSyncModal = (manualName: string) => {
     if (!manualName) return;
@@ -550,10 +583,11 @@ export default function PembayaranSiswaView({
   let totalTunggakanGross = 0;
   let totalPendingVerification = 0;
 
-  const categoryStats = {
+  const categoryStats: Record<string, { lunas: number; tunggakan: number; total: number }> = {
     "Administrasi Pendaftaran": { lunas: 0, tunggakan: 0, total: 0 },
-    "DP Biaya Belajar": { lunas: 0, tunggakan: 0, total: 0 },
-    "Pelunasan Biaya Belajar": { lunas: 0, tunggakan: 0, total: 0 },
+    "Biaya Belajar Tahap 1": { lunas: 0, tunggakan: 0, total: 0 },
+    "Biaya Belajar Tahap 2": { lunas: 0, tunggakan: 0, total: 0 },
+    "Biaya Belajar Tahap 3 (N4)": { lunas: 0, tunggakan: 0, total: 0 },
     "Manajemen Fee": { lunas: 0, tunggakan: 0, total: 0 }
   };
 
@@ -574,7 +608,7 @@ export default function PembayaranSiswaView({
       }
 
       const bucket = categorizePaymentBucket(p.category);
-      if (bucket) {
+      if (bucket && categoryStats[bucket]) {
         categoryStats[bucket].total += amount;
         if (isLunas) categoryStats[bucket].lunas += amount;
         else categoryStats[bucket].tunggakan += amount;
@@ -654,6 +688,17 @@ export default function PembayaranSiswaView({
                   <BarChart3 className="w-4 h-4 shrink-0" /> 
                   <span className="truncate">Grafik Keuangan Siswa</span>
                   <span className="ml-1 text-[8.5px] bg-amber-400 text-slate-950 px-1.5 py-0.5 rounded-full font-black tracking-tight">SUPER & VVIP</span>
+                </button>
+                <button
+                  onClick={() => setAdminActiveTab("absen_staff")}
+                  className={`w-full sm:w-auto px-4 py-2.5 rounded-xl text-xs font-black uppercase tracking-wider transition-all duration-300 flex items-center justify-center gap-2 cursor-pointer ${
+                    adminActiveTab === "absen_staff"
+                      ? "bg-gradient-to-r from-emerald-600 via-teal-600 to-cyan-600 text-white shadow-lg shadow-emerald-500/30 scale-[1.02]"
+                      : "bg-gradient-to-r from-slate-50 to-slate-100 text-slate-700 hover:from-emerald-600 hover:to-teal-600 hover:text-white border border-slate-200 hover:border-transparent hover:shadow-md"
+                  }`}
+                >
+                  <UserCheck className="w-4 h-4 shrink-0 text-emerald-600 group-hover:text-white" />
+                  <span className="truncate">Absen & HR Staf</span>
                 </button>
               </div>
             </div>
@@ -889,7 +934,7 @@ export default function PembayaranSiswaView({
                               <div className="truncate pr-2 text-left">
                                 <div className="flex items-center gap-1.5 flex-wrap">
                                   <span className="truncate block font-semibold">{name}</span>
-                                  {!registeredStudentNamesSet.has(name.trim()) && (
+                                  {typeof name === "string" && !registeredStudentNamesSet.has(name.trim()) && (
                                     <span 
                                       className={`text-[8px] px-1 py-0.2 rounded font-black shrink-0 ${
                                         isSelected 
@@ -1008,7 +1053,7 @@ export default function PembayaranSiswaView({
                           confirmMessage={`Apakah Anda yakin ingin menghapus seluruh rincian riwayat tagihan/pembayaran milik "${selectedStudent}"? Data profil & akun siswa TIDAK akan terhapus.`}
                           onConfirmClick={async () => {
                             // Tandai semua pembayaran milik siswa sebagai dihapus
-                            const studentPayments = systemState.payments?.filter(p => (p.studentName || "").trim().toLowerCase() === selectedStudent.trim().toLowerCase()) || [];
+                            const studentPayments = systemState.payments?.filter(p => (p.studentName || "").trim().toLowerCase() === String(selectedStudent || "").trim().toLowerCase()) || [];
                             for (const p of studentPayments) {
                               await onUpdateState('payments', 'update', { ...p, status: "Dihapus", isDeleted: true });
                             }
@@ -1303,25 +1348,63 @@ export default function PembayaranSiswaView({
                   <p className="text-[10px] text-slate-400">Tentukan standar nominal wajib untuk setiap paket pendaftaran.</p>
                 </div>
 
-                <form onSubmit={handleSaveCostConfig} className="space-y-4">
+                <form onSubmit={handleSaveCostConfig} className="space-y-3.5">
                   <div>
                     <label className="text-[10px] font-bold text-slate-500 uppercase font-mono block mb-1">Administrasi Pendaftaran (Rp)</label>
                     <input type="number" required value={costRegistration} onChange={e => setCostRegistration(Number(e.target.value))} className="w-full border rounded-xl p-2 text-xs font-bold font-mono outline-none focus:border-indigo-500" />
                   </div>
                   <div>
-                    <label className="text-[10px] font-bold text-slate-500 uppercase font-mono block mb-1">DP Biaya Belajar (Persiapan Awal) (Rp)</label>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase font-mono block mb-1">Biaya Belajar Tahap 1 (Rp)</label>
                     <input type="number" required value={costDP} onChange={e => setCostDP(Number(e.target.value))} className="w-full border rounded-xl p-2 text-xs font-bold font-mono outline-none focus:border-indigo-500" />
                   </div>
                   <div>
-                    <label className="text-[10px] font-bold text-slate-500 uppercase font-mono block mb-1">Pelunasan Biaya Belajar (Rp)</label>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase font-mono block mb-1">Biaya Belajar Tahap 2 (Rp)</label>
                     <input type="number" required value={costFullPayment} onChange={e => setCostFullPayment(Number(e.target.value))} className="w-full border rounded-xl p-2 text-xs font-bold font-mono outline-none focus:border-indigo-500" />
                   </div>
                   <div>
-                    <label className="text-[10px] font-bold text-slate-500 uppercase font-mono block mb-1">Management Fee (Pasca Lolos CoE) (Rp)</label>
-                    <input type="number" required value={costManagementFee} onChange={e => setCostManagementFee(Number(e.target.value))} className="w-full border rounded-xl p-2 text-xs font-bold font-mono outline-none focus:border-indigo-500" />
+                    <label className="text-[10px] font-bold text-slate-500 uppercase font-mono block mb-1">Biaya Belajar Tahap 3 (Level Belajar N4) (Rp)</label>
+                    <input type="number" required value={costStage3} onChange={e => setCostStage3(Number(e.target.value))} className="w-full border rounded-xl p-2 text-xs font-bold font-mono outline-none focus:border-indigo-500" />
                   </div>
-                  <button type="submit" className="w-full py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold cursor-pointer transition">
-                    Simpan SOP Biaya Baru
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-500 uppercase font-mono block mb-1">Management Fee (Pasca Lolos CoE / Opsional) (Rp)</label>
+                    <input type="number" value={costManagementFee} onChange={e => setCostManagementFee(Number(e.target.value))} className="w-full border rounded-xl p-2 text-xs font-bold font-mono outline-none focus:border-indigo-500" />
+                  </div>
+
+                  <div className="p-3 bg-indigo-50/60 rounded-xl border border-indigo-100 flex justify-between items-center text-xs">
+                    <span className="font-bold text-indigo-950 font-sans">Total Paket Belajar:</span>
+                    <span className="font-mono font-black text-indigo-700">
+                      Rp {(costRegistration + costDP + costFullPayment + costStage3 + costManagementFee).toLocaleString('id-ID')}
+                    </span>
+                  </div>
+
+                  {costSaveSuccess && (
+                    <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl text-xs font-semibold flex items-center gap-2 animate-in fade-in duration-200">
+                      <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+                      <span>SOP Biaya Resmi berhasil diperbarui & disinkronkan real-time ke seluruh database!</span>
+                    </div>
+                  )}
+
+                  <button 
+                    type="submit" 
+                    disabled={isSavingCost}
+                    className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 text-white rounded-xl text-xs font-bold cursor-pointer transition shadow-sm flex items-center justify-center gap-2"
+                  >
+                    {isSavingCost ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin text-white" />
+                        <span>Menyimpan & Mengintegrasikan Real-Time...</span>
+                      </>
+                    ) : costSaveSuccess ? (
+                      <>
+                        <CheckCircle className="w-4 h-4 text-emerald-300" />
+                        <span>Tersimpan & Terintegrasi Real-Time!</span>
+                      </>
+                    ) : (
+                      <>
+                        <RefreshCw className="w-3.5 h-3.5" />
+                        <span>Simpan Perubahan Real-Time</span>
+                      </>
+                    )}
                   </button>
                 </form>
               </div>
@@ -1688,6 +1771,28 @@ export default function PembayaranSiswaView({
             </div>
           )}
 
+          {/* ABSEN & HR STAF (TeacherDashboardPanel) */}
+          {adminActiveTab === "absen_staff" && (
+            <div className="bg-white rounded-3xl border border-slate-200 p-2 sm:p-4 shadow-sm animate-fade-in">
+              <TeacherDashboardPanel
+                currentUser={currentUser}
+                systemState={systemState}
+                onUpdateState={onUpdateState}
+                setActiveTab={setActiveTab}
+              />
+            </div>
+          )}
+
+        </div>
+      ) : currentUser?.role === "Pengajar" ? (
+        /* 2. TEACHER/STAFF ATTENDANCE PORTAL (Pengajar Access) */
+        <div className="bg-white rounded-3xl border border-slate-200 p-2 sm:p-4 shadow-sm animate-fade-in">
+          <TeacherDashboardPanel
+            currentUser={currentUser}
+            systemState={systemState}
+            onUpdateState={onUpdateState}
+            setActiveTab={setActiveTab}
+          />
         </div>
       ) : (
         

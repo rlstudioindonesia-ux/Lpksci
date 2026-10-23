@@ -49,7 +49,7 @@ export const StudentActivitySummary = ({ systemState }: { systemState: any }) =>
     if (st.status === "Belajar" || st.status === "Dikeluarkan") return false;
     const matchedUser = users.find((u: any) =>
       u.studentId === st.id ||
-      (u.name && st.name && u.name.trim().toLowerCase() === st.name.trim().toLowerCase())
+      (typeof u.name === "string" && typeof st.name === "string" && u.name.trim().toLowerCase() === st.name.trim().toLowerCase())
     );
     if (matchedUser && hasStaffOversight(matchedUser.role)) {
       return false;
@@ -115,7 +115,7 @@ export const StudentActivitySummary = ({ systemState }: { systemState: any }) =>
 
             const matchedUser = users.find((u: any) =>
               u.studentId === st.id ||
-              (u.name && st.name && u.name.trim().toLowerCase() === st.name.trim().toLowerCase())
+              (typeof u.name === "string" && typeof st.name === "string" && u.name.trim().toLowerCase() === st.name.trim().toLowerCase())
             );
             const isAlumni =
               isStudentAlumni(st) || matchedUser?.role === "Alumni" || isAlumniClassName(st.class);

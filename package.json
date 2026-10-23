@@ -13,7 +13,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@google/genai": "^2.4.0",
+    "@google-cloud/storage": "^8.0.1",
     "@tailwindcss/vite": "^4.1.14",
     "@types/compression": "^1.8.1",
     "@types/express": "^4.17.21",
@@ -47,6 +47,7 @@
     "@testing-library/user-event": "^14.6.4",
     "@types/bcryptjs": "^2.4.6",
     "jsdom": "^30.0.1",
+    "sharp": "^0.35.4",
     "vitest": "^4.1.10"
   }
 }

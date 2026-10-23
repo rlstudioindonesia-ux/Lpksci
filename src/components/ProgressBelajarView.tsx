@@ -8,6 +8,7 @@ import { SystemState, UserAccount, ActiveStudent, ChapterAssessment } from "../t
 import { CHAPTERS_LIST } from "../chapters";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { uploadFileToFirebase, getEmbeddablePdfUrl } from "../lib/storageHelper";
+import { MediaViewerModal } from "./MediaViewerModal";
 import { resolveAttendanceScore } from "../lib/attendanceMetrics";
 import { computeSubjectAverage } from "../lib/scoreAveraging";
 import { hasStaffOversight } from "../lib/permissions";
@@ -89,9 +90,11 @@ export default function ProgressBelajarView({
 
   // Filter students
   const filteredStudents = (systemState?.activeStudents || []).filter(student => {
-    const matchesSearch = student.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                          student.class.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesClass = selectedClassFilter === "Semua" || student.class === selectedClassFilter;
+    const sName = String(student?.name || "").toLowerCase();
+    const sClass = String(student?.class || "").toLowerCase();
+    const q = (searchQuery || "").toLowerCase();
+    const matchesSearch = sName.includes(q) || sClass.includes(q);
+    const matchesClass = selectedClassFilter === "Semua" || (student?.class || "") === selectedClassFilter;
     return matchesSearch && matchesClass;
   });
 
@@ -964,92 +967,11 @@ export default function ProgressBelajarView({
 
       {/* Document Viewer Modal */}
       {viewingDoc && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm z-[9999] flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white rounded-3xl max-w-3xl w-full overflow-hidden shadow-2xl border border-slate-100 flex flex-col max-h-[90vh]">
-            <div className="p-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
-              <h4 className="font-bold text-slate-800 text-sm">
-                {viewingDoc.title}
-              </h4>
-              <button
-                type="button"
-                onClick={() => setViewingDoc(null)}
-                className="p-1.5 hover:bg-slate-200 rounded-full transition text-slate-500 hover:text-slate-800 cursor-pointer"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-            <div className="p-6 bg-slate-900 flex flex-col items-center justify-center min-h-[50vh] max-h-[70vh] overflow-y-auto gap-4">
-              {!viewingDoc.url || (!viewingDoc.url.startsWith('http') && !viewingDoc.url.startsWith('data:')) ? (
-                <div className="text-center p-8 bg-slate-800 rounded-2xl border border-slate-700 max-w-sm">
-                  <div className="text-amber-500 text-3xl mb-2">⚠️</div>
-                  <p className="text-sm font-bold text-slate-200">Berkas tidak tersedia</p>
-                  <p className="text-xs text-slate-400 mt-1">Dokumen belum diunggah.</p>
-                </div>
-              ) : viewingDoc.url.includes("application/pdf") || viewingDoc.url.toLowerCase().includes(".pdf") ? (
-                <div className="w-full flex flex-col items-center gap-4">
-                  <div className="bg-slate-800 p-4 rounded-2xl border border-slate-700 text-center max-w-md w-full">
-                    <p className="text-xs text-slate-300 font-bold mb-3">
-                      Dokumen ini adalah format PDF.
-                    </p>
-                    <div className="flex flex-col sm:flex-row gap-3 justify-center">
-                      <a
-                        href={viewingDoc.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="px-4 py-2 bg-indigo-900 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs transition shadow-sm text-center cursor-pointer flex items-center justify-center gap-2"
-                      >
-                        <Eye className="h-4 w-4" />
-                        <span>Buka PDF di Tab Baru</span>
-                      </a>
-                    </div>
-                  </div>
-                  <object
-                    data={getEmbeddablePdfUrl(viewingDoc.url)}
-                    type="application/pdf"
-                    className="w-full h-[45vh] bg-white rounded-lg shadow-md border border-slate-200"
-                  >
-                    <iframe
-                      src={getEmbeddablePdfUrl(viewingDoc.url)}
-                      title="PDF Viewer"
-                      className="w-full h-full bg-white rounded-lg border-0"
-                    />
-                  </object>
-                </div>
-              ) : (
-                <div className="w-full flex flex-col items-center gap-4">
-                  <div className="flex flex-wrap gap-3 justify-center items-center w-full">
-                    <a
-                      href={viewingDoc.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="px-4 py-2 bg-indigo-900 hover:bg-indigo-700 text-white font-bold rounded-xl text-xs transition shadow-sm text-center cursor-pointer flex items-center justify-center gap-2"
-                    >
-                      <Eye className="h-4 w-4" />
-                      <span>Buka Gambar di Tab Baru</span>
-                    </a>
-                  </div>
-                  <div className="w-full overflow-auto flex items-center justify-center p-4 bg-slate-950/40 rounded-2xl border border-slate-800 max-h-[50vh]">
-                    <img
-                      src={viewingDoc.url}
-                      alt="Dokumen"
-                      referrerPolicy="no-referrer"
-                      className="max-w-full max-h-[40vh] object-contain rounded-lg shadow-md"
-                    />
-                  </div>
-                </div>
-              )}
-            </div>
-            <div className="p-4 border-t border-slate-100 flex justify-end bg-slate-50">
-              <button
-                type="button"
-                onClick={() => setViewingDoc(null)}
-                className="px-4 py-2 bg-indigo-900 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition shadow-sm cursor-pointer"
-              >
-                Tutup
-              </button>
-            </div>
-          </div>
-        </div>
+        <MediaViewerModal
+          url={viewingDoc.url}
+          title={viewingDoc.title}
+          onClose={() => setViewingDoc(null)}
+        />
       )}
 
     </div>

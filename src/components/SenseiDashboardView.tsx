@@ -38,7 +38,7 @@ export default function SenseiDashboardView({ currentUser, systemState }: Sensei
   const uniqueClasses = React.useMemo(() => {
     const classesSet = new Set<string>();
     (systemState.activeStudents || []).forEach((s: any) => {
-      if (s.class) {
+      if (s?.class && typeof s.class === "string" && s.class.trim()) {
         classesSet.add(s.class.trim());
       }
     });
@@ -243,20 +243,36 @@ export default function SenseiDashboardView({ currentUser, systemState }: Sensei
               >
                 Sebelumnya
               </button>
-              {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
-                <button
-                  key={page}
-                  type="button"
-                  onClick={() => setCurrentPage(page)}
-                  className={`w-8 h-8 rounded-lg text-xs font-bold transition cursor-pointer ${
-                    currentPage === page
-                      ? "bg-indigo-600 text-white shadow-xs"
-                      : "border border-slate-200 text-slate-700 bg-white hover:bg-slate-50"
-                  }`}
-                >
-                  {page}
-                </button>
-              ))}
+              {(totalPages <= 7
+                ? Array.from({ length: totalPages }, (_, i) => i + 1)
+                : currentPage <= 4
+                ? [1, 2, 3, 4, 5, "...", totalPages]
+                : currentPage >= totalPages - 3
+                ? [1, "...", totalPages - 4, totalPages - 3, totalPages - 2, totalPages - 1, totalPages]
+                : [1, "...", currentPage - 1, currentPage, currentPage + 1, "...", totalPages]
+              ).map((page, idx) => {
+                if (typeof page === "string") {
+                  return (
+                    <span key={`ell-${idx}`} className="w-6 text-center text-slate-400 font-black text-xs select-none">
+                      …
+                    </span>
+                  );
+                }
+                return (
+                  <button
+                    key={page}
+                    type="button"
+                    onClick={() => setCurrentPage(page)}
+                    className={`w-8 h-8 rounded-lg text-xs font-bold transition cursor-pointer ${
+                      currentPage === page
+                        ? "bg-indigo-600 text-white shadow-xs"
+                        : "border border-slate-200 text-slate-700 bg-white hover:bg-slate-50"
+                    }`}
+                  >
+                    {page}
+                  </button>
+                );
+              })}
               <button
                 type="button"
                 disabled={currentPage === totalPages}

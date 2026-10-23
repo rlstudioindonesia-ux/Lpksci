@@ -68,17 +68,24 @@ body {
 
 @keyframes marquee {
   0% {
-    transform: translateX(15%);
+    transform: translateX(0%);
   }
   100% {
-    transform: translateX(-100%);
+    transform: translateX(-50%);
   }
 }
 
 .animate-marquee {
-  display: inline-block;
+  display: inline-flex;
   white-space: nowrap;
-  animation: marquee 25s linear infinite;
+  animation: marquee 35s linear infinite;
+  will-change: transform;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .animate-marquee:hover {
+    animation-play-state: paused;
+  }
 }
 @layer utilities {
   .hide-scrollbar::-webkit-scrollbar {

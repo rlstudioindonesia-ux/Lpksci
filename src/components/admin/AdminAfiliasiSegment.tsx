@@ -33,10 +33,10 @@ export default function AdminAfiliasiSegment({ affiliateSearch, selectedReferrer
                   const isSelfReferral = (s: { id: string; name: string; email?: string }, ref: string) => {
                     const r = (ref || "").trim().toLowerCase();
                     if (!r) return false;
-                    if (s.name && s.name.trim().toLowerCase() === r) return true;
-                    if (s.email && s.email.trim().toLowerCase() === r) return true;
-                    const ownUser = (systemState.users || []).find(u => u.studentId === s.id || u.name === s.name);
-                    return !!ownUser && ownUser.username.trim().toLowerCase() === r;
+                    if (s?.name && typeof s.name === "string" && s.name.trim().toLowerCase() === r) return true;
+                    if (s?.email && typeof s.email === "string" && s.email.trim().toLowerCase() === r) return true;
+                    const ownUser = (systemState.users || []).find(u => (u.studentId && u.studentId === s.id) || (u.name && u.name === s.name));
+                    return !!ownUser && typeof ownUser.username === "string" && ownUser.username.trim().toLowerCase() === r;
                   };
     
                   // Get all referred students

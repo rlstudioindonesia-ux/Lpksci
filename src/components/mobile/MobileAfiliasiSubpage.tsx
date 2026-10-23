@@ -79,30 +79,30 @@ export default function MobileAfiliasiSubpage({ currentUser, onLoginSuccess, sys
                         const isSelfReferral = (s: { id: string; name: string; email?: string }, ref: string) => {
                           const r = (ref || "").trim().toLowerCase();
                           if (!r) return false;
-                          if (s.name && s.name.trim().toLowerCase() === r) return true;
-                          if (s.email && s.email.trim().toLowerCase() === r) return true;
-                          const ownUser = (systemState.users || []).find(u => u.studentId === s.id || u.name === s.name);
-                          return !!ownUser && ownUser.username.trim().toLowerCase() === r;
+                          if (s?.name && typeof s.name === "string" && s.name.trim().toLowerCase() === r) return true;
+                          if (s?.email && typeof s.email === "string" && s.email.trim().toLowerCase() === r) return true;
+                          const ownUser = (systemState.users || []).find(u => (u.studentId && u.studentId === s.id) || (u.name && u.name === s.name));
+                          return !!ownUser && typeof ownUser.username === "string" && ownUser.username.trim().toLowerCase() === r;
                         };
     
                         // Group referrals by referrer username/email
                         const statsByReferrer: { [key: string]: { name: string, regs: number, actives: number } } = {};
     
                         allRegs.forEach(s => {
-                          if (s.referrer && !isSelfReferral(s, s.referrer)) {
+                          if (s?.referrer && typeof s.referrer === "string" && s.referrer.trim() && !isSelfReferral(s, s.referrer)) {
                             const refKey = s.referrer.trim().toLowerCase();
                             if (!statsByReferrer[refKey]) {
-                              statsByReferrer[refKey] = { name: s.referrer, regs: 0, actives: 0 };
+                              statsByReferrer[refKey] = { name: s.referrer.trim(), regs: 0, actives: 0 };
                             }
                             statsByReferrer[refKey].regs += 1;
                           }
                         });
     
                         allActives.forEach(s => {
-                          if (s.referrer && !isSelfReferral(s, s.referrer)) {
+                          if (s?.referrer && typeof s.referrer === "string" && s.referrer.trim() && !isSelfReferral(s, s.referrer)) {
                             const refKey = s.referrer.trim().toLowerCase();
                             if (!statsByReferrer[refKey]) {
-                              statsByReferrer[refKey] = { name: s.referrer, regs: 0, actives: 0 };
+                              statsByReferrer[refKey] = { name: s.referrer.trim(), regs: 0, actives: 0 };
                             }
                             statsByReferrer[refKey].actives += 1;
                           }
@@ -149,11 +149,11 @@ export default function MobileAfiliasiSubpage({ currentUser, onLoginSuccess, sys
                       {(() => {
                         const isAdminOrVip = currentUser?.role === "Admin" || currentUser?.role === "Admin Super" || currentUser?.role === "Admin Biasa" || currentUser?.role === "VVIP";
                         const isReferrerMatch = (ref: string) => {
-                          if (!ref) return false;
+                          if (!ref || typeof ref !== "string") return false;
                           const r = ref.toLowerCase().trim();
-                          return r === currentUser?.username?.toLowerCase().trim() ||
-                                 r === currentUser?.email?.toLowerCase().trim() ||
-                                 r === currentUser?.name?.toLowerCase().trim();
+                          return (!!currentUser?.username && r === String(currentUser.username).toLowerCase().trim()) ||
+                                 (!!currentUser?.email && r === String(currentUser.email).toLowerCase().trim()) ||
+                                 (!!currentUser?.name && r === String(currentUser.name).toLowerCase().trim());
                         };
                         // A student cannot refer themselves - some applicants type
                         // their own email/name into the optional "Kode Referral"
@@ -161,7 +161,7 @@ export default function MobileAfiliasiSubpage({ currentUser, onLoginSuccess, sys
                         // to their own account. Never show that as a referral.
                         const isSelfReferral = (s: { name: string }, ref: string) => {
                           const r = (ref || "").toLowerCase().trim();
-                          return !!r && s.name.toLowerCase().trim() === r;
+                          return !!r && !!s?.name && String(s.name).toLowerCase().trim() === r;
                         };
     
                         const myReferrals = [

@@ -254,6 +254,7 @@ export interface ActiveStudent {
   jobCoeFile?: string;          // 12. UPLOAD COE DARI SO
   jobFeedback?: string;         // 13. KRITIK DAN SARAN mengenai system pembelajaran
   jobRoadmap?: string;          // 14. Roadmap siswa
+  verifiedDocs?: string[];
 }
 
 export interface AttendanceRecord {
@@ -365,6 +366,7 @@ export interface TeacherReport {
 }
 
 export interface UserAccount {
+  id?: string;
   username: string;
   name: string;
   email: string;
@@ -374,6 +376,7 @@ export interface UserAccount {
   status?: "Active" | "Suspended";
   studentId?: string; // If Siswa, points to ActiveStudent
   profilePicture?: string;
+  docFoto?: string;
   birthDate?: string;
   assignedClass?: string; // Plotted class (from Management Kelas)
   japaneseLevel?: string; // Optional Japanese level for teachers/users
@@ -403,6 +406,7 @@ export interface LMSLesson {
   bookUrl?: string; // PDF textbook / book download or reader link
   audioData?: string; // Base64 recorded audio data
   isLocked?: boolean; // Whether the lesson is locked by Sensei/Admin
+  isMandiri?: boolean; // Whether the lesson is Mandiri
   targetClass?: string; // Target class for the lesson
   deadline?: string; // ISO date or custom string for deadline / tenggang waktu
   durationMinutes?: number; // pengerjaan time limit in minutes
@@ -411,16 +415,29 @@ export interface LMSLesson {
 export interface LMSQuiz {
   id: string;
   subject: "Bahasa Jepang" | "SSW";
-  questionType?: "pilihan_ganda" | "essay";
+  questionType?: "pilihan_ganda" | "essay" | "pilihan_ganda_kompleks";
   question: string;
   options?: string[]; // for pilihan ganda
-  correctAnswerIndex?: number; // for pilihan ganda
+  correctAnswerIndex?: number; // for pilihan ganda (primary/single key)
+  correctAnswerIndices?: number[]; // for multiple correct answers (e.g. [0, 2])
+  allowMultipleAnswers?: boolean; // whether question allows >1 correct answers
+  correctAnswerEssay?: string; // for essay auto-grading (kunci jawaban essay)
+  correctAnswerText?: string; // alias/alternative key for essay
   chapterNumber?: number; // associated chapter
+  chapterId?: string | number; // alternative/alias identifier
+  subTitle?: string; // Sub-bab or sub-materi title (e.g. "Sub 1: Kosakata", "Pelajaran 1")
+  lessonId?: string; // Associated lesson ID
+  targetClass?: string; // target class e.g. "FUKUSHU" or "Semua"
+  isMandiri?: boolean; // Whether the quiz is Mandiri
+  shuffleQuestions?: boolean; // acak urutan soal (Google Form style)
   deadline?: string; // ISO date or custom string for deadline / tenggang waktu
   durationMinutes?: number; // pengerjaan time limit in minutes
   imageUrl?: string;
   videoUrl?: string;
   audioUrl?: string;
+  points?: number;
+  required?: boolean;
+  explanation?: string;
 }
 
 export interface ChapterAssessment {
@@ -451,6 +468,7 @@ export interface JobOrder {
   id: string; // e.g. "JOB-001"
   noReg: string; // no reg
   jobType?: string; // Jenis Order Job
+  targetAudience?: "Semua" | "Siswa" | "Alumni" | string; // Sasaran Notifikasi & Akses Lowongan
   partnerName: string; // PT Mitra e.g. "PT Fuji Tokutei Agency"
   occupation: string; // bidang kerja
   location: string; // lokasi kerja di Jepang
@@ -539,6 +557,7 @@ export interface SystemState {
     registration: number;
     dp: number;
     fullPayment: number;
+    stage3?: number;
     managementFee: number;
   };
   customization?: {

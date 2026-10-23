@@ -133,6 +133,12 @@ export default function AdminKustomisasiSegment({ custFaviconDragActive, custFav
                                 alt="Custom Logo Preview"
                                 referrerPolicy="no-referrer"
                                 className="h-full w-full object-contain"
+                                onError={(e) => {
+                                  const target = e.currentTarget;
+                                  if (target.src !== window.location.origin + "/logo.png") {
+                                    target.src = "/logo.png";
+                                  }
+                                }}
                               />
                             ) : (
                               <div className="text-slate-400 flex flex-col items-center">
@@ -732,7 +738,7 @@ export default function AdminKustomisasiSegment({ custFaviconDragActive, custFav
                                           ...updated[sIdx],
                                           tag: e.target.value,
                                         };
-                                        setCustSlides(updated); onUpdateState("slideshows", "update", updated);
+                                        setCustSlides(updated);
                                       }}
                                       className="w-full text-[10px] p-1 border rounded-md bg-white outline-hidden focus:border-indigo-500"
                                     />
@@ -750,7 +756,7 @@ export default function AdminKustomisasiSegment({ custFaviconDragActive, custFav
                                           ...updated[sIdx],
                                           title: e.target.value,
                                         };
-                                        setCustSlides(updated); onUpdateState("slideshows", "update", updated);
+                                        setCustSlides(updated);
                                       }}
                                       className="w-full text-[10px] p-1 border rounded-md bg-white outline-hidden focus:border-indigo-500"
                                     />
@@ -767,7 +773,7 @@ export default function AdminKustomisasiSegment({ custFaviconDragActive, custFav
                                           ...updated[sIdx],
                                           description: e.target.value,
                                         };
-                                        setCustSlides(updated); onUpdateState("slideshows", "update", updated);
+                                        setCustSlides(updated);
                                       }}
                                       className="w-full text-[10px] p-1 border rounded-md bg-white outline-hidden focus:border-indigo-500 min-h-[45px] leading-snug"
                                     />
@@ -787,7 +793,7 @@ export default function AdminKustomisasiSegment({ custFaviconDragActive, custFav
                                             ...updated[sIdx],
                                             image: e.target.value,
                                           };
-                                          setCustSlides(updated); onUpdateState("slideshows", "update", updated);
+                                          setCustSlides(updated);
                                         }}
                                         className="w-full text-[10px] p-1 border rounded-md bg-white outline-hidden focus:border-indigo-500 font-mono"
                                       />
@@ -809,7 +815,7 @@ export default function AdminKustomisasiSegment({ custFaviconDragActive, custFav
                                                     ...updated[sIdx],
                                                     image: url,
                                                   };
-                                                  setCustSlides(updated); onUpdateState("slideshows", "update", updated);
+                                                  setCustSlides(updated);
                                                   onUpdateState("slideshows", "update", updated);
                                                   setSliderUploadStatus(prev => ({ ...prev, [sIdx]: 'success' }));
                                                   setTimeout(() => setSliderUploadStatus(prev => ({ ...prev, [sIdx]: undefined as any })), 3000);
@@ -849,8 +855,7 @@ export default function AdminKustomisasiSegment({ custFaviconDragActive, custFav
                                             ...updated[sIdx],
                                             statValue: e.target.value,
                                           };
-                                          setCustSlides(updated); onUpdateState("slideshows", "update", updated);
-                                          onUpdateState("slideshows", "update", updated);
+                                          setCustSlides(updated);
                                         }}
                                         className="w-full text-[10px] p-1 border rounded-md bg-white"
                                       />
@@ -868,8 +873,7 @@ export default function AdminKustomisasiSegment({ custFaviconDragActive, custFav
                                             ...updated[sIdx],
                                             statText: e.target.value,
                                           };
-                                          setCustSlides(updated); onUpdateState("slideshows", "update", updated);
-                                          onUpdateState("slideshows", "update", updated);
+                                          setCustSlides(updated);
                                         }}
                                         className="w-full text-[10px] p-1 border rounded-md bg-white"
                                       />
@@ -889,8 +893,7 @@ export default function AdminKustomisasiSegment({ custFaviconDragActive, custFav
                                             ...updated[sIdx],
                                             actionText: e.target.value,
                                           };
-                                          setCustSlides(updated); onUpdateState("slideshows", "update", updated);
-                                          onUpdateState("slideshows", "update", updated);
+                                          setCustSlides(updated);
                                         }}
                                         className="w-full text-[10px] p-1 border rounded-md bg-white"
                                       />
@@ -909,8 +912,7 @@ export default function AdminKustomisasiSegment({ custFaviconDragActive, custFav
                                             ...updated[sIdx],
                                             accent: e.target.value,
                                           };
-                                          setCustSlides(updated); onUpdateState("slideshows", "update", updated);
-                                          onUpdateState("slideshows", "update", updated);
+                                          setCustSlides(updated);
                                         }}
                                         className="w-full text-[10px] p-1 border rounded-md bg-white font-mono"
                                       />
@@ -936,9 +938,10 @@ export default function AdminKustomisasiSegment({ custFaviconDragActive, custFav
                             <div className="bg-slate-100 px-3 py-2 flex items-center justify-between border-t border-slate-200">
                               <button
                                 type="button"
-                                onClick={() => {
+                                onClick={async () => {
                                   if (isEditing) {
                                     setSelectedSlideId(null);
+                                    await onUpdateState("slideshows", "update", custSlides);
                                   } else {
                                     setSelectedSlideId(slide.id);
                                   }
@@ -954,12 +957,12 @@ export default function AdminKustomisasiSegment({ custFaviconDragActive, custFav
     
                               <button
                                 type="button"
-                                onClick={() => {
+                                onClick={async () => {
                                   const updated = custSlides.filter(
                                     (s) => s.id !== slide.id,
                                   );
-                                  setCustSlides(updated); onUpdateState("slideshows", "update", updated);
-                                  onUpdateState("slideshows", "update", updated);
+                                  setCustSlides(updated);
+                                  await onUpdateState("slideshows", "update", updated);
                                   if (selectedSlideId === slide.id) {
                                     setSelectedSlideId(null);
                                   }
@@ -1239,84 +1242,103 @@ export default function AdminKustomisasiSegment({ custFaviconDragActive, custFav
     
                       {/* Opportunity Images Section */}
                       <div className="space-y-4">
-                        <h4 className="font-bold text-sm text-slate-800 bg-slate-50 p-2 rounded border border-slate-100">Bagian: Gambar Kesempatan (3 Foto Utama)</h4>
-                        {custLandingConfig.opportunityImages && custLandingConfig.opportunityImages.length >= 3 && (
-                          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            {[0, 1, 2].map((idx) => (
-                              <div key={idx} className="space-y-3 p-3 border border-slate-200 rounded-xl bg-slate-50/50">
-                                <div className="space-y-1">
-                                  <label className="text-xs font-bold text-slate-700 block">Label Gambar {idx + 1}</label>
-                                  <input
-                                    type="text"
-                                    value={custLandingConfig.opportunityImages![idx].label || ""}
-                                    onChange={(e) => {
-                                      const newImages = [...custLandingConfig.opportunityImages!];
-                                      newImages[idx] = { ...newImages[idx], label: e.target.value };
-                                      setCustLandingConfig({ ...custLandingConfig, opportunityImages: newImages });
-                                    }}
-                                    className="w-full text-xs rounded-md border border-slate-200 bg-white px-2 py-1.5 outline-hidden focus:border-indigo-500 transition"
-                                  />
-                                </div>
-                                <div className="space-y-1">
-                                  <label className="text-xs font-bold text-slate-700 block">Link Gambar (URL) atau Upload {idx + 1}</label>
-                                  <input
-                                    type="text"
-                                    placeholder="https://images.unsplash.com/..."
-                                    value={custLandingConfig.opportunityImages![idx].url || ""}
-                                    onChange={(e) => {
-                                      const newImages = [...custLandingConfig.opportunityImages!];
-                                      newImages[idx] = { ...newImages[idx], url: e.target.value };
-                                      setCustLandingConfig({ ...custLandingConfig, opportunityImages: newImages });
-                                    }}
-                                    className="w-full text-xs rounded-md border border-slate-200 bg-white px-2 py-1.5 outline-hidden focus:border-indigo-500 transition mb-2"
-                                  />
-                                  <div className="relative">
+                        <div className="flex items-center justify-between bg-slate-50 p-2.5 rounded-xl border border-slate-150">
+                          <div>
+                            <h4 className="font-bold text-sm text-slate-800">Bagian: Gambar Kesempatan (3 Foto Utama)</h4>
+                            <p className="text-[10px] text-slate-500">Tiga foto dokumentasi unggulan yang tampil di bagian "Kesempatan Masih Terbuka Untuk Kamu".</p>
+                          </div>
+                        </div>
+                        {(() => {
+                          const defaultOppList = [
+                            { label: "Pelatihan Teori & Praktik", url: "https://firebasestorage.googleapis.com/v0/b/gen-lang-client-0782283050.firebasestorage.app/o/galeri%2F1788397965132_WhatsApp_Image_2026-09-02_at_10.02.15.jpeg?alt=media&token=afd37c47-ed69-440a-bf04-0f524e94c79f" },
+                            { label: "Penyerahan Sertifikat", url: "https://firebasestorage.googleapis.com/v0/b/gen-lang-client-0782283050.firebasestorage.app/o/galeri%2F1788398049192_WhatsApp_Image_2026-09-02_at_09.10.45.jpeg?alt=media&token=f7bcb632-ff46-4e62-879e-9589b46ceecc" },
+                            { label: "Foto Bersama Alumni", url: "https://firebasestorage.googleapis.com/v0/b/gen-lang-client-0782283050.firebasestorage.app/o/galeri%2F1788398162422_WhatsApp_Image_2026-09-01_at_09.06.50.jpg?alt=media&token=a63b6a63-c29b-48db-9416-1cb10d74401d" }
+                          ];
+                          const rawList = Array.isArray(custLandingConfig.opportunityImages) ? custLandingConfig.opportunityImages : [];
+                          const oppItems = [
+                            rawList[0] || defaultOppList[0],
+                            rawList[1] || defaultOppList[1],
+                            rawList[2] || defaultOppList[2]
+                          ];
+
+                          return (
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                              {oppItems.map((item, idx) => (
+                                <div key={idx} className="space-y-3 p-3 border border-slate-200 rounded-xl bg-slate-50/50">
+                                  <div className="space-y-1">
+                                    <label className="text-xs font-bold text-slate-700 block">Label Gambar {idx + 1}</label>
                                     <input
-                                      type="file"
-                                      accept="image/*"
+                                      type="text"
+                                      value={item.label || ""}
                                       onChange={(e) => {
-                                        const file = e.target.files?.[0];
-                                        if (file) {
-                                          setOppUploadStatus(prev => ({ ...prev, [idx]: 'loading' }));
-                                          uploadFileToFirebase(file, "customization").then(url => {
-                                            const newImages = [...custLandingConfig.opportunityImages!];
-                                            newImages[idx] = { ...newImages[idx], url: url };
-                                            const updatedConfig = { ...custLandingConfig, opportunityImages: newImages };
-                                            setCustLandingConfig(updatedConfig);
-                                            // Auto-save when an image is successfully uploaded
-                                            onUpdateState("customization", "update", { landingConfig: updatedConfig });
-                                            setOppUploadStatus(prev => ({ ...prev, [idx]: 'success' }));
-                                            setTimeout(() => setOppUploadStatus(prev => ({ ...prev, [idx]: undefined as any })), 3000);
-                                          }).catch(err => { 
-                                            console.error(err); 
-                                            alert("Gagal upload gambar"); 
-                                            setOppUploadStatus(prev => ({ ...prev, [idx]: undefined as any }));
-                                          });
-                                        }
+                                        const newImages = [...oppItems];
+                                        newImages[idx] = { ...newImages[idx], label: e.target.value };
+                                        setCustLandingConfig({ ...custLandingConfig, opportunityImages: newImages });
                                       }}
                                       className="w-full text-xs rounded-md border border-slate-200 bg-white px-2 py-1.5 outline-hidden focus:border-indigo-500 transition"
                                     />
-                                    {oppUploadStatus[idx] === 'loading' && (
-                                      <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 text-[10px] text-indigo-600 font-bold bg-white px-1">
-                                        <LoaderCircle className="w-3 h-3 animate-spin" /> Uploading...
-                                      </div>
-                                    )}
-                                    {oppUploadStatus[idx] === 'success' && (
-                                      <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 text-[10px] text-emerald-600 font-bold bg-white px-1">
-                                        <Check className="w-3 h-3" /> Berhasil
-                                      </div>
-                                    )}
                                   </div>
+                                  <div className="space-y-1">
+                                    <label className="text-xs font-bold text-slate-700 block">Link Gambar (URL) atau Upload {idx + 1}</label>
+                                    <input
+                                      type="text"
+                                      placeholder="https://firebasestorage.googleapis.com/..."
+                                      value={item.url || ""}
+                                      onChange={(e) => {
+                                        const newImages = [...oppItems];
+                                        newImages[idx] = { ...newImages[idx], url: e.target.value };
+                                        setCustLandingConfig({ ...custLandingConfig, opportunityImages: newImages });
+                                      }}
+                                      className="w-full text-xs rounded-md border border-slate-200 bg-white px-2 py-1.5 outline-hidden focus:border-indigo-500 transition mb-2"
+                                    />
+                                    <div className="relative">
+                                      <input
+                                        type="file"
+                                        accept="image/*"
+                                        onChange={(e) => {
+                                          const file = e.target.files?.[0];
+                                          if (file) {
+                                            setOppUploadStatus(prev => ({ ...prev, [idx]: 'loading' }));
+                                            uploadFileToFirebase(file, "branding").then(url => {
+                                              const newImages = [...oppItems];
+                                              newImages[idx] = { ...newImages[idx], url: url };
+                                              const updatedConfig = { ...custLandingConfig, opportunityImages: newImages };
+                                              setCustLandingConfig(updatedConfig);
+                                              // Auto-save when an image is successfully uploaded
+                                              onUpdateState("customization", "update", { landingConfig: updatedConfig });
+                                              setOppUploadStatus(prev => ({ ...prev, [idx]: 'success' }));
+                                              setTimeout(() => setOppUploadStatus(prev => ({ ...prev, [idx]: undefined as any })), 3000);
+                                            }).catch(err => { 
+                                              console.error(err); 
+                                              alert("Gagal upload gambar"); 
+                                              setOppUploadStatus(prev => ({ ...prev, [idx]: undefined as any }));
+                                            });
+                                          }
+                                        }}
+                                        className="w-full text-xs rounded-md border border-slate-200 bg-white px-2 py-1.5 outline-hidden focus:border-indigo-500 transition"
+                                      />
+                                      {oppUploadStatus[idx] === 'loading' && (
+                                        <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 text-[10px] text-indigo-600 font-bold bg-white px-1">
+                                          <LoaderCircle className="w-3 h-3 animate-spin" /> Uploading...
+                                        </div>
+                                      )}
+                                      {oppUploadStatus[idx] === 'success' && (
+                                        <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1 text-[10px] text-emerald-600 font-bold bg-white px-1">
+                                          <Check className="w-3 h-3" /> Berhasil
+                                        </div>
+                                      )}
+                                    </div>
+                                  </div>
+                                  {item.url && (
+                                    <div className="h-24 rounded-lg border border-slate-200 bg-slate-100 overflow-hidden relative mt-2 shadow-inner">
+                                      <img src={item.url} alt="Preview" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                                    </div>
+                                  )}
                                 </div>
-                                {custLandingConfig.opportunityImages![idx].url && (
-                                  <div className="h-20 rounded border border-slate-200 bg-slate-100 overflow-hidden relative mt-2">
-                                    <img src={custLandingConfig.opportunityImages![idx].url} alt="Preview" className="w-full h-full object-cover" />
-                                  </div>
-                                )}
-                              </div>
-                            ))}
-                          </div>
-                        )}
+                              ))}
+                            </div>
+                          );
+                        })()}
                       </div>
                     </div>
                   )}

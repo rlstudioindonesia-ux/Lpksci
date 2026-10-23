@@ -1,20 +1,22 @@
 import { initializeApp, getApp, getApps } from 'firebase/app';
-import { getFirestore, doc, setDoc, getDocs, collection, getDoc, getDocFromServer, deleteDoc, query, where } from 'firebase/firestore';
+import { initializeFirestore, getFirestore, doc, setDoc, getDocs, collection, getDoc, getDocFromServer, deleteDoc, query, where, limit, type Firestore } from 'firebase/firestore';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { auth } from '../firebaseClient';
 import { isStudentAlumni } from '../lib/alumniStatus';
+import { DEFAULT_GALLERY_ITEMS } from '../data/defaultGallery';
 import fs from 'fs';
 import path from 'path';
 import firebaseAppletConfig from '../../firebase-applet-config.json';
 
-export enum OperationType {
-  CREATE = 'create',
-  UPDATE = 'update',
-  DELETE = 'delete',
-  LIST = 'list',
-  GET = 'get',
-  WRITE = 'write',
-}
+export const OperationType = {
+  CREATE: 'create',
+  UPDATE: 'update',
+  DELETE: 'delete',
+  LIST: 'list',
+  GET: 'get',
+  WRITE: 'write',
+} as const;
+export type OperationType = typeof OperationType[keyof typeof OperationType];
 
 interface FirestoreErrorInfo {
   error: string;
@@ -75,9 +77,19 @@ export const app = hasConfig
   ? (getApps().length === 0 ? initializeApp(firebaseConfig) : getApp())
   : null;
 
-export const db = hasConfig && app
-  ? (firebaseConfig.firestoreDatabaseId ? getFirestore(app, firebaseConfig.firestoreDatabaseId) : getFirestore(app))
-  : null;
+let firestoreDbInstance: Firestore | null = null;
+if (hasConfig && app) {
+  const dbId = firebaseConfig.firestoreDatabaseId || "(default)";
+  try {
+    firestoreDbInstance = initializeFirestore(app, {
+      experimentalForceLongPolling: true,
+    }, dbId);
+  } catch {
+    firestoreDbInstance = getFirestore(app, dbId);
+  }
+}
+
+export const db = firestoreDbInstance;
 
 export const storage = hasConfig && app
   ? (firebaseConfig.storageBucket
@@ -248,18 +260,34 @@ async function fetchSafeDoc(docPath: { coll: string; id: string }, retries = 3):
   return null;
 }
 
-async function fetchSafeCollection(collName: string, retries = 3): Promise<{ collName: string; docs: any[] }> {
+async function fetchSafeCollection(collName: string, retries = 3, maxLimit?: number): Promise<{ collName: string; docs: any[] }> {
   if (!db) return { collName, docs: [] };
-  for (let attempt = 0; attempt <= retries; attempt++) {
+  const effectiveRetries = (collName === 'chapterAssessments' || collName === 'attendance') ? Math.max(retries, 5) : retries;
+  for (let attempt = 0; attempt <= effectiveRetries; attempt++) {
     try {
-      const snap = await getDocs(collection(db, collName));
+      let q: any = collection(db, collName);
+      if (maxLimit && maxLimit > 0) {
+        q = query(collection(db, collName), limit(maxLimit));
+      }
+      const snap = await getDocs(q);
       if (snap && !snap.empty) {
-        return { collName, docs: snap.docs.map(d => d.data()) };
+        return {
+          collName,
+          docs: snap.docs.map(d => {
+            const data = d.data() as any;
+            return {
+              id: d.id,
+              ...data,
+              // Ensure explicit id is preserved
+              ...(data?.id ? { id: data.id } : {})
+            };
+          })
+        };
       }
       return { collName, docs: [] };
     } catch (err: any) {
-      if (attempt < retries) {
-        await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
+      if (attempt < effectiveRetries) {
+        await new Promise(r => setTimeout(r, 600 * (attempt + 1)));
         continue;
       }
       handleFirestoreError(err, OperationType.LIST, collName);
@@ -279,23 +307,17 @@ export async function loadStateFromFirestore(fallbackState: any) {
   console.log("🚀 Initializing State Load from Firestore database:", firebaseConfig.firestoreDatabaseId || "(default)");
 
   try {
-    const collections = [
-      'registeredStudents', 'activeStudents', 'attendance',
-      'payments', 'inventory', 'taxes', 'lmsLessons', 'lmsQuizzes',
-      'chapterAssessments', 'jobOrders', 'users', 'events',
-      'salaries', 'cashLedger', 'messages', 'logs', 'lmsClasses',
-      'lmsComments', 'teacherLeaves', 'teacherReports', 'teacherContracts'
-    ];
-    
     let loadedState: any = { ...fallbackState };
     let hasData = false;
 
-    // Load system docs safely
-    const [custDoc, slideDoc, galleryDoc, costConfigDoc] = await Promise.all([
+    // Load system docs safely across all known legacy and standard keys
+    const [custDoc, slideDoc, galleryDoc, galleryAltDoc, costConfigDoc, lmsClassesDoc] = await Promise.all([
       fetchSafeDoc({ coll: 'system', id: 'customization' }),
       fetchSafeDoc({ coll: 'system', id: 'slideshows' }),
       fetchSafeDoc({ coll: 'system', id: 'galleries' }),
-      fetchSafeDoc({ coll: 'system', id: 'costConfig' })
+      fetchSafeDoc({ coll: 'system', id: 'gallery' }),
+      fetchSafeDoc({ coll: 'system', id: 'costConfig' }),
+      fetchSafeDoc({ coll: 'system', id: 'lmsClasses' })
     ]);
 
     if (custDoc && custDoc.exists()) {
@@ -309,79 +331,240 @@ export async function loadStateFromFirestore(fallbackState: any) {
         }
       };
       hasData = true;
-      const { lmsClasses, ...custWithoutClasses } = custData;
-      writeCache.set('system/customization', JSON.stringify(sanitizeFirestoreData(custWithoutClasses)));
+      setWriteCache('system/customization', hashString(JSON.stringify(sanitizeFirestoreData(custData))));
+    }
+    if (lmsClassesDoc && lmsClassesDoc.exists()) {
+      const clsData = lmsClassesDoc.data();
+      const list = Array.isArray(clsData?.classes) ? clsData.classes : (Array.isArray(clsData) ? clsData : []);
+      if (list.length > 0) {
+        loadedState.lmsClasses = list;
+        if (!loadedState.customization) loadedState.customization = {};
+        loadedState.customization.lmsClasses = list;
+        hasData = true;
+      }
     }
     if (slideDoc && slideDoc.exists()) {
       const slideData = slideDoc.data();
-      loadedState.slideshows = Array.isArray(slideData.data) ? slideData.data : (fallbackState.slideshows || []);
-      hasData = true;
-      writeCache.set('system/slideshows', JSON.stringify(sanitizeFirestoreData(slideData)));
+      const slideList = Array.isArray(slideData?.data)
+        ? slideData.data
+        : Array.isArray(slideData?.slideshows)
+          ? slideData.slideshows
+          : Array.isArray(slideData)
+            ? slideData
+            : [];
+      if (slideList.length > 0) {
+        loadedState.slideshows = slideList;
+        hasData = true;
+      } else {
+        loadedState.slideshows = fallbackState.slideshows || [];
+      }
+      setWriteCache('system/slideshows', hashString(JSON.stringify(sanitizeFirestoreData(slideData))));
     }
-    if (galleryDoc && galleryDoc.exists()) {
-      const galleryData = galleryDoc.data();
-      loadedState.galleries = Array.isArray(galleryData.data) ? galleryData.data : (fallbackState.galleries || []);
-      hasData = true;
-      writeCache.set('system/galleries', JSON.stringify(sanitizeFirestoreData(galleryData)));
+    
+    // Check system/galleries and system/gallery documents
+    const activeGalleryDoc = (galleryDoc && galleryDoc.exists()) ? galleryDoc : (galleryAltDoc && galleryAltDoc.exists() ? galleryAltDoc : null);
+    if (activeGalleryDoc) {
+      const galleryData = activeGalleryDoc.data();
+      const galList = Array.isArray(galleryData?.data)
+        ? galleryData.data
+        : Array.isArray(galleryData?.gallery)
+          ? galleryData.gallery
+          : Array.isArray(galleryData?.galleries)
+            ? galleryData.galleries
+            : Array.isArray(galleryData?.items)
+              ? galleryData.items
+              : Array.isArray(galleryData)
+                ? galleryData
+                : [];
+      if (galList.length > 0) {
+        loadedState.galleries = galList;
+        hasData = true;
+      } else {
+        loadedState.galleries = (fallbackState.galleries && fallbackState.galleries.length > 0) ? fallbackState.galleries : DEFAULT_GALLERY_ITEMS;
+      }
+      setWriteCache('system/galleries', hashString(JSON.stringify(sanitizeFirestoreData(galleryData))));
+    }
+
+    // If galleries is empty, check customization doc for any previously saved gallery
+    if ((!loadedState.galleries || loadedState.galleries.length === 0) && custDoc && custDoc.exists()) {
+      const custData = custDoc.data();
+      if (Array.isArray(custData?.gallery) && custData.gallery.length > 0) {
+        loadedState.galleries = custData.gallery;
+        hasData = true;
+      } else if (Array.isArray(custData?.galleries) && custData.galleries.length > 0) {
+        loadedState.galleries = custData.galleries;
+        hasData = true;
+      }
+    }
+    if (!loadedState.galleries || loadedState.galleries.length === 0) {
+      loadedState.galleries = DEFAULT_GALLERY_ITEMS;
     }
     if (costConfigDoc && costConfigDoc.exists()) {
       loadedState.costConfig = costConfigDoc.data();
       hasData = true;
-      writeCache.set('system/costConfig', JSON.stringify(sanitizeFirestoreData(costConfigDoc.data())));
+      setWriteCache('system/costConfig', hashString(JSON.stringify(sanitizeFirestoreData(costConfigDoc.data()))));
     }
 
-    // Load all collections safely in parallel
-    const collResults = await Promise.all(
-      collections.map(collName => fetchSafeCollection(collName))
-    );
+    // Load collections in organized, sequential batches to prevent network/socket exhaustion and Firestore drops
+    // Batch 1: Critical user accounts and core structure
+    const batch1Names = ['users', 'lmsClasses', 'events', 'registeredStudents', 'activeStudents'];
+    const batch1Results = await Promise.all(batch1Names.map(name => fetchSafeCollection(name)));
+
+    // Batch 2: Daily operations and academics
+    const batch2Names = ['payments', 'jobOrders', 'inventory', 'taxes', 'lmsLessons', 'lmsQuizzes', 'lmsComments'];
+    const batch2Results = await Promise.all(batch2Names.map(name => fetchSafeCollection(name)));
+
+    // Batch 3A: Academic Chapter Assessments (Dedicated batch to guarantee no socket exhaustion)
+    const batch3aNames = ['chapterAssessments', 'assessments'];
+    const batch3aResults = await Promise.all(batch3aNames.map(name => fetchSafeCollection(name, 4)));
+
+    // Batch 3B: Large Attendance records (Dedicated batch)
+    const batch3bResults = [await fetchSafeCollection('attendance', 4)];
+
+    // Batch 3C: Logs, HR, and other historical datasets
+    const batch3cNames = ['salaries', 'cashLedger', 'messages', 'teacherLeaves', 'teacherReports', 'teacherContracts', 'logs'];
+    const batch3cResults = await Promise.all(batch3cNames.map(name => fetchSafeCollection(name)));
+
+    const collResults = [...batch1Results, ...batch2Results, ...batch3aResults, ...batch3bResults, ...batch3cResults];
 
     collResults.forEach(({ collName, docs }) => {
-      const fallbackItems = Array.isArray(fallbackState[collName]) ? fallbackState[collName] : [];
+      // Map alternative collection names to canonical state property
+      let canonicalName = collName;
+      if (collName === "assessments" || collName === "evaluasi" || collName === "penilaian") {
+        canonicalName = "chapterAssessments";
+      }
+
+      const fallbackItems = Array.isArray(fallbackState[canonicalName]) ? fallbackState[canonicalName] : [];
 
       if (docs && docs.length > 0) {
         hasData = true;
 
-        // Non-destructive merge: Merge Firestore docs with any memory items that might not yet be in Firestore
         const itemMap = new Map<string, any>();
 
-        // 1. First add memory fallback items
-        fallbackItems.forEach((item: any) => {
+        const parseDateToEpoch = (dStr: any, idStr: string) => {
+          if (typeof dStr === "number") return dStr;
+          const match = idStr ? idStr.match(/(\d{13})$/) : null;
+          if (match) return Number(match[1]);
+          if (!dStr) return 0;
+          if (typeof dStr === "string" && dStr.includes("/")) {
+            const parts = dStr.split("/");
+            if (parts.length === 3) {
+              const d = Number(parts[0]);
+              const m = Number(parts[1]) - 1;
+              const y = Number(parts[2]);
+              const dateObj = new Date(y, m, d);
+              if (!isNaN(dateObj.getTime())) return dateObj.getTime();
+            }
+          }
+          const t = new Date(dStr).getTime();
+          return isNaN(t) ? 0 : t;
+        };
+
+        const scoreCompleteness = (r: any) => {
+          let pts = 0;
+          if (r.scoreKotoba !== undefined && r.scoreKotoba !== null && r.scoreKotoba !== "") pts++;
+          if (r.scoreBumpo !== undefined && r.scoreBumpo !== null && r.scoreBumpo !== "") pts++;
+          if (r.scoreKaiwa !== undefined && r.scoreKaiwa !== null && r.scoreKaiwa !== "") pts++;
+          if (r.scoreKanji !== undefined && r.scoreKanji !== null && r.scoreKanji !== "") pts++;
+          return pts;
+        };
+
+        const getItemKey = (item: any) => {
+          if (!item) return "";
+          if (canonicalName === "chapterAssessments" && item.studentId && item.chapterNumber && !item.lessonId) {
+            const sId = String(item.studentId).trim().toLowerCase();
+            const ch = Number(item.chapterNumber);
+            const rawSubj = String(item.subject || "Bahasa Jepang").trim().toLowerCase();
+            const subj = rawSubj.includes("ssw") || rawSubj.includes("matematika") || rawSubj === "math" ? "matematika" : (rawSubj || "bahasa_jepang");
+            return `asses_${sId}_ch${ch}_${subj}`;
+          }
+          return item.id || (item.studentId && item.chapterNumber ? `${item.studentId}_${item.chapterNumber}_${item.subject || ''}` : item.username || item.email || JSON.stringify(item));
+        };
+
+        // 1. First add existing loaded / fallback items
+        const existingItems = Array.isArray(loadedState[canonicalName]) ? loadedState[canonicalName] : fallbackItems;
+        existingItems.forEach((item: any) => {
           if (!item) return;
-          const key = item.id || item.username || item.email;
+          const key = getItemKey(item);
           if (key) itemMap.set(String(key).toLowerCase(), item);
         });
 
-        // 2. Overwrite with Firestore authoritative docs
+        // 2. Overwrite / merge with Firestore authoritative docs
         docs.forEach((item: any) => {
           if (!item) return;
-          const key = item.id || item.username || item.email;
+          const key = getItemKey(item);
           if (key) {
-            itemMap.set(String(key).toLowerCase(), item);
-            writeCache.set(`${collName}/${key}`, JSON.stringify(sanitizeFirestoreData(item)));
+            const lowKey = String(key).toLowerCase();
+            const prev = itemMap.get(lowKey);
+            if (prev && canonicalName === "chapterAssessments") {
+              const prevTime = prev.timestamp || parseDateToEpoch(prev.assessedDate, prev.id || "");
+              const curTime = item.timestamp || parseDateToEpoch(item.assessedDate, item.id || "");
+              const prevComp = scoreCompleteness(prev);
+              const curComp = scoreCompleteness(item);
+
+              if (curTime > prevTime) {
+                itemMap.set(lowKey, item);
+              } else if (curTime < prevTime) {
+                // Keep prev because prev is newer
+              } else {
+                // Equal timestamp: prefer higher score completeness or Telah Dinilai status
+                if (curComp > prevComp || (item.status === "Telah Dinilai" && prev.status !== "Telah Dinilai")) {
+                  itemMap.set(lowKey, item);
+                }
+              }
+            } else {
+              itemMap.set(lowKey, item);
+            }
+            setWriteCache(`${collName}/${item.id || key}`, hashString(JSON.stringify(sanitizeFirestoreData(item))));
           }
         });
 
-        loadedState[collName] = Array.from(itemMap.values());
-        console.log(`✅ Loaded & merged ${loadedState[collName].length} items from ${collName} (${docs.length} from Firestore)`);
-      } else {
-        // Firestore returned 0 items (or had a connection issue) -> KEEP memory fallback data!
-        loadedState[collName] = fallbackItems;
-        if (fallbackItems.length > 0) {
-          console.log(`ℹ️ Firestore ${collName} empty/unreachable. Retained ${fallbackItems.length} in-memory items.`);
-        }
+        loadedState[canonicalName] = Array.from(itemMap.values());
+        console.log(`✅ Loaded & merged ${loadedState[canonicalName].length} items into ${canonicalName} (${docs.length} from Firestore coll ${collName})`);
+      } else if (!loadedState[canonicalName]) {
+        loadedState[canonicalName] = fallbackItems;
       }
     });
 
     // Merge lmsClasses collection back into customization object for backward compatibility with frontend
+    const sanitizeClassChapters = (cls: any) => {
+      if (!cls || typeof cls !== "object") return cls;
+      if (Array.isArray(cls.chapters)) {
+        const seen = new Set<number>();
+        cls.chapters = cls.chapters.filter((ch: any) => {
+          const num = Number(ch?.number);
+          if (!num || seen.has(num)) return false;
+          seen.add(num);
+          return true;
+        }).sort((a: any, b: any) => Number(a.number) - Number(b.number));
+      }
+      if (Array.isArray(cls.mathChapters)) {
+        const seen = new Set<number>();
+        cls.mathChapters = cls.mathChapters.filter((ch: any) => {
+          const num = Number(ch?.number);
+          if (!num || seen.has(num)) return false;
+          seen.add(num);
+          return true;
+        }).sort((a: any, b: any) => Number(a.number) - Number(b.number));
+      }
+      return cls;
+    };
+
     if (loadedState.lmsClasses && loadedState.lmsClasses.length > 0) {
+      loadedState.lmsClasses = loadedState.lmsClasses.map(sanitizeClassChapters);
       if (!loadedState.customization) loadedState.customization = {};
       loadedState.customization.lmsClasses = loadedState.lmsClasses;
       
       loadedState.lmsClasses.forEach((lmsClass: any) => {
-        if (lmsClass && lmsClass.id) {
-          writeCache.set(`lmsClasses/${lmsClass.id}`, JSON.stringify(sanitizeFirestoreData(lmsClass)));
+        const classId = String(lmsClass.id || lmsClass.name || '').replace(/\//g, '_').trim();
+        if (classId) {
+          lmsClass.id = classId;
+          setWriteCache(`lmsClasses/${classId}`, hashString(JSON.stringify(sanitizeFirestoreData(lmsClass))));
         }
       });
+    } else if (loadedState.customization?.lmsClasses && Array.isArray(loadedState.customization.lmsClasses) && loadedState.customization.lmsClasses.length > 0) {
+      loadedState.customization.lmsClasses = loadedState.customization.lmsClasses.map(sanitizeClassChapters);
+      loadedState.lmsClasses = loadedState.customization.lmsClasses;
     }
 
     if (loadedState.logs && loadedState.logs.length > 0) {
@@ -409,7 +592,20 @@ export async function loadStateFromFirestore(fallbackState: any) {
         }
       });
 
-      loadedState.logs = Array.from(logMap.values()).sort((a: any, b: any) => {
+      // Keep ALL presensi pengajar logs (never drop teacher attendance / HR records)
+      // plus the latest 500 general system and security logs
+      const allLogs = Array.from(logMap.values());
+      const presensiLogs = allLogs.filter((l: any) => l.type === "PRESENSI_PENGAJAR");
+      const otherLogs = allLogs
+        .filter((l: any) => l.type !== "PRESENSI_PENGAJAR")
+        .sort((a: any, b: any) => {
+          const timeA = new Date(a.timestamp || a.time || 0).getTime();
+          const timeB = new Date(b.timestamp || b.time || 0).getTime();
+          return timeB - timeA;
+        })
+        .slice(0, 500);
+
+      loadedState.logs = [...presensiLogs, ...otherLogs].sort((a: any, b: any) => {
         const timeA = new Date(a.timestamp || a.time || 0).getTime();
         const timeB = new Date(b.timestamp || b.time || 0).getTime();
         return timeB - timeA;
@@ -420,7 +616,8 @@ export async function loadStateFromFirestore(fallbackState: any) {
     console.log(`💎 Firestore synchronization completed in ${duration}ms. Data loaded: ${hasData ? 'YES' : 'CLEAN_INIT'}`);
     
     // Ensure all critical collection arrays exist
-    for (const collName of collections) {
+    const allCollectionNames = [...batch1Names, ...batch2Names, ...batch3aNames, 'attendance', ...batch3cNames];
+    for (const collName of allCollectionNames) {
       if (!Array.isArray(loadedState[collName])) {
         loadedState[collName] = fallbackState[collName] || [];
       }
@@ -436,8 +633,30 @@ export async function loadStateFromFirestore(fallbackState: any) {
   }
 }
 
+// Lightweight 32-bit FNV-1a hash to store 4-byte number hashes instead of heavy serialized JSON strings in memory
+function hashString(str: string): number {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < str.length; i++) {
+    hash ^= str.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return hash >>> 0;
+}
+
 // In-memory write cache to prevent redundant writes and avoid RESOURCE_EXHAUSTED errors
-export const writeCache = new Map<string, string>();
+export const writeCache = new Map<string, number>();
+
+export function setWriteCache(key: string, hashVal: number) {
+  if (writeCache.size > 800) {
+    let count = 0;
+    for (const k of writeCache.keys()) {
+      writeCache.delete(k);
+      count++;
+      if (count > 200) break;
+    }
+  }
+  writeCache.set(key, hashVal);
+}
 
 // Transient network hiccups (common right after a cold start, or brief Firestore
 // throttling) used to cause a write to be dropped after a single failed attempt -
@@ -465,15 +684,33 @@ export function syncEntityToFirestore(collectionName: string, id: string, data: 
   try {
     const sanitized = sanitizeFirestoreData(data);
     const cacheKey = `${collectionName}/${id}`;
-    const serialized = JSON.stringify(sanitized);
-    if (writeCache.get(cacheKey) === serialized) {
+    const hashVal = hashString(JSON.stringify(sanitized));
+    if (writeCache.get(cacheKey) === hashVal) {
       return;
     }
-    writeCache.set(cacheKey, serialized);
+    setWriteCache(cacheKey, hashVal);
     // Fire-and-forget from the caller's perspective, but retried internally.
     setDocWithRetry(doc(db, collectionName, id), sanitized, cacheKey, OperationType.WRITE);
   } catch(e) {
     console.error(e);
+  }
+}
+
+export async function syncEntityToFirestoreAsync(collectionName: string, id: string, data: any): Promise<boolean> {
+  if (!db || !id) return false;
+  try {
+    const sanitized = sanitizeFirestoreData(data);
+    const cacheKey = `${collectionName}/${id}`;
+    const hashVal = hashString(JSON.stringify(sanitized));
+    if (writeCache.get(cacheKey) === hashVal) {
+      return true;
+    }
+    setWriteCache(cacheKey, hashVal);
+    await setDocWithRetry(doc(db, collectionName, id), sanitized, cacheKey, OperationType.WRITE);
+    return true;
+  } catch (e) {
+    console.error(`Error in syncEntityToFirestoreAsync [${collectionName}/${id}]:`, e);
+    return false;
   }
 }
 
@@ -489,35 +726,68 @@ export async function getEntityFromFirestore(collectionName: string, id: string)
 }
 
 export function syncCustomizationToFirestore(data: any) {
-  if (!db) return;
+  if (!db || !data) return;
   try {
-    const { lmsClasses, ...customizationWithoutClasses } = data;
-    const sanitized = sanitizeFirestoreData(customizationWithoutClasses);
+    const sanitized = sanitizeFirestoreData(data);
     const cacheKey = `system/customization`;
-    const serialized = JSON.stringify(sanitized);
-    if (writeCache.get(cacheKey) === serialized) {
+    const hashVal = hashString(JSON.stringify(sanitized));
+    if (writeCache.get(cacheKey) === hashVal) {
       return;
     }
-    writeCache.set(cacheKey, serialized);
+    setWriteCache(cacheKey, hashVal);
     setDocWithRetry(doc(db, 'system', 'customization'), sanitized, cacheKey, OperationType.WRITE);
   } catch(e) {
-    console.error(e);
+    console.error("Error in syncCustomizationToFirestore:", e);
+  }
+}
+
+export function syncGalleriesToFirestore(galleries: any[]) {
+  if (!db) return;
+  try {
+    const list = Array.isArray(galleries) ? galleries : [];
+    const sanitized = sanitizeFirestoreData(list);
+    const cacheKey = `system/galleries`;
+    const hashVal = hashString(JSON.stringify(sanitized));
+    if (writeCache.get(cacheKey) !== hashVal) {
+      setWriteCache(cacheKey, hashVal);
+      setDocWithRetry(doc(db, 'system', 'galleries'), { data: sanitized, galleries: sanitized, gallery: sanitized, updatedAt: new Date().toISOString() }, cacheKey, OperationType.WRITE);
+    }
+  } catch(e) {
+    console.error("syncGalleriesToFirestore error:", e);
   }
 }
 
 export function syncLmsClassToFirestore(lmsClass: any) {
-  if (!db || !lmsClass || !lmsClass.id) return;
+  if (!db || !lmsClass) return;
   try {
+    const classId = String(lmsClass.id || lmsClass.name || 'class_' + Date.now()).replace(/\//g, '_').trim();
+    if (!classId) return;
+    lmsClass.id = classId;
     const sanitized = sanitizeFirestoreData(lmsClass);
-    const cacheKey = `lmsClasses/${lmsClass.id}`;
-    const serialized = JSON.stringify(sanitized);
-    if (writeCache.get(cacheKey) === serialized) {
+    const cacheKey = `lmsClasses/${classId}`;
+    const hashVal = hashString(JSON.stringify(sanitized));
+    if (writeCache.get(cacheKey) === hashVal) {
       return;
     }
-    writeCache.set(cacheKey, serialized);
-    setDocWithRetry(doc(db, 'lmsClasses', lmsClass.id), sanitized, cacheKey, OperationType.WRITE);
+    setWriteCache(cacheKey, hashVal);
+    setDocWithRetry(doc(db, 'lmsClasses', classId), sanitized, cacheKey, OperationType.WRITE);
   } catch(e) {
-    console.error(e);
+    console.error("Error in syncLmsClassToFirestore:", e);
+  }
+}
+
+export function syncAllLmsClassesToFirestore(classes: any[]) {
+  if (!db || !Array.isArray(classes)) return;
+  try {
+    const sanitized = sanitizeFirestoreData(classes);
+    const cacheKey = `system/lmsClasses`;
+    const hashVal = hashString(JSON.stringify(sanitized));
+    if (writeCache.get(cacheKey) !== hashVal) {
+      setWriteCache(cacheKey, hashVal);
+      setDocWithRetry(doc(db, 'system', 'lmsClasses'), { classes: sanitized, updatedAt: new Date().toISOString() }, cacheKey, OperationType.WRITE);
+    }
+  } catch (e) {
+    console.error("Error in syncAllLmsClassesToFirestore:", e);
   }
 }
 
@@ -545,18 +815,73 @@ export function deleteEntityFromFirestore(collectionName: string, id: string) {
   }
 }
 
-export async function uploadBufferToFirebaseStorage(buffer: Buffer, fileName: string, mimeType: string): Promise<string> {
+export async function deleteEntityFromFirestoreAsync(collectionName: string, id: string): Promise<boolean> {
+  if (!db || !id) return false;
+  try {
+    const cacheKey = `${collectionName}/${id}`;
+    writeCache.delete(cacheKey);
+    for (let attempt = 0; attempt <= 2; attempt++) {
+      try {
+        await deleteDoc(doc(db, collectionName, id));
+        return true;
+      } catch (e) {
+        if (attempt < 2) {
+          await new Promise(r => setTimeout(r, 500 * (attempt + 1)));
+          continue;
+        }
+        try { handleFirestoreError(e, OperationType.DELETE, cacheKey); } catch (logged) {}
+      }
+    }
+    return false;
+  } catch(e) {
+    console.error(`Error in deleteEntityFromFirestoreAsync [${collectionName}/${id}]:`, e);
+    return false;
+  }
+}
+
+export async function uploadBufferToFirebaseStorage(
+  buffer: Buffer,
+  fileName: string,
+  mimeType: string,
+  folder: string = "uploads"
+): Promise<string> {
   if (!storage) {
     throw new Error("Firebase Storage is not configured or initialized.");
   }
   const cleanFileName = fileName.replace(/[^a-zA-Z0-9_.-]/g, "_");
-  const storagePath = `uploads/${Date.now()}_${cleanFileName}`;
+  const cleanFolder = (folder || "uploads").replace(/[^a-zA-Z0-9_.-]/g, "_");
+  const storagePath = `${cleanFolder}/${Date.now()}_${cleanFileName}`;
   const storageRef = ref(storage, storagePath);
   const uint8Array = new Uint8Array(buffer);
   const metadata = {
-    contentType: mimeType,
+    contentType: mimeType || "application/octet-stream",
+    customMetadata: {
+      originalName: fileName,
+      uploadedAt: new Date().toISOString(),
+    },
   };
   const snapshot = await uploadBytes(storageRef, uint8Array, metadata);
   const downloadUrl = await getDownloadURL(snapshot.ref);
   return downloadUrl;
+}
+
+export async function touchSyncMeta(meta: string | { source?: string; dataType?: string; id?: string; action?: string; instanceId?: string; [key: string]: any } = "system"): Promise<void> {
+  if (!db) return;
+  try {
+    const rawPayload = typeof meta === "string" 
+      ? { source: meta, updatedAt: Date.now() }
+      : { source: "system", ...meta, updatedAt: Date.now() };
+
+    // Sanitize and prune any undefined keys so Firestore setDoc never rejects the document
+    const cleanPayload: Record<string, any> = {};
+    for (const [key, value] of Object.entries(rawPayload)) {
+      if (value !== undefined) {
+        cleanPayload[key] = value;
+      }
+    }
+
+    await setDoc(doc(db, "system", "sync_meta"), cleanPayload, { merge: true });
+  } catch (e) {
+    console.warn("Failed to touch sync_meta:", e);
+  }
 }

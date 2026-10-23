@@ -17,7 +17,10 @@ export default function RegistrationView({
   onBackToLanding,
   systemState,
 }: RegistrationViewProps) {
-const [step, setStep] = useState(1);
+  const regFee = systemState?.costConfig?.registration ?? 500000;
+  const stage1Fee = systemState?.costConfig?.dp ?? 5000000;
+  const combinedFee = regFee + stage1Fee;
+  const [step, setStep] = useState(1);
 const [uploadingFiles, setUploadingFiles] = useState<Record<string, boolean>>({});
 
 const [selectedRegType, setSelectedRegType] = useState<
@@ -79,15 +82,18 @@ const [referrer, setReferrer] = useState(() => {
 });
 
 const isSelfReferralCode = useMemo(() => {
-  if (!referrer.trim()) return false;
-  const r = referrer.trim().toLowerCase();
-  return r === email.trim().toLowerCase() || (!!name.trim() && r === name.trim().toLowerCase());
+  const r = (referrer || "").trim().toLowerCase();
+  if (!r) return false;
+  const em = (email || "").trim().toLowerCase();
+  const nm = (name || "").trim().toLowerCase();
+  return (!!em && r === em) || (!!nm && r === nm);
 }, [referrer, email, name]);
 
 const matchedReferrer = useMemo(() => {
-  if (!referrer || isSelfReferralCode) return null;
+  const r = (referrer || "").trim().toLowerCase();
+  if (!r || isSelfReferralCode) return null;
   return (systemState?.users || []).find((u: any) =>
-    u.username.toLowerCase().trim() === referrer.toLowerCase().trim()
+    u?.username && typeof u.username === "string" && u.username.toLowerCase().trim() === r
   );
 }, [referrer, systemState?.users, isSelfReferralCode]);
 
@@ -123,12 +129,15 @@ useEffect(() => {
  const handleMidtransSimulatedPayment = async () => {
   setLoading(true);
   try {
+    const regFee = systemState?.costConfig?.registration ?? 500000;
+    const stage1Fee = systemState?.costConfig?.dp ?? 5000000;
+    const combinedFee = regFee + stage1Fee;
     let calculatedAmount =
       selectedRegType === "reguler"
         ? registrationFeeChoice === "dp"
-          ? 4000000
-          : 500000
-        : 500000;
+          ? combinedFee
+          : regFee
+        : regFee;
      if (statusPendaftaran === "Alumni") {
       calculatedAmount = 0;
     }
@@ -170,10 +179,10 @@ useEffect(() => {
       // A student cannot refer themselves - guard against applicants who
       // misunderstand the optional field and type their own email/name.
       referrer:
-        referrer.trim().toLowerCase() === email.trim().toLowerCase() ||
-        referrer.trim().toLowerCase() === name.trim().toLowerCase()
+        (referrer || "").trim().toLowerCase() === (email || "").trim().toLowerCase() ||
+        (referrer || "").trim().toLowerCase() === (name || "").trim().toLowerCase()
           ? ""
-          : referrer.trim(),
+          : (referrer || "").trim(),
     };
     const result = await onRegisterSubmit(payload);
     if (result) {
@@ -593,7 +602,7 @@ useEffect(() => {
                       }
                       className="text-blue-600 focus:ring-blue-500 h-3.5 w-3.5"
                     />
-                    <span>Hanya Administrasi</span>
+                    <span>Hanya Administrasi (Rp {regFee.toLocaleString("id-ID")})</span>
                   </label>
                   <label className="flex items-center gap-1.5 text-[11px] font-bold text-slate-700 cursor-pointer">
                     <input
@@ -606,7 +615,7 @@ useEffect(() => {
                       className="text-blue-600 focus:ring-blue-500 h-3.5 w-3.5"
                     />
                     <span>
-                      Administrasi + DP Kelas
+                      Administrasi + Biaya Belajar Tahap 1 (Rp {combinedFee.toLocaleString("id-ID")})
                     </span>
                   </label>
                 </div>
@@ -828,7 +837,7 @@ useEffect(() => {
                   }
                   className="text-blue-600 focus:ring-blue-500 h-3.5 w-3.5"
                 />
-                <span>Hanya Administrasi (Rp 500.000)</span>
+                <span>Hanya Administrasi (Rp {regFee.toLocaleString("id-ID")})</span>
               </label>
               <label className="flex items-center gap-1.5 text-[11px] font-bold text-slate-700 cursor-pointer">
                 <input
@@ -841,7 +850,7 @@ useEffect(() => {
                   className="text-blue-600 focus:ring-blue-500 h-3.5 w-3.5"
                 />
                 <span>
-                  Administrasi + DP Kelas (Rp 4.000.000)
+                  Administrasi + Biaya Belajar Tahap 1 (Rp {combinedFee.toLocaleString("id-ID")})
                 </span>
               </label>
             </div>
@@ -853,16 +862,18 @@ useEffect(() => {
             NOMINAL TRANSFER
           </span>
           <p className="text-sm font-black text-rose-600 mt-1">
-            {selectedRegType === "reguler"
+            Rp{" "}
+            {(selectedRegType === "reguler"
               ? registrationFeeChoice === "dp"
-                ? "Rp 4.000.000"
-                : "Rp 500.000"
-              : "Rp 500.000"}{" "}
+                ? combinedFee
+                : regFee
+              : regFee
+            ).toLocaleString("id-ID")}{" "}
             <span className="text-[10px] text-slate-400 font-normal block mt-0.5">
               (
               {selectedRegType === "reguler"
                 ? registrationFeeChoice === "dp"
-                  ? "Administrasi + DP Kelas Awal LPK SCI"
+                  ? "Administrasi + Biaya Belajar Tahap 1 Awal LPK SCI"
                   : "Administrasi Pendaftaran Resmi LPK SCI"
                 : "Administrasi Pendaftaran Resmi LPK SCI"}
               )
@@ -1269,12 +1280,12 @@ useEffect(() => {
           <strong className="text-slate-850 font-bold text-indigo-600">
             123456
           </strong>{" "}
-          untuk otorisasi tagihan Rp $
+          untuk otorisasi tagihan Rp{" "}
           {(selectedRegType === "reguler"
             ? registrationFeeChoice === "dp"
-              ? 4000000
-              : 500000
-            : 500000
+              ? combinedFee
+              : regFee
+            : regFee
           ).toLocaleString("id-ID")}
           .
         </p>

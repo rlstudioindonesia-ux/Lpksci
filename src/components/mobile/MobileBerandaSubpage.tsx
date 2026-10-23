@@ -5,6 +5,7 @@ import { auth } from "../../firebaseClient";
 import { createSvgAvatar, getSafePhotoUrl } from "../../lib/storageHelper";
 import { resolveGoogleSignupRole } from "../../lib/googleAuthProvisioning";
 import { isAndroidWebView } from "../MobileDashboardView";
+import RunningTextTicker from "../RunningTextTicker";
 
 interface MobileBerandaSubpageProps {
   currentMobileSlide: any;
@@ -154,45 +155,12 @@ export default function MobileBerandaSubpage({ currentMobileSlide, currentUser, 
                 );
               })()}
     
-              {/* 2. TICKER RIBBON - "INFO TERKINI" and marquee announcements scroll list */}
-              <div className="bg-gradient-to-r from-indigo-700 via-blue-900 to-indigo-800 flex items-center h-9 overflow-hidden select-none relative shadow-inner rounded-xl mx-2 my-2 border border-blue-800/50">
-                <div className="bg-red-600 text-white text-[9.5px] font-black uppercase px-4 h-full flex items-center justify-center tracking-tight shrink-0 rounded-r-xl shadow-lg relative z-10 border-r border-red-500">
-                  <span className="flex items-center gap-1.5"><AlertCircle className="w-3 h-3" /> Info Terkini</span>
-                </div>
-                {/* Standard marquee emulator */}
-                <div className="flex-1 text-blue-50 text-[10.5px] font-bold font-sans overflow-hidden whitespace-nowrap px-4 relative z-0 flex items-center gap-2">
-                  <div className="animate-marquee inline-block whitespace-nowrap">
-                    {(() => {
-                      if (systemState.customization?.runningText) {
-                        return systemState.customization.runningText;
-                      }
-                      
-                      const activeEvents = systemState.events && systemState.events.length > 0 
-                        ? systemState.events 
-                        : mockCalendarEvents;
-                        
-                      const formatDateSimple = (dStr: string) => {
-                        if (!dStr) return "";
-                        const parts = dStr.split("-");
-                        if (parts.length === 3) {
-                          const months = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
-                          const monthIdx = parseInt(parts[1], 10) - 1;
-                          if (monthIdx >= 0 && monthIdx < 12) {
-                            return `${parseInt(parts[2], 10)} ${months[monthIdx]} ${parts[0]}`;
-                          }
-                        }
-                        return dStr;
-                      };
-    
-                      const eventTickerString = activeEvents
-                        .map((e: any) => `${e.title} (${formatDateSimple(e.date)})`)
-                        .join(" • ");
-                        
-                      return `Selamat datang di aplikasi LPK SOURCE COURSE INDONESIA | Jadwal LPK Terbaru: ${eventTickerString} | Ujian JFT-Basic & Tokutei Ginou Kaigo terdekat segera diselenggarakan...`;
-                    })()}
-                  </div>
-                </div>
-              </div>
+              {/* 2. TICKER RIBBON - "INFO TERKINI" marquee announcements */}
+              <RunningTextTicker
+                customization={systemState?.customization}
+                events={systemState?.events || mockCalendarEvents}
+                variant="mobile"
+              />
     
               {/* Quick-Access Mobile Auth Gateway / Portal Masuk di Depan */}
               {!currentUser ? (

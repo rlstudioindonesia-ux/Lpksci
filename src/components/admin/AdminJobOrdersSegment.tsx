@@ -4,6 +4,7 @@ import { StudentActivitySummary } from "../StudentActivitySummary";
 import { ConfirmButton } from "../ConfirmButton";
 import { JobScheduleConfigPanel } from "./JobScheduleConfigPanel";
 import { createSvgAvatar, getSafePhotoUrl } from "../../lib/storageHelper";
+import { sendBroadcastNotification } from "../../lib/notifications";
 
 interface AdminJobOrdersSegmentProps {
   expandedJobIds: any;
@@ -426,6 +427,18 @@ export default function AdminJobOrdersSegment({ expandedJobIds, onUpdateState, r
                                               jobOrderId: job.id,
                                               studentId: stId,
                                             },
+                                          );
+                                          // Send targeted notification specifically to this student
+                                          const recommendedStudent = systemState?.activeStudents?.find((s: any) => s.id === stId);
+                                          sendBroadcastNotification(
+                                            "🎯 Rekomendasi Job Order Spesial",
+                                            `Selamat! ${recommendedStudent?.name || "Siswa"} mendapatkan rekomendasi resmi untuk posisi ${job.occupation || "Peluang Kerja"} di ${job.partnerName} (${job.location})! Segera cek menu Order Job untuk konfirmasi minat.`,
+                                            {
+                                              type: "job_order",
+                                              url: "/?tab=jobs",
+                                              targetStudentIds: [stId],
+                                              jobId: job.id
+                                            }
                                           );
                                           // Clear selection
                                           setRecoSiswaId((prev) => ({

@@ -27,7 +27,7 @@ export function makeMockSystemState(overrides: Record<string, any> = {}) {
     logs: [],
     slideshows: [],
     galleries: [],
-    costConfig: { registration: 0, dp: 0, fullPayment: 0, managementFee: 0 },
+    costConfig: { registration: 0, dp: 0, fullPayment: 0, stage3: 0, managementFee: 0 },
     customization: {
       logoText: "Test LPK",
       logoIcon: "book",

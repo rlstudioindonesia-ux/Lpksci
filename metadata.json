@@ -1,8 +1,9 @@
 {
   "name": "LPK Source Course Indonesia",
-  "description": "Aplikasi Web Terpadu LPK Bahasa Jepang Source Course Indonesia dengan website interatif, LMS E-Benkyou, Admin Desk, dan VVIP strategic monitoring.",
+  "description": "LPK Source Course Indonesia (LPK SCI) adalah Lembaga Pelatihan Kerja Resmi penyiapan karir ke Jepang (SSW & Ginou Jisshusei) dengan sistem LMS E-Benkyou interaktif.",
   "requestFramePermissions": [
     "camera",
+    "microphone",
     "geolocation"
   ],
   "majorCapabilities": [

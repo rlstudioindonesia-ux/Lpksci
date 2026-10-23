@@ -1,12 +1,13 @@
 import type { Request, Response } from "express";
-import { syncEntityToFirestore, syncCustomizationToFirestore, syncLmsClassToFirestore, deleteEntityFromFirestore } from "../../src/db/firebase-adapter.ts";
+import { syncEntityToFirestore, syncCustomizationToFirestore, syncLmsClassToFirestore, syncAllLmsClassesToFirestore, deleteEntityFromFirestore } from "../../src/db/firebase-adapter.ts";
+import { invalidateStateCache } from "../stateCache.ts";
 
 // Site customization/branding + landing config
 // Extracted verbatim from the monolithic /api/state/update handler in server.ts.
 // Returns a truthy value (the Express Response) if this domain handled the
 // (dataType, action) combination and already sent a response; otherwise false,
 // so the caller (server/handlers/index.ts) can try the next domain in order.
-export function handleCustomizationState(req: Request, res: Response, dataType: string, action: string, payload: any, state: any) {
+export async function handleCustomizationState(req: Request, res: Response, dataType: string, action: string, payload: any, state: any): Promise<boolean> {
 
 
     if (dataType === "customization" && action === "update") {
@@ -43,6 +44,7 @@ export function handleCustomizationState(req: Request, res: Response, dataType: 
          state.customization.lmsClasses = lmsClasses;
          state.lmsClasses = lmsClasses;
          lmsClasses.forEach(syncLmsClassToFirestore);
+         syncAllLmsClassesToFirestore(lmsClasses);
       }
       if (deletedLmsClassId) {
          state.lmsClasses = (state.lmsClasses || []).filter((c: any) => c.id !== deletedLmsClassId && (c.name || '').toLowerCase() !== deletedLmsClassId.toLowerCase());
@@ -102,7 +104,22 @@ export function handleCustomizationState(req: Request, res: Response, dataType: 
         }
       }
       syncCustomizationToFirestore(state.customization);
-      return res.json({ success: true, customization: state.customization });
+      if (typeof invalidateStateCache === "function") invalidateStateCache();
+      res.json({ success: true, customization: state.customization, lmsClasses: state.lmsClasses });
+      return true;
+    }
+
+    if (dataType === "lmsClasses") {
+      const classesList = Array.isArray(payload) ? payload : (payload?.lmsClasses || payload?.classes || [payload]);
+      state.lmsClasses = classesList;
+      if (!state.customization) state.customization = {};
+      state.customization.lmsClasses = classesList;
+      classesList.forEach(syncLmsClassToFirestore);
+      syncAllLmsClassesToFirestore(classesList);
+      syncCustomizationToFirestore(state.customization);
+      if (typeof invalidateStateCache === "function") invalidateStateCache();
+      res.json({ success: true, lmsClasses: classesList });
+      return true;
     }
   return false;
 }

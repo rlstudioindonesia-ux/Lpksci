@@ -1,5 +1,5 @@
 // Service Worker for LPK Source Course Indonesia PWA
-const CACHE_NAME = 'lpk-sci-pwa-v3';
+const CACHE_NAME = 'lpk-sci-pwa-v4';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -62,3 +62,63 @@ self.addEventListener('fetch', (event) => {
       })
   );
 });
+
+// Handle notification click outside the app / APK
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const notifData = event.notification.data || {};
+  const notifId = event.notification.tag || notifData.id || '';
+  const targetUrl = notifData.url || '/';
+
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      // Broadcast to all active clients to turn off sound immediately
+      for (const client of clientList) {
+        try {
+          client.postMessage({
+            type: 'NOTIFICATION_OPENED',
+            id: notifId,
+            url: targetUrl
+          });
+        } catch (e) {}
+      }
+
+      for (const client of clientList) {
+        if (client.url && 'focus' in client) {
+          client.navigate(targetUrl).catch(() => {});
+          return client.focus();
+        }
+      }
+      if (self.clients.openWindow) {
+        return self.clients.openWindow(targetUrl);
+      }
+    })
+  );
+});
+
+// Handle push notifications when browser or app is closed / background
+self.addEventListener('push', (event) => {
+  let data = { title: 'Notifikasi LPK SCI', body: 'Ada informasi terbaru dari LPK SCI', url: '/' };
+  try {
+    if (event.data) {
+      data = event.data.json();
+    }
+  } catch (e) {
+    if (event.data) {
+      data.body = event.data.text();
+    }
+  }
+  const options = {
+    body: data.body || 'Informasi terbaru tersedia.',
+    icon: '/logo.png',
+    badge: '/logo.png',
+    vibrate: [250, 100, 250],
+    tag: data.id || ('lpk-notif-' + Date.now()),
+    renotify: true,
+    data: {
+      url: data.url || '/'
+    }
+  };
+  event.waitUntil(self.registration.showNotification(data.title || 'LPK SCI Pati', options));
+});
+

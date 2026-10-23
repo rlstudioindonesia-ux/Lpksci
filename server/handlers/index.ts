@@ -18,19 +18,19 @@ import { handleMediaState } from "./media.ts";
 // single request only ever carries one dataType value, calling every domain
 // handler unconditionally is safe - at most one of them will find a matching
 // (dataType, action) branch and actually send a response.
-export function handleStateUpdate(req: Request, res: Response, dataType: string, action: string, payload: any, state: any): boolean {
-  if (handleLmsState(req, res, dataType, action, payload, state)) return true;
-  if (handleHrState(req, res, dataType, action, payload, state)) return true;
-  if (handleFinanceState(req, res, dataType, action, payload, state)) return true;
-  if (handleRegistrationState(req, res, dataType, action, payload, state)) return true;
-  if (handleInventoryState(req, res, dataType, action, payload, state)) return true;
-  if (handleCustomizationState(req, res, dataType, action, payload, state)) return true;
-  if (handleJobOrdersState(req, res, dataType, action, payload, state)) return true;
-  if (handleStudentsState(req, res, dataType, action, payload, state)) return true;
-  if (handleEventsState(req, res, dataType, action, payload, state)) return true;
-  if (handleUsersState(req, res, dataType, action, payload, state)) return true;
-  if (handleLogsState(req, res, dataType, action, payload, state)) return true;
-  if (handleMessagesState(req, res, dataType, action, payload, state)) return true;
-  if (handleMediaState(req, res, dataType, action, payload, state)) return true;
+export async function handleStateUpdate(req: Request, res: Response, dataType: string, action: string, payload: any, state: any): Promise<boolean> {
+  if (await handleLmsState(req, res, dataType, action, payload, state)) return true;
+  if (await handleHrState(req, res, dataType, action, payload, state)) return true;
+  if (await handleFinanceState(req, res, dataType, action, payload, state)) return true;
+  if (await handleRegistrationState(req, res, dataType, action, payload, state)) return true;
+  if (await handleInventoryState(req, res, dataType, action, payload, state)) return true;
+  if (await handleCustomizationState(req, res, dataType, action, payload, state)) return true;
+  if (await handleJobOrdersState(req, res, dataType, action, payload, state)) return true;
+  if (await handleStudentsState(req, res, dataType, action, payload, state)) return true;
+  if (await handleEventsState(req, res, dataType, action, payload, state)) return true;
+  if (await handleUsersState(req, res, dataType, action, payload, state)) return true;
+  if (await handleLogsState(req, res, dataType, action, payload, state)) return true;
+  if (await handleMessagesState(req, res, dataType, action, payload, state)) return true;
+  if (await handleMediaState(req, res, dataType, action, payload, state)) return true;
   return false;
 }

@@ -1,5 +1,5 @@
 import React from "react";
-import { Image as ImageIcon, Lock } from "lucide-react";
+import { Image as ImageIcon, Lock, CheckSquare, CreditCard } from "lucide-react";
 import { getStudentPayments } from "../PembayaranSiswaView";
 import { TeacherDashboardPanel } from "../TeacherDashboardPanel";
 import { isAdminTier } from "../../lib/permissions";
@@ -16,24 +16,56 @@ interface MobilePembayaranSubpageProps {
 }
 
 export default function MobilePembayaranSubpage({ currentUser, handleUpdateState, onOpenLogin, selectedStudent, setActivePaymentDetail, setActiveSubpage, setSelectedStudent, systemState }: MobilePembayaranSubpageProps) {
+  const isStaff = currentUser && (currentUser.role === "Pengajar" || isAdminTier(currentUser.role));
+  const [staffTab, setStaffTab] = React.useState<"presensi" | "keuangan">("presensi");
+
   return (
     <div className="p-4 space-y-4 text-left">
-                  <h3 className="font-sans font-black text-slate-900 border-b pb-2 text-md">
-                    {currentUser && currentUser.role === "VVIP"
-                      ? "Pembayaran Siswa"
-                      : currentUser && (currentUser.role === "Pengajar" || isAdminTier(currentUser.role))
-                      ? "HR & Personalia"
-                      : "Pembayaran & Booking Online"}
-                  </h3>
-                  <p className="text-xs text-slate-500">
-                    {currentUser && currentUser.role === "VVIP"
-                      ? "Pantau status pembayaran, tunggakan, dan riwayat transaksi seluruh siswa LPK."
-                      : currentUser && (currentUser.role === "Pengajar" || isAdminTier(currentUser.role))
-                      ? "Kelola kehadiran, gaji, cuti, dan rekapitulasi data staff LPK."
-                      : "Pantau riwayat pembayaran dan tagihan Anda untuk program pelatihan di LPK."}
-                  </p>
-    
-                  {!currentUser ? (
+      <div className="border-b pb-2 space-y-1">
+        <h3 className="font-sans font-black text-slate-900 text-md">
+          {currentUser && currentUser.role === "VVIP"
+            ? "Keuangan Siswa"
+            : isStaff
+            ? (staffTab === "presensi" ? (currentUser.role === "Pengajar" ? "Absen & Presensi Sensei" : "Absen & HR Staf / Admin") : "Keuangan & Kasir Siswa")
+            : "Tagihan & Pembayaran Siswa"}
+        </h3>
+        <p className="text-xs text-slate-500">
+          {currentUser && currentUser.role === "VVIP"
+            ? "Pantau status pembayaran, tunggakan, dan riwayat transaksi seluruh siswa LPK."
+            : isStaff
+            ? (staffTab === "presensi" ? "Lakukan presensi harian (Absen Masuk/Pulang), verifikasi GPS, dan kelola kehadiran." : "Rekapitulasi keuangan dan tagihan seluruh siswa.")
+            : "Pantau riwayat pembayaran dan tagihan Anda untuk program pelatihan di LPK."}
+        </p>
+      </div>
+
+      {isStaff && (
+        <div className="flex gap-2 p-1.5 bg-slate-100/90 rounded-2xl border border-slate-200 shadow-inner">
+          <button
+            onClick={() => setStaffTab("presensi")}
+            className={`flex-1 py-2 px-3 text-xs font-black rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+              staffTab === "presensi"
+                ? "bg-indigo-600 text-white shadow-md"
+                : "text-slate-600 hover:text-slate-900 bg-transparent"
+            }`}
+          >
+            <CheckSquare className="w-3.5 h-3.5" />
+            <span>Absen Staff</span>
+          </button>
+          <button
+            onClick={() => setStaffTab("keuangan")}
+            className={`flex-1 py-2 px-3 text-xs font-black rounded-xl transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+              staffTab === "keuangan"
+                ? "bg-indigo-600 text-white shadow-md"
+                : "text-slate-600 hover:text-slate-900 bg-transparent"
+            }`}
+          >
+            <CreditCard className="w-3.5 h-3.5" />
+            <span>Keuangan Siswa</span>
+          </button>
+        </div>
+      )}
+
+      {!currentUser ? (
                     <div className="bg-amber-50 border border-amber-200 rounded-[24px] p-4 text-center space-y-3">
                       <div className="h-10 w-10 bg-amber-100 text-amber-600 rounded-full flex items-center justify-center mx-auto ring-4 ring-amber-50">
                         <Lock className="h-5 w-5" />
@@ -54,8 +86,16 @@ export default function MobilePembayaranSubpage({ currentUser, handleUpdateState
                         Buka Portal Login
                       </button>
                     </div>
-                  ) : currentUser.role === "VVIP" ? (
-                    /* VVIP WORKFLOW: STATS & STUDENT REKAP FILTER */
+                  ) : isStaff && staffTab === "presensi" ? (
+                    /* STAFF & ADMIN PERSONAL WORKFLOW: ATTENDANCE, GPS, FACE CAMERA, SALARY, CUTI */
+                    <TeacherDashboardPanel
+                      currentUser={currentUser}
+                      systemState={systemState}
+                      onUpdateState={handleUpdateState}
+                      setActiveTab={(tab) => setActiveSubpage(tab === "kalender" ? "kalender" : tab)}
+                    />
+                  ) : (currentUser.role === "VVIP" || (isStaff && staffTab === "keuangan")) ? (
+                    /* ADMIN & VVIP WORKFLOW: STATS & STUDENT REKAP FILTER */
                     <div className="space-y-4 animate-fade-in text-xs font-sans">
                       {(() => {
                         const allStudentNames = Array.from(
@@ -228,14 +268,6 @@ export default function MobilePembayaranSubpage({ currentUser, handleUpdateState
                         );
                       })()}
                     </div>
-                  ) : currentUser.role === "Pengajar" || isAdminTier(currentUser.role) ? (
-                    /* STAFF PERSONAL WORKFLOW: ATTENDANCE, SALARY, CUTI */
-                    <TeacherDashboardPanel
-                      currentUser={currentUser}
-                      systemState={systemState}
-                      onUpdateState={handleUpdateState}
-                      setActiveTab={(tab) => setActiveSubpage(tab === "kalender" ? "kalender" : tab)}
-                    />
                   ) : (
                     /* CLIENT/STUDENT VIEW: CHOOSE AND CHECKOUT SINGLE-VIEW LIST */
                     <div className="space-y-3">

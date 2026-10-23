@@ -166,8 +166,29 @@ export default function VvipGajiSegment({ financialMetrics, handleDeletePayment,
     
                 {Object.keys(monthlyExpenseBreakdown).length > 0 ? (
                   <div className="grid gap-6 md:grid-cols-2">
-                    {Object.keys(monthlyExpenseBreakdown).map((monthKey) => {
+                    {Object.keys(monthlyExpenseBreakdown)
+                      .sort((a, b) => {
+                        const months = [
+                          "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+                          "Juli", "Agustus", "September", "Oktober", "November", "Desember"
+                        ];
+                        const [mA, yA] = a.split(" ");
+                        const [mB, yB] = b.split(" ");
+                        const yearDiff = (parseInt(yB, 10) || 0) - (parseInt(yA, 10) || 0);
+                        if (yearDiff !== 0) return yearDiff;
+                        return months.indexOf(mB) - months.indexOf(mA);
+                      })
+                      .map((monthKey) => {
                       const data = monthlyExpenseBreakdown[monthKey];
+                      const sortedItemList = [...(data.list || [])].sort((a: any, b: any) => {
+                        const dateA = a.date || "";
+                        const dateB = b.date || "";
+                        if (dateA !== dateB) return dateB.localeCompare(dateA);
+                        const timeA = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+                        const timeB = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+                        if (timeA && timeB && timeA !== timeB) return timeB - timeA;
+                        return (b.id || "").toString().localeCompare((a.id || "").toString());
+                      });
                       return (
                         <div key={monthKey} className="border border-slate-100 bg-slate-50/50 p-5 rounded-2xl space-y-4">
                           <div className="flex items-center justify-between border-b border-slate-200 pb-3">
@@ -194,7 +215,7 @@ export default function VvipGajiSegment({ financialMetrics, handleDeletePayment,
     
                           <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
                             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest border-b pb-1">Uraian Transaksi Out</p>
-                            {data.list.map((item: any) => {
+                            {sortedItemList.map((item: any) => {
                               const getCodeLabel = (code: string) => {
                                 switch (code) {
                                   case "P1": return "GAJI KARYAWAN";

@@ -7,6 +7,7 @@ export function isHashedPassword(pw: unknown): pw is string {
 
 export function hashPassword(plain: string): string {
   if (!plain) return "";
+  if (isHashedPassword(plain)) return plain;
   return bcrypt.hashSync(plain, 10);
 }
 
@@ -15,12 +16,19 @@ export function hashPassword(plain: string): string {
 export function verifyPassword(plain: string, stored: unknown): boolean {
   if (!plain || !stored || typeof stored !== "string") return false;
   if (isHashedPassword(stored)) {
-    return bcrypt.compareSync(plain, stored);
+    try {
+      return bcrypt.compareSync(plain, stored);
+    } catch {
+      return false;
+    }
   }
   return plain === stored;
 }
 
-export function stripPassword<T extends { password?: unknown }>(obj: T): Omit<T, "password"> {
-  const { password, ...rest } = obj;
-  return rest;
+export function stripPassword<T extends { password?: unknown }>(obj: T): T {
+  if (!obj || typeof obj !== "object") return obj;
+  const copy = { ...obj };
+  delete copy.password;
+  return copy;
 }
+

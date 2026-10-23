@@ -45,6 +45,7 @@ interface NavbarProps {
   };
   isOverlay?: boolean;
   onOpenDownloadModal?: () => void;
+  onSwitchToMobile?: () => void;
 }
 
 export default function Navbar({
@@ -56,7 +57,8 @@ export default function Navbar({
   setActiveTab,
   customization,
   isOverlay = false,
-  onOpenDownloadModal
+  onOpenDownloadModal,
+  onSwitchToMobile
 }: NavbarProps) {
   const [scrolled, setScrolled] = useState(false);
   const [isPortalMenuOpen, setIsPortalMenuOpen] = useState(false);
@@ -140,21 +142,19 @@ export default function Navbar({
           >
             <div className="relative">
               <div className={`absolute inset-0 rounded-2xl blur-md opacity-20 transition duration-300 ${themeGlowStyles}`}></div>
-              <div className="relative flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-950 text-white shadow-lg transition-transform duration-300 group-hover:scale-105 overflow-hidden">
-                {logoUrl ? (
-                  <img 
-                    src={logoUrl} 
-                    alt="Logo" 
-                    referrerPolicy="no-referrer" 
-                    onError={(e) => {
-                      e.currentTarget.onerror = null;
-                      e.currentTarget.src = "/logo.png";
-                    }}
-                    className="h-full w-full object-contain p-1 bg-white rounded-2xl" 
-                  />
-                ) : (
-                  <LogoIcon className={`h-5.5 w-5.5 group-hover:rotate-6 transition-transform duration-300 ${themeIconStyles}`} />
-                )}
+              <div className="relative flex h-10 w-10 items-center justify-center rounded-2xl bg-white text-white shadow-lg transition-transform duration-300 group-hover:scale-105 overflow-hidden border border-slate-200/50">
+                <img
+                  src={logoUrl || "/logo.png"}
+                  alt={logoText || "LPK SCI Logo"}
+                  referrerPolicy="no-referrer"
+                  className="h-full w-full object-contain p-0.5"
+                  onError={(e) => {
+                    const target = e.currentTarget;
+                    if (target.src !== window.location.origin + "/logo.png") {
+                      target.src = "/logo.png";
+                    }
+                  }}
+                />
               </div>
             </div>
             <div>
@@ -167,114 +167,116 @@ export default function Navbar({
             </div>
           </div>
 
-          {/* Desktop Navigation Tabs - Beautiful Compact Pills (public marketing nav only) */}
+          {/* Desktop Navigation Tabs - Sleek and Responsive (Only on xl+ screens to prevent overlapping on tablets) */}
           {activeTab === "frontend" && (
-          <nav className={`hidden md:flex items-center gap-1 p-1 rounded-2xl flex-nowrap max-w-[50%] lg:max-w-[65%] xl:max-w-none ${isOverlay ? 'bg-transparent border-none' : 'bg-slate-50 border border-slate-200/60'}`}>
-              <>
-                <button
-                  onClick={() => scrollToSection("hero")}
-                  className={`px-3 py-1.5 text-xs font-bold uppercase rounded-xl transition cursor-pointer shrink-0 ${
-                    isOverlay
-                      ? "text-slate-200 hover:bg-white/10 hover:text-white"
-                      : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-                  }`}
-                >
-                  Beranda
-                </button>
-                <button
-                  onClick={() => scrollToSection("program")}
-                  className={`px-3 py-1.5 text-xs font-bold uppercase rounded-xl transition cursor-pointer shrink-0 ${
-                    isOverlay
-                      ? "text-slate-200 hover:bg-white/10 hover:text-white"
-                      : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-                  }`}
-                >
-                  Program
-                </button>
-                <button
-                  onClick={() => scrollToSection("join-us")}
-                  className={`px-3 py-1.5 text-xs font-bold uppercase rounded-xl transition cursor-pointer shrink-0 ${
-                    isOverlay
-                      ? "text-slate-200 hover:bg-white/10 hover:text-white"
-                      : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-                  }`}
-                >
-                  Join With Us
-                </button>
-                <button
-                  onClick={() => scrollToSection("biaya")}
-                  className={`px-3 py-1.5 text-xs font-bold uppercase rounded-xl transition cursor-pointer shrink-0 ${
-                    isOverlay
-                      ? "text-slate-200 hover:bg-white/10 hover:text-white"
-                      : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-                  }`}
-                >
-                  SOP Biaya
-                </button>
-                <button
-                  onClick={() => scrollToSection("map-penyebaran")}
-                  className={`px-3 py-1.5 text-xs font-bold uppercase rounded-xl transition cursor-pointer shrink-0 ${
-                    isOverlay
-                      ? "text-slate-200 hover:bg-white/10 hover:text-white"
-                      : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-                  }`}
-                >
-                  Peta Alumni
-                </button>
-                <button
-                  onClick={() => scrollToSection("galeri")}
-                  className={`px-3 py-1.5 text-xs font-bold uppercase rounded-xl transition cursor-pointer shrink-0 ${
-                    isOverlay
-                      ? "text-slate-200 hover:bg-white/10 hover:text-white"
-                      : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-                  }`}
-                >
-                  Galeri
-                </button>
-                <button
-                  onClick={() => scrollToSection("testimoni")}
-                  className={`px-3 py-1.5 text-xs font-bold uppercase rounded-xl transition cursor-pointer shrink-0 ${
-                    isOverlay
-                      ? "text-slate-200 hover:bg-white/10 hover:text-white"
-                      : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-                  }`}
-                >
-                  Testimoni
-                </button>
-                <button
-                  onClick={() => scrollToSection("faq")}
-                  className={`px-3 py-1.5 text-xs font-bold uppercase rounded-xl transition cursor-pointer shrink-0 ${
-                    isOverlay
-                      ? "text-slate-200 hover:bg-white/10 hover:text-white"
-                      : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-                  }`}
-                >
-                  FAQ
-                </button>
-                {currentUser && (
-                  <button
-                    onClick={() => {
-                      if (currentUser?.role === "Siswa" || currentUser?.role === "Alumni" || currentUser?.role === "Pengajar") {
-                        setActiveTab("lms");
-                      } else if (currentUser?.role === "Admin" || currentUser?.role === "Admin Super" || currentUser?.role === "Admin Biasa") {
-                        setActiveTab("admin");
-                      } else if (currentUser?.role === "VVIP") {
-                        setActiveTab("vvip");
-                      } else {
-                        setActiveTab("eksplorasi");
-                      }
-                    }}
-                    className="px-3.5 py-1.5 text-xs font-extrabold uppercase rounded-xl transition cursor-pointer bg-cyan-500 text-slate-950 hover:bg-cyan-400 shrink-0"
-                  >
-                    Masuk Portal App
-                  </button>
-                )}
-              </>
-          </nav>
+            <nav className={`hidden xl:flex items-center gap-1 p-1 rounded-2xl shrink ${isOverlay ? 'bg-transparent border-none' : 'bg-slate-50 border border-slate-200/60'}`}>
+              <button
+                onClick={() => scrollToSection("hero")}
+                className={`px-2.5 py-1.5 text-xs font-bold uppercase rounded-xl transition cursor-pointer shrink-0 ${
+                  isOverlay
+                    ? "text-slate-200 hover:bg-white/10 hover:text-white"
+                    : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                }`}
+              >
+                Beranda
+              </button>
+              <button
+                onClick={() => scrollToSection("program")}
+                className={`px-2.5 py-1.5 text-xs font-bold uppercase rounded-xl transition cursor-pointer shrink-0 ${
+                  isOverlay
+                    ? "text-slate-200 hover:bg-white/10 hover:text-white"
+                    : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                }`}
+              >
+                Program
+              </button>
+              <button
+                onClick={() => scrollToSection("join-us")}
+                className={`px-2.5 py-1.5 text-xs font-bold uppercase rounded-xl transition cursor-pointer shrink-0 ${
+                  isOverlay
+                    ? "text-slate-200 hover:bg-white/10 hover:text-white"
+                    : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                }`}
+              >
+                Join With Us
+              </button>
+              <button
+                onClick={() => scrollToSection("biaya")}
+                className={`px-2.5 py-1.5 text-xs font-bold uppercase rounded-xl transition cursor-pointer shrink-0 ${
+                  isOverlay
+                    ? "text-slate-200 hover:bg-white/10 hover:text-white"
+                    : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                }`}
+              >
+                SOP Biaya
+              </button>
+              <button
+                onClick={() => scrollToSection("map-penyebaran")}
+                className={`px-2.5 py-1.5 text-xs font-bold uppercase rounded-xl transition cursor-pointer shrink-0 ${
+                  isOverlay
+                    ? "text-slate-200 hover:bg-white/10 hover:text-white"
+                    : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                }`}
+              >
+                Peta Alumni
+              </button>
+              <button
+                onClick={() => scrollToSection("galeri")}
+                className={`px-2.5 py-1.5 text-xs font-bold uppercase rounded-xl transition cursor-pointer shrink-0 ${
+                  isOverlay
+                    ? "text-slate-200 hover:bg-white/10 hover:text-white"
+                    : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                }`}
+              >
+                Galeri
+              </button>
+              <button
+                onClick={() => scrollToSection("testimoni")}
+                className={`px-2.5 py-1.5 text-xs font-bold uppercase rounded-xl transition cursor-pointer shrink-0 ${
+                  isOverlay
+                    ? "text-slate-200 hover:bg-white/10 hover:text-white"
+                    : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                }`}
+              >
+                Testimoni
+              </button>
+              <button
+                onClick={() => scrollToSection("faq")}
+                className={`px-2.5 py-1.5 text-xs font-bold uppercase rounded-xl transition cursor-pointer shrink-0 ${
+                  isOverlay
+                    ? "text-slate-200 hover:bg-white/10 hover:text-white"
+                    : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                }`}
+              >
+                FAQ
+              </button>
+            </nav>
           )}
 
-          {/* Right cluster: in-app portal menu + VVIP room + account, grouped together (not floating center) */}
-          <div className="flex items-center gap-2.5">
+          {/* Right cluster: Portal Access, Mode Switcher, iOS install, & Account */}
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 ml-auto pl-2">
+            
+            {/* Quick Access to Portal App if logged in on Frontend Landing */}
+            {activeTab === "frontend" && currentUser && (
+              <button
+                onClick={() => {
+                  if (currentUser?.role === "Siswa" || currentUser?.role === "Alumni" || currentUser?.role === "Pengajar") {
+                    setActiveTab("lms");
+                  } else if (currentUser?.role === "Admin" || currentUser?.role === "Admin Super" || currentUser?.role === "Admin Biasa") {
+                    setActiveTab("admin");
+                  } else if (currentUser?.role === "VVIP") {
+                    setActiveTab("vvip");
+                  } else {
+                    setActiveTab("eksplorasi");
+                  }
+                }}
+                className="hidden sm:inline-flex items-center gap-1.5 px-3 py-2 text-xs font-black uppercase rounded-xl transition-all active:scale-95 cursor-pointer bg-cyan-500 hover:bg-cyan-400 text-slate-950 shadow-sm shrink-0"
+                title="Buka Portal Aplikasi LPK"
+              >
+                <Compass className="h-3.5 w-3.5 shrink-0" />
+                <span className="whitespace-nowrap">Portal App</span>
+              </button>
+            )}
             {activeTab !== "frontend" && currentUser && (
             <div className="hidden md:flex items-center gap-2">
               <>
@@ -441,21 +443,38 @@ export default function Navbar({
             </div>
             )}
 
-            {/* Pasang di iOS Button (Apple PWA) */}
+            {/* Switch to Mobile Mode Button for Tablets and Desktops */}
+            {onSwitchToMobile && (
+              <button
+                onClick={onSwitchToMobile}
+                className={`inline-flex items-center gap-1.5 rounded-xl px-2.5 py-2 sm:px-3 sm:py-2 text-[11px] sm:text-xs font-bold uppercase tracking-wider transition-all active:scale-95 cursor-pointer shrink-0 ${
+                  isOverlay
+                    ? "bg-white/10 hover:bg-white/20 text-white border border-white/20 shadow-2xs"
+                    : "bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 shadow-2xs"
+                }`}
+                title="Beralih ke Tampilan Aplikasi Mobile / Tablet"
+                id="btn-switch-to-mobile-nav"
+              >
+                <Smartphone className="h-3.5 w-3.5 text-indigo-400 shrink-0" />
+                <span className="whitespace-nowrap">Mode Mobile</span>
+              </button>
+            )}
+
+            {/* Pasang di iOS Button (Apple PWA) - Shown when spacious */}
             <button
               onClick={() => setActiveTab("install")}
-              className={`inline-flex items-center gap-1.5 rounded-2xl px-3 py-2 sm:px-3.5 sm:py-2.5 text-[11px] sm:text-xs font-bold uppercase tracking-wider transition-all active:scale-95 cursor-pointer ${
+              className={`hidden 2xl:inline-flex items-center gap-1.5 rounded-xl px-3 py-2 text-[11px] sm:text-xs font-bold uppercase tracking-wider transition-all active:scale-95 cursor-pointer shrink-0 ${
                 activeTab === "install"
                   ? "bg-indigo-600 text-white shadow-md shadow-indigo-600/30"
                   : isOverlay
-                    ? "bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-400/40 shadow-sm"
-                    : "bg-indigo-50 hover:bg-indigo-100/80 text-indigo-800 border border-indigo-200 shadow-xs"
+                    ? "bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 border border-indigo-400/40 shadow-2xs"
+                    : "bg-indigo-50 hover:bg-indigo-100/80 text-indigo-800 border border-indigo-200 shadow-2xs"
               }`}
               title="Pasang Aplikasi Web di Apple iOS (iPhone & iPad)"
               id="btn-download-app-nav"
             >
               <Apple className="h-3.5 w-3.5 fill-current shrink-0" />
-              <span className="hidden sm:inline">Pasang di iOS</span>
+              <span className="whitespace-nowrap">Pasang di iOS</span>
             </button>
 
             {/* User Account / Auth trigger */}

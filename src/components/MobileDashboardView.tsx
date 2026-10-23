@@ -27,6 +27,7 @@ import {
   ArrowLeft,
   MapPin,
   CheckCircle,
+  Globe,
   GraduationCap,
   Building, FolderOpen,
   Briefcase,
@@ -87,6 +88,7 @@ import {
   Smartphone,
   Apple,
 } from "lucide-react";
+import { markAllNotificationsAsRead, stopAllNotificationChimes } from "../lib/notifications";
 import {
   SystemState,
   UserAccount,
@@ -270,6 +272,7 @@ interface MobileDashboardViewProps {
   onOpenPrivacy?: () => void;
   onLoginAs?: (user: UserAccount) => void;
   onOpenDownloadModal?: () => void;
+  onSwitchToWeb?: () => void;
 }
 
 export default function MobileDashboardView({
@@ -285,6 +288,7 @@ export default function MobileDashboardView({
   onOpenPrivacy,
   onLoginAs,
   onOpenDownloadModal,
+  onSwitchToWeb,
 }: MobileDashboardViewProps) {
   // Mobile navigation tabs: "beranda", "notifikasi", "chat", "kalender", "akun"
   const [mobileTab, setMobileTab] = useState<string>("beranda");
@@ -602,6 +606,10 @@ export default function MobileDashboardView({
   useEffect(() => {
     if (activeSubpage !== "peta") return;
 
+    let isMounted = true;
+    let retryTimer: any = null;
+    let retryCount = 0;
+
     // 1. Inject Leaflet CDN style sheet
     const linkId = "leaflet-css-pkg";
     if (!document.getElementById(linkId)) {
@@ -609,7 +617,6 @@ export default function MobileDashboardView({
       link.id = linkId;
       link.rel = "stylesheet";
       link.href = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.css";
-      link.integrity = "sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=";
       link.crossOrigin = "";
       document.head.appendChild(link);
     }
@@ -621,121 +628,151 @@ export default function MobileDashboardView({
       script = document.createElement("script");
       script.id = scriptId;
       script.src = "https://unpkg.com/leaflet@1.9.4/dist/leaflet.js";
-      script.integrity = "sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=";
       script.crossOrigin = "";
       document.body.appendChild(script);
     }
 
     const loadMobileRadarMap = () => {
+      if (!isMounted) return;
       const L = (window as any).L;
-      if (!L || !mobileMapRef.current) return;
-
-      // Ensure no past double allocations
-      if (mobileMapInstanceRef.current) {
-        mobileMapInstanceRef.current.remove();
-        mobileMapInstanceRef.current = null;
+      if (!L || !mobileMapRef.current) {
+        if (retryCount < 15 && isMounted) {
+          retryCount++;
+          retryTimer = setTimeout(loadMobileRadarMap, 100);
+        }
+        return;
       }
 
-      // Initialize map centered around Japan
-      const map = L.map(mobileMapRef.current, {
-        center: [36.2048, 138.2529],
-        zoom: 5,
-        zoomControl: true,
-        scrollWheelZoom: true,
-        attributionControl: false,
-      });
-
-      mobileMapInstanceRef.current = map;
-      setTimeout(() => { try { if (map && map._container) map.invalidateSize(); } catch (e) {} }, 250);
-
-      // Elegant voyager style tiles matching OpenStreetMap
-      L.tileLayer(
-        "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
-      ).addTo(map);
-
-      // Define default coordinates for Japanese cities/prefectures
-      const defaultCoordinates = ALL_48_PREFECTURES_COORDINATES;
-
-      const expatriates =
-        systemState.activeStudents?.filter((s) => s.status === "Di Jepang") ||
-        [];
-
-      // Group activeStudents by their coordinates or prefecture
-      const groups: Record<
-        string,
-        {
-          cityName: string;
-          lat: number;
-          lng: number;
-          alumni: typeof expatriates;
+      try {
+        // Ensure no past double allocations
+        if (mobileMapInstanceRef.current) {
+          try {
+            mobileMapInstanceRef.current.remove();
+          } catch (e) {}
+          mobileMapInstanceRef.current = null;
         }
-      > = {};
 
-      expatriates.forEach((student) => {
-        const pref = student.prefecture || "Tokyo";
-        const lat =
-          student.latitude !== undefined && student.latitude !== null
-            ? Number(student.latitude)
-            : defaultCoordinates[pref]
-              ? defaultCoordinates[pref][0]
-              : 35.6762;
-        const lng =
-          student.longitude !== undefined && student.longitude !== null
-            ? Number(student.longitude)
-            : defaultCoordinates[pref]
-              ? defaultCoordinates[pref][1]
-              : 139.6503;
-
-        // Group by an exact coordinate string or prefecture to group multiple alumni under same icon beautifully
-        const key = `${lat.toFixed(4)}_${lng.toFixed(4)}`;
-        if (!groups[key]) {
-          groups[key] = {
-            cityName: pref,
-            lat,
-            lng,
-            alumni: [],
-          };
+        if (mobileMapRef.current) {
+          delete (mobileMapRef.current as any)._leaflet_id;
         }
-        groups[key].alumni.push(student);
-      });
 
-      // Plot markers for each city group
-      Object.keys(groups).forEach((key) => {
-        const group = groups[key];
-        const numAlumni = group.alumni.length;
-
-        // Leaflet Circle Marker as custom city icon
-        const marker = L.circleMarker([group.lat, group.lng], {
-          radius: 12 + Math.min(numAlumni, 8),
-          fillColor: "#ef4444", // beautiful red color for Japanese cities
-          color: "#ffffff",
-          weight: 2,
-          opacity: 1,
-          fillOpacity: 0.95,
-        }).addTo(map);
-
-        // Bind interactive popup listing details of alumni and company
-        const popupContent = `
-          <div style="font-family: system-ui, -apple-system, sans-serif; font-size: 11px; max-width: 250px; color: #1e293b;">
-            <div style="font-weight: 800; font-size: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; text-align: center;">
-              <span>🇯🇵 KOTA/PREF: ${group.cityName.toUpperCase()}</span>
-              <span style="background-color: #ef4444; color: white; padding: 4px 8px; border-radius: 9999px; font-size: 10px; font-weight: 900;">${numAlumni} ALUMNI</span>
-            </div>
-          </div>
-        `;
-
-        marker.bindPopup(popupContent, {
-          closeButton: true,
-          closeOnEscapeKey: true,
+        // Initialize map centered around Japan
+        const map = L.map(mobileMapRef.current, {
+          center: [36.2048, 138.2529],
+          zoom: 5,
+          zoomControl: true,
+          scrollWheelZoom: true,
+          attributionControl: false,
         });
 
-        marker.on("click", (e: any) => {
-          if (e.originalEvent) {
-            e.originalEvent.stopPropagation();
+        mobileMapInstanceRef.current = map;
+        setTimeout(() => {
+          try {
+            if (map && map._container) map.invalidateSize();
+          } catch (e) {}
+        }, 250);
+
+        // Standard OpenStreetMap tiles (free, no API key required)
+        L.tileLayer(
+          "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+          {
+            subdomains: ["a", "b", "c"],
+            maxZoom: 19,
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           }
-          map.setView([group.lat, group.lng], 10, { animate: false });
+        ).addTo(map);
+
+        // Define default coordinates for Japanese cities/prefectures
+        const defaultCoordinates = ALL_48_PREFECTURES_COORDINATES || {};
+
+        const expatriates =
+          systemState.activeStudents?.filter((s) => s.status === "Di Jepang") ||
+          [];
+
+        // Group activeStudents by their coordinates or prefecture
+        const groups: Record<
+          string,
+          {
+            cityName: string;
+            lat: number;
+            lng: number;
+            alumni: typeof expatriates;
+          }
+        > = {};
+
+        expatriates.forEach((student) => {
+          const pref = student.prefecture || "Tokyo";
+          const parsedLat =
+            student.latitude !== undefined &&
+            student.latitude !== null &&
+            String(student.latitude).trim() !== ""
+              ? Number(student.latitude)
+              : NaN;
+          const parsedLng =
+            student.longitude !== undefined &&
+            student.longitude !== null &&
+            String(student.longitude).trim() !== ""
+              ? Number(student.longitude)
+              : NaN;
+
+          const defCoord = defaultCoordinates[pref] || [35.6762, 139.6503];
+          const lat = !isNaN(parsedLat) && isFinite(parsedLat) ? parsedLat : defCoord[0];
+          const lng = !isNaN(parsedLng) && isFinite(parsedLng) ? parsedLng : defCoord[1];
+
+          // Group by an exact coordinate string or prefecture to group multiple alumni under same icon beautifully
+          const key = `${lat.toFixed(4)}_${lng.toFixed(4)}`;
+          if (!groups[key]) {
+            groups[key] = {
+              cityName: pref,
+              lat,
+              lng,
+              alumni: [],
+            };
+          }
+          groups[key].alumni.push(student);
         });
-      });
+
+        // Plot markers for each city group
+        Object.keys(groups).forEach((key) => {
+          const group = groups[key];
+          if (isNaN(group.lat) || isNaN(group.lng)) return;
+          const numAlumni = group.alumni.length;
+
+          // Leaflet Circle Marker as custom city icon
+          const marker = L.circleMarker([group.lat, group.lng], {
+            radius: 12 + Math.min(numAlumni, 8),
+            fillColor: "#ef4444", // beautiful red color for Japanese cities
+            color: "#ffffff",
+            weight: 2,
+            opacity: 1,
+            fillOpacity: 0.95,
+          }).addTo(map);
+
+          // Bind interactive popup listing details of alumni and company
+          const popupContent = `
+            <div style="font-family: system-ui, -apple-system, sans-serif; font-size: 11px; max-width: 250px; color: #1e293b;">
+              <div style="font-weight: 800; font-size: 12px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; text-align: center;">
+                <span>🇯🇵 KOTA/PREF: ${group.cityName.toUpperCase()}</span>
+                <span style="background-color: #ef4444; color: white; padding: 4px 8px; border-radius: 9999px; font-size: 10px; font-weight: 900;">${numAlumni} ALUMNI</span>
+              </div>
+            </div>
+          `;
+
+          marker.bindPopup(popupContent, {
+            closeButton: true,
+            closeOnEscapeKey: true,
+          });
+
+          marker.on("click", (e: any) => {
+            if (e.originalEvent) {
+              e.originalEvent.stopPropagation();
+            }
+            map.setView([group.lat, group.lng], 10, { animate: false });
+          });
+        });
+      } catch (err) {
+        console.error("Error loading Mobile Leaflet Radar Map:", err);
+      }
     };
 
     if ((window as any).L) {
@@ -745,9 +782,16 @@ export default function MobileDashboardView({
     }
 
     return () => {
+      isMounted = false;
+      if (retryTimer) clearTimeout(retryTimer);
       if (mobileMapInstanceRef.current) {
-        mobileMapInstanceRef.current.remove();
+        try {
+          mobileMapInstanceRef.current.remove();
+        } catch (e) {}
         mobileMapInstanceRef.current = null;
+      }
+      if (mobileMapRef.current) {
+        delete (mobileMapRef.current as any)._leaflet_id;
       }
     };
   }, [activeSubpage, systemState.activeStudents]);
@@ -1064,11 +1108,14 @@ export default function MobileDashboardView({
             <div className="h-10 w-10 bg-white rounded-xl flex items-center justify-center p-0.5 shadow-md overflow-hidden shrink-0 border border-slate-200/60">
               <img
                 src={systemState.customization?.logoUrl || "/logo.png"}
-                alt="LPK Logo"
+                alt={systemState.customization?.logoText || "LPK SCI Logo"}
                 referrerPolicy="no-referrer"
                 className="h-full w-full object-contain"
                 onError={(e) => {
-                  (e.currentTarget as any).src = "/logo.png";
+                  const target = e.currentTarget;
+                  if (target.src !== window.location.origin + "/logo.png") {
+                    target.src = "/logo.png";
+                  }
                 }}
               />
             </div>
@@ -1084,8 +1131,21 @@ export default function MobileDashboardView({
             </div>
           </div>
         </div>
-        {/* Right actions: Pasang di iOS & Bell notifications & User Account */}
+        {/* Right actions: Switch to Web & Pasang di iOS & Bell notifications */}
         <div className="flex items-center gap-1.5 shrink-0 ml-2">
+          {/* Switch to Web Mode Button */}
+          {onSwitchToWeb && (
+            <button
+              onClick={onSwitchToWeb}
+              className="inline-flex items-center gap-1 px-2.5 py-1.5 text-[10.5px] font-bold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border border-indigo-200/90 rounded-xl transition-all active:scale-95 cursor-pointer shadow-2xs"
+              title="Beralih ke Tampilan Mode Web"
+              id="mobile-header-switch-to-web-btn"
+            >
+              <Globe className="h-3.5 w-3.5 text-indigo-600 shrink-0" />
+              <span className="hidden xs:inline font-bold">Mode Web</span>
+            </button>
+          )}
+
           {/* iOS Web App PWA Install Button */}
           <button
             onClick={() => {
@@ -1104,8 +1164,11 @@ export default function MobileDashboardView({
             onClick={() => {
               setActiveSubpage("notifikasi");
               setNotifBadge(0);
+              markAllNotificationsAsRead();
+              stopAllNotificationChimes();
             }}
             className="relative p-1.5 bg-slate-50 text-slate-500 rounded-full hover:bg-slate-100 transition active:scale-90 border border-slate-100"
+            title="Lihat notifikasi"
           >
             <Bell className="h-5 w-5" />
             {notifBadge > 0 && (
@@ -1123,7 +1186,7 @@ export default function MobileDashboardView({
         (() => {
           const currentUser = effectiveUserForSubpage;
           return (
-            <div className={`flex-1 bg-white animate-fade-only ${activeSubpage === "chat" ? "pb-0" : "pb-24"} max-w-full overflow-x-hidden`}>
+            <div className={`flex-1 bg-white animate-fade-only ${activeSubpage === "chat" ? "pb-0" : "pb-24"} max-w-full overflow-x-hidden flex flex-col min-h-[calc(100vh-120px)]`}>
           <div className="sticky top-0 z-50 bg-indigo-900/95 backdrop-blur-xl text-white p-4 flex items-center justify-between gap-3 shadow-[0_10px_30px_-15px_rgba(0,0,0,0.5)] border-b border-white/10 rounded-b-3xl mb-2">
             {true ? (
               <button
@@ -1136,12 +1199,19 @@ export default function MobileDashboardView({
               <div className="w-1" />
             )}
             <span className="text-[10px] font-black tracking-widest uppercase font-sans text-sky-400 max-w-[60%] truncate text-right">
+              {activeSubpage === "chat" && "Chat & Pesan LPK"}
               {activeSubpage === "pendaftaran" && "Pendaftaran Siswa"}
               {activeSubpage === "profil" && "Profil LPK & Form Daftar"}
               {activeSubpage === "jobs" && "Order Job Tokutei Ginou"}
               {activeSubpage === "perkembangan" && "Data Progress Siswa"}
               {(activeSubpage === "ebenkyou") && "LMS E-Benkyou Kelas"}
-              {activeSubpage === "pembayaran" && (currentUser?.role === "VVIP" ? "Pembayaran Siswa" : (currentUser?.role === "Pengajar" || currentUser?.role?.startsWith("Admin")) ? "HR & Personalia" : "Dashboard Pembayaran")}
+              {activeSubpage === "pembayaran" && (
+                currentUser?.role === "Siswa"
+                  ? "Tagihan & Pembayaran Siswa"
+                  : (currentUser?.role === "Pengajar" || (currentUser?.role && ["Admin", "Admin Super", "Admin Biasa"].includes(currentUser.role)))
+                  ? "Absen Staff & Keuangan"
+                  : "Keuangan Siswa"
+              )}
               {activeSubpage === "peta" && "Peta Sebaran Alumni LPK"}
               {activeSubpage === "galeri" && "Galeri Foto Pembelajaran"}
               {activeSubpage === "medsos" && "Media Sosial Resmi LPK"}
@@ -1385,7 +1455,7 @@ export default function MobileDashboardView({
 
           {/* 12. CHAT */}
           {activeSubpage === "chat" && (
-            <div className="flex-1 flex flex-col justify-between text-left h-full">
+            <div className="flex-1 flex flex-col justify-start text-left min-h-[calc(100vh-140px)] w-full">
               {currentUser ? (
                 <ChatView
                   currentUser={currentUser}
@@ -1631,20 +1701,52 @@ export default function MobileDashboardView({
                   className="w-full pl-9 pr-3 py-2 bg-slate-50 border border-slate-100/80 rounded-xl text-xs outline-none focus:border-indigo-500 transition-colors"
                 />
               </div>
-              <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
-                {["Semua", "Siswa", "Pengajar", "Admin", "Admin Super", "Admin Biasa", "VVIP"].map(role => (
-                  <button
-                    key={role}
-                    onClick={() => setLoginAsRole(role)}
-                    className={`px-3 py-1.5 rounded-lg text-[10px] font-bold whitespace-nowrap transition-colors ${loginAsRole === role ? 'bg-indigo-100 text-indigo-700' : 'bg-slate-50 text-slate-600 hover:bg-slate-100'}`}
-                  >
-                    {role}
-                  </button>
-                ))}
-              </div>
+              {(() => {
+                const baseUsers = systemState.unfilteredUsers || systemState.users || [];
+                const defaultSystemAccounts: any[] = [
+                  { username: "admin", name: "Administrator Utama", email: "admin@lpk.id", role: "Admin", status: "Active" },
+                  { username: "admin_super", name: "Admin Super (Pengawas Sistem)", email: "superadmin@lpk.id", role: "Admin Super", status: "Active" },
+                  { username: "admin_biasa", name: "Admin Operasional Biasa", email: "adminbiasa@lpk.id", role: "Admin Biasa", status: "Active" },
+                  { username: "direktur", name: "Direktur Utama (CEO VVIP)", email: "direktur@lpk.id", role: "VVIP", status: "Active" }
+                ];
+                const pool = [...baseUsers];
+                defaultSystemAccounts.forEach(d => { if (!pool.some(u => u.username === d.username)) pool.push(d); });
+                (systemState.activeStudents || []).forEach((st: any) => {
+                  const uname = st.email?.trim() || st.id || st.nik;
+                  if (uname && !pool.some(u => (u.username || "").toLowerCase() === uname.toLowerCase() || (u.studentId && st.id && u.studentId === st.id))) {
+                    pool.push({ username: uname, name: st.name || "Siswa", email: st.email || "", role: isStudentAlumni(st) ? "Alumni" : "Siswa", status: "Active", studentId: st.id, assignedClass: st.class || "", profilePicture: st.profilePicture || "" });
+                  }
+                });
+                const getCount = (r: string) => {
+                  if (r === "Semua") return pool.length;
+                  if (r === "Admin") return pool.filter(u => u.role === "Admin" || u.role === "Admin Super" || u.role === "Admin Biasa").length;
+                  return pool.filter(u => u.role === r).length;
+                };
+
+                return (
+                  <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1">
+                    {["Semua", "Pengajar", "Siswa", "Admin", "Admin Super", "Admin Biasa", "VVIP"].map(role => {
+                      const count = getCount(role);
+                      const isActive = loginAsRole === role;
+                      return (
+                        <button
+                          key={role}
+                          onClick={() => setLoginAsRole(role)}
+                          className={`px-2.5 py-1 rounded-lg text-[10px] font-bold whitespace-nowrap transition-all flex items-center gap-1 cursor-pointer active:scale-95 ${isActive ? 'bg-indigo-600 text-white shadow-xs' : 'bg-slate-50 text-slate-600 hover:bg-slate-100 border border-slate-100'}`}
+                        >
+                          <span>{role === "Pengajar" ? "Pengajar / Sensei" : role}</span>
+                          <span className={`text-[8px] font-black px-1.5 py-0.2 rounded-full ${isActive ? 'bg-white/20 text-white' : 'bg-slate-200/80 text-slate-700'}`}>
+                            {count}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
             </div>
             
-            <div className="p-4 overflow-y-auto custom-scrollbar flex-1">
+            <div className="p-3 overflow-y-auto custom-scrollbar flex-1 min-h-0 overscroll-contain touch-pan-y" style={{ WebkitOverflowScrolling: "touch" }}>
               <div className="space-y-2">
                 {(() => {
                   const baseUsers = systemState.unfilteredUsers || systemState.users || [];
@@ -1727,7 +1829,7 @@ export default function MobileDashboardView({
                     }
                   });
 
-                  return combinedUsers
+                  const filtered = combinedUsers
                     .filter(u => {
                       if (loginAsRole === "Semua") return true;
                       if (loginAsRole === "Admin") {
@@ -1737,10 +1839,26 @@ export default function MobileDashboardView({
                     })
                     .filter(u => 
                       (u.name || "").toLowerCase().includes(loginAsSearch.toLowerCase()) || 
-                      (u.username || "").toLowerCase().includes(loginAsSearch.toLowerCase())
+                      (u.username || "").toLowerCase().includes(loginAsSearch.toLowerCase()) ||
+                      (u.email || "").toLowerCase().includes(loginAsSearch.toLowerCase())
                     )
-                    .sort((a, b) => (a.name || "").localeCompare(b.name || ""))
-                    .map((user) => (
+                    .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
+
+                  if (filtered.length === 0) {
+                    return (
+                      <div className="py-8 text-center space-y-2">
+                        <p className="text-xs text-slate-500 font-medium">Tidak ada akun ditemukan.</p>
+                        <button
+                          onClick={() => { setLoginAsRole("Semua"); setLoginAsSearch(""); }}
+                          className="px-3 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-[10px] font-bold rounded-lg transition-colors cursor-pointer"
+                        >
+                          Reset Pencarian & Filter
+                        </button>
+                      </div>
+                    );
+                  }
+
+                  return filtered.map((user) => (
                       <button
                         key={user.username}
                         onClick={() => {
@@ -1751,10 +1869,10 @@ export default function MobileDashboardView({
                         }}
                         className="w-full flex items-center justify-between p-3 bg-white border border-slate-100 hover:border-indigo-200 hover:bg-indigo-50/50 rounded-xl transition-all group active:scale-[0.98] cursor-pointer text-left"
                       >
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-3 min-w-0">
                           <div className="h-10 w-10 rounded-full bg-slate-100 overflow-hidden border border-slate-100/80 shrink-0">
                             <img
-                              src={getSafePhotoUrl(user.profilePicture, user.name)}
+                              src={getSafePhotoUrl(user.profilePicture || user.docFoto || (user.faceBiometricData && typeof user.faceBiometricData === 'string' && user.faceBiometricData.startsWith('data:image') ? user.faceBiometricData : ''), user.name)}
                               alt={user.name || "Avatar"}
                               referrerPolicy="no-referrer"
                               className="h-full w-full object-cover"
@@ -1764,9 +1882,14 @@ export default function MobileDashboardView({
                               }}
                             />
                           </div>
-                          <div className="min-w-0">
+                          <div className="min-w-0 flex-1">
                             <p className="text-xs font-bold text-slate-800 truncate group-hover:text-indigo-700 transition-colors">{user.name}</p>
                             <p className="text-[10px] text-slate-500 font-mono truncate">@{user.username}</p>
+                            {user.role === "Pengajar" && (
+                              <span className="inline-block mt-0.5 text-[9px] font-semibold text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-100 truncate max-w-full">
+                                {user.assignedClass ? `Kelas: ${user.assignedClass}` : "Belum diplot kelas"}
+                              </span>
+                            )}
                           </div>
                         </div>
                         <div className="flex flex-col items-end shrink-0 pl-2">
@@ -1777,7 +1900,7 @@ export default function MobileDashboardView({
                              user.role === "Admin" ? "bg-indigo-100 text-indigo-700" :
                              user.role === "Pengajar" ? "bg-emerald-100 text-emerald-700" :
                              "bg-slate-100 text-slate-600"
-                           }`}>{user.role}</span>
+                           }`}>{user.role === "Pengajar" ? "PENGAJAR" : user.role}</span>
                            <div className="h-6 w-6 mt-1 rounded-full bg-white border border-slate-100 flex items-center justify-center text-slate-300 group-hover:text-indigo-600 group-hover:border-indigo-200 transition-colors">
                              <ArrowRight className="h-3 w-3" />
                            </div>

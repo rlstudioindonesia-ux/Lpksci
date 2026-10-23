@@ -205,8 +205,26 @@
         "faviconUrl": { "type": "string" },
         "paymentAccounts": { "type": "array" },
         "slides": { "type": "array" },
+        "lmsClasses": { "type": "array" },
         "landingConfig": { "type": "object" }
       }
+    },
+    "LmsClass": {
+      "title": "LMS Class",
+      "description": "LMS Class containing curriculum chapters (including additional mandiri chapters) and settings.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "isActive": { "type": "boolean" },
+        "type": { "type": "string" },
+        "method": { "type": "string" },
+        "chapters": { "type": "array" },
+        "mathChapters": { "type": "array" },
+        "activeChapterNum": { "type": "number" },
+        "activeMathChapterNum": { "type": "number" }
+      },
+      "required": ["id", "name"]
     },
     "LMSComment": {
       "title": "LMS Comment",
@@ -224,9 +242,56 @@
         "parentId": { "type": "string" }
       },
       "required": ["id", "lessonId", "userId", "userName", "content", "createdAt"]
+    },
+    "LMSQuiz": {
+      "title": "LMS Quiz Question",
+      "description": "Quiz questions associated with lessons or chapters.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "chapterNumber": { "type": "number" },
+        "chapterId": { "type": "number" },
+        "subject": { "type": "string" },
+        "targetClass": { "type": "string" },
+        "questionType": { "type": "string" },
+        "question": { "type": "string" },
+        "options": { "type": "array" },
+        "correctAnswerIndex": { "type": "number" },
+        "correctAnswerEssay": { "type": "string" },
+        "correctAnswerText": { "type": "string" },
+        "imageUrl": { "type": "string" },
+        "audioUrl": { "type": "string" },
+        "videoUrl": { "type": "string" },
+        "points": { "type": "number" },
+        "deadline": { "type": "string" },
+        "durationMinutes": { "type": "number" },
+        "shuffleQuestions": { "type": "boolean" },
+        "required": { "type": "boolean" },
+        "explanation": { "type": "string" }
+      },
+      "required": ["id", "chapterNumber", "subject"]
+    },
+    "BroadcastNotification": {
+      "title": "Broadcast Notification",
+      "description": "Broadcast notifications for job orders, daily schedules, and announcements across all user devices.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "body": { "type": "string" },
+        "type": { "type": "string" },
+        "url": { "type": "string" },
+        "createdAt": { "type": "number" },
+        "timestamp": { "type": "string" }
+      },
+      "required": ["id", "title", "body"]
     }
   },
   "firestore": {
+    "broadcast_notifications": {
+      "schema": { "$ref": "#/entities/BroadcastNotification" },
+      "description": "Real-time broadcast notifications sent to all registered accounts."
+    },
     "registeredStudents": {
       "schema": { "$ref": "#/entities/RegisteredStudent" },
       "description": "Store all registered students."
@@ -275,9 +340,17 @@
         "schema": { "$ref": "#/entities/Customization" },
         "description": "Customizable UI components."
     },
+    "lmsClasses": {
+        "schema": { "$ref": "#/entities/LmsClass" },
+        "description": "Store LMS classes and their chapter curriculums including mandiri chapters."
+    },
     "lmsComments": {
         "schema": { "$ref": "#/entities/LMSComment" },
         "description": "LMS lesson comment/discussion threads."
+    },
+    "lmsQuizzes": {
+        "schema": { "$ref": "#/entities/LMSQuiz" },
+        "description": "LMS chapter quiz questions and answers."
     }
   }
 }

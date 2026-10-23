@@ -1,5 +1,8 @@
 import React from "react";
-import { BookOpen, Calendar, ChevronDown, ChevronUp, Clock, Edit3, Save, Search, Users, X } from "lucide-react";
+import { createPortal } from "react-dom";
+import { BookOpen, Calendar, ChevronDown, ChevronUp, Clock, Edit3, Save, Search, Trash2, Users, X } from "lucide-react";
+import { MediaViewerModal } from "../MediaViewerModal";
+import { ConfirmButton } from "../ConfirmButton";
 
 export function StudentAttendanceManager({
   activeStudents = [],
@@ -28,6 +31,7 @@ export function StudentAttendanceManager({
   const [startTime, setStartTime] = React.useState("08:30");
   const [endTime, setEndTime] = React.useState("11:00");
   const [selectedClass, setSelectedClass] = React.useState(defaultClass || "");
+  const [historyClassFilter, setHistoryClassFilter] = React.useState<string>("all");
   const [selectedBab, setSelectedBab] = React.useState(defaultBabNumber);
   const [selectedSubject, setSelectedSubject] = React.useState(defaultSubject);
   const [studentStatuses, setStudentStatuses] = React.useState<Record<string, string>>({});
@@ -50,23 +54,27 @@ export function StudentAttendanceManager({
 
     const groups = new Map<string, any>();
     
-    const filteredRecords = attendanceRecords.filter((r: any) => {
-      // If a class is selected, filter by that class
-      if (selectedClass) {
-        const rClass = studentClassMap.get(r.studentId) || "";
-        if (rClass !== selectedClass.toLowerCase().trim()) return false;
+    const filteredRecords = (attendanceRecords || []).filter((r: any) => {
+      // If a class is selected for history filtering
+      if (historyClassFilter && historyClassFilter !== "all") {
+        const rClass = (studentClassMap.get(r.studentId) || r.class || "").toLowerCase().trim();
+        if (rClass !== historyClassFilter.toLowerCase().trim()) return false;
       }
       
+      const search = historySearch.toLowerCase().trim();
+      if (!search) return true;
       return (
-        (r.studentName || "").toLowerCase().includes(historySearch.toLowerCase()) ||
-        (r.subject || "").toLowerCase().includes(historySearch.toLowerCase()) ||
-        (r.notes || "").toLowerCase().includes(historySearch.toLowerCase())
+        (r.studentName || "").toLowerCase().includes(search) ||
+        (r.subject || "").toLowerCase().includes(search) ||
+        (r.notes || "").toLowerCase().includes(search) ||
+        (r.date || "").includes(search) ||
+        (r.time || "").includes(search)
       );
     });
     
     filteredRecords.forEach((r: any) => {
       // Add class to the group key if we have it, to distinguish identical sessions across different classes
-      const rClass = studentClassMap.get(r.studentId) || "Unknown Class";
+      const rClass = studentClassMap.get(r.studentId) || r.class || "Unknown Class";
       const key = `${r.date}|${r.time || '-' }|${r.subject}|${rClass}`;
       if (!groups.has(key)) {
         groups.set(key, { records: [], className: rClass });
@@ -77,13 +85,21 @@ export function StudentAttendanceManager({
     return Array.from(groups.entries())
       .map(([key, data]) => ({ key, records: data.records, className: data.className }))
       .sort((a, b) => new Date(b.records[0].date).getTime() - new Date(a.records[0].date).getTime());
-  }, [attendanceRecords, historySearch, selectedClass, activeStudents]);
+  }, [attendanceRecords, historySearch, historyClassFilter, activeStudents]);
 
   React.useEffect(() => {
     if (defaultClass) {
       setSelectedClass(defaultClass);
+    } else if (!selectedClass) {
+      // Auto-select the first class with registered active students
+      const firstClassWithStudents = allClasses.find((c: any) =>
+        activeStudents.some((s: any) => (s.class || "").toLowerCase().trim() === (c.name || "").toLowerCase().trim())
+      );
+      if (firstClassWithStudents) {
+        setSelectedClass(firstClassWithStudents.name);
+      }
     }
-  }, [defaultClass]);
+  }, [defaultClass, allClasses, activeStudents]);
 
   React.useEffect(() => {
     if (defaultBabNumber) {
@@ -271,11 +287,14 @@ export function StudentAttendanceManager({
                     required
                   >
                     <option value="">-- Pilih Kelas --</option>
-                    {allClasses.map((c: any) => (
-                      <option key={c.id || c.name} value={c.name}>
-                        {c.name}
-                      </option>
-                    ))}
+                    {allClasses.map((c: any) => {
+                      const count = activeStudents.filter((s: any) => (s.class || "").toLowerCase().trim() === (c.name || "").toLowerCase().trim()).length;
+                      return (
+                        <option key={c.id || c.name} value={c.name}>
+                          {c.name} {count > 0 ? `(${count} Siswa)` : `(0 Siswa)`}
+                        </option>
+                      );
+                    })}
                   </select>
                 </div>
 
@@ -466,15 +485,50 @@ export function StudentAttendanceManager({
           </form>
           ) : (
             <div className="space-y-4">
-              <div className="relative mb-4">
-                <Search className="absolute inset-y-0 left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-                <input
-                  type="text"
-                  placeholder="Cari nama siswa, topik, catatan..."
-                  value={historySearch}
-                  onChange={(e) => setHistorySearch(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-indigo-500 transition-colors"
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+                <div className="sm:col-span-2 relative">
+                  <Search className="absolute inset-y-0 left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Cari nama siswa, topik, tanggal, catatan..."
+                    value={historySearch}
+                    onChange={(e) => setHistorySearch(e.target.value)}
+                    className="w-full pl-9 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-xs focus:outline-none focus:border-indigo-500 transition-colors shadow-2xs font-medium"
+                  />
+                </div>
+                <div className="relative">
+                  <select
+                    value={historyClassFilter}
+                    onChange={(e) => setHistoryClassFilter(e.target.value)}
+                    className="w-full bg-white border border-slate-200 px-3 py-2.5 rounded-xl text-xs font-bold text-slate-700 focus:border-indigo-500 outline-none cursor-pointer shadow-2xs"
+                  >
+                    <option value="all">Semua Kelas ({attendanceRecords?.length || 0} Catatan)</option>
+                    {allClasses.map((c: any) => {
+                      const count = (attendanceRecords || []).filter((r: any) => {
+                        const studentClass = (activeStudents.find((s: any) => s.id === r.studentId)?.class || r.class || "").toLowerCase().trim();
+                        return studentClass === (c.name || "").toLowerCase().trim();
+                      }).length;
+                      return (
+                        <option key={c.id || c.name} value={c.name}>
+                          {c.name} ({count} Data)
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex items-center justify-between text-[11px] text-slate-500 px-1 pb-1">
+                <span>Menampilkan <strong>{sessionGroups.length} sesi pertemuan</strong> ({sessionGroups.reduce((acc, g) => acc + g.records.length, 0)} total absensi)</span>
+                {historyClassFilter !== "all" && (
+                  <button
+                    type="button"
+                    onClick={() => setHistoryClassFilter("all")}
+                    className="text-indigo-600 hover:text-indigo-800 font-bold underline cursor-pointer"
+                  >
+                    Tampilkan Semua Kelas
+                  </button>
+                )}
               </div>
               <div className="space-y-3">
                 {sessionGroups.map((group) => {
@@ -573,7 +627,7 @@ export function StudentAttendanceManager({
                                       )}
                                     </td>
                                     <td className="px-4 py-3 text-slate-500 max-w-[200px] truncate" title={r.notes}>{r.notes || "-"}</td>
-                                    <td className="px-4 py-3 text-right">
+                                    <td className="px-4 py-3 text-right flex items-center justify-end gap-1">
                                       <button
                                         type="button"
                                         onClick={() => setEditingRecord(r)}
@@ -581,6 +635,21 @@ export function StudentAttendanceManager({
                                       >
                                         <Edit3 className="w-4 h-4" />
                                       </button>
+                                      {onUpdateState && (
+                                        <ConfirmButton
+                                          confirmTitle="Hapus Riwayat Absensi"
+                                          confirmMessage={`Yakin ingin menghapus riwayat kehadiran ${r.studentName} pada ${r.date}?`}
+                                          onConfirmClick={async () => {
+                                            const ok = await onUpdateState("attendance", "delete", { id: r.id });
+                                            if (!ok) {
+                                              alert("Gagal menghapus riwayat absensi");
+                                            }
+                                          }}
+                                          className="p-1.5 text-rose-600 hover:bg-rose-50 rounded-lg transition"
+                                        >
+                                          <Trash2 className="w-4 h-4" />
+                                        </ConfirmButton>
+                                      )}
                                     </td>
                                   </tr>
                                 ))}
@@ -600,17 +669,27 @@ export function StudentAttendanceManager({
                 )}
               </div>
               
-              {editingRecord && (
-                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
-                  <div className="bg-white rounded-2xl w-full max-w-md shadow-2xl overflow-hidden animate-fade-in">
-                    <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+              {editingRecord && createPortal(
+                <div 
+                  className="fixed inset-0 z-[100000] flex items-center justify-center p-4 sm:p-6 overflow-y-auto bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-200"
+                  onClick={() => setEditingRecord(null)}
+                  role="dialog"
+                  aria-modal="true"
+                >
+                  <div 
+                    className="bg-white rounded-3xl w-full max-w-md max-h-[90vh] flex flex-col shadow-2xl border border-slate-200 overflow-hidden my-auto animate-in zoom-in-95 duration-150 text-left"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className="p-4 sm:p-5 border-b border-slate-100 flex justify-between items-center bg-slate-50/80 shrink-0">
                       <h3 className="font-extrabold text-sm text-slate-800">Edit Riwayat Absensi</h3>
-                      <button onClick={() => setEditingRecord(null)} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
+                      <button onClick={() => setEditingRecord(null)} className="h-8 w-8 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-700 flex items-center justify-center transition cursor-pointer">
+                        <X className="w-4 h-4" />
+                      </button>
                     </div>
-                    <div className="p-4 space-y-4">
-                      <div>
-                        <label className="text-[10px] font-bold text-slate-500 uppercase">Siswa</label>
-                        <p className="font-bold text-slate-800">{editingRecord.studentName}</p>
+                    <div className="p-5 space-y-4 overflow-y-auto flex-1 overscroll-contain">
+                      <div className="bg-slate-50 p-3 rounded-2xl border border-slate-100">
+                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Siswa</label>
+                        <p className="font-extrabold text-slate-800 text-sm mt-0.5">{editingRecord.studentName}</p>
                       </div>
                       <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-1">
@@ -618,7 +697,7 @@ export function StudentAttendanceManager({
                           <select
                             value={editingRecord.status}
                             onChange={(e) => setEditingRecord({...editingRecord, status: e.target.value})}
-                            className="w-full border border-slate-200 bg-white rounded-lg px-3 py-2 text-xs focus:border-indigo-500 outline-none"
+                            className="w-full border border-slate-200 bg-white rounded-xl px-3 py-2 text-xs focus:border-indigo-500 outline-none"
                           >
                             <option value="Hadir">Hadir</option>
                             <option value="Izin">Izin</option>
@@ -632,7 +711,7 @@ export function StudentAttendanceManager({
                             type="text"
                             value={editingRecord.subject}
                             onChange={(e) => setEditingRecord({...editingRecord, subject: e.target.value})}
-                            className="w-full border border-slate-200 bg-white rounded-lg px-3 py-2 text-xs focus:border-indigo-500 outline-none"
+                            className="w-full border border-slate-200 bg-white rounded-xl px-3 py-2 text-xs focus:border-indigo-500 outline-none"
                           />
                         </div>
                       </div>
@@ -642,15 +721,15 @@ export function StudentAttendanceManager({
                           rows={2}
                           value={editingRecord.notes}
                           onChange={(e) => setEditingRecord({...editingRecord, notes: e.target.value})}
-                          className="w-full border border-slate-200 bg-white rounded-lg px-3 py-2 text-xs focus:border-indigo-500 outline-none"
+                          className="w-full border border-slate-200 bg-white rounded-xl px-3 py-2 text-xs focus:border-indigo-500 outline-none"
                         />
                       </div>
                     </div>
-                    <div className="p-4 border-t border-slate-100 flex justify-end gap-2 bg-slate-50/50">
+                    <div className="p-4 sm:p-5 border-t border-slate-100 flex justify-end gap-2 bg-slate-50/80 shrink-0">
                       <button
                         type="button"
                         onClick={() => setEditingRecord(null)}
-                        className="px-4 py-2 text-xs font-bold text-slate-500 hover:text-slate-700 bg-white border border-slate-200 rounded-xl"
+                        className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-800 bg-white border border-slate-200 rounded-xl transition cursor-pointer"
                       >
                         Batal
                       </button>
@@ -662,47 +741,22 @@ export function StudentAttendanceManager({
                             setEditingRecord(null);
                           }
                         }}
-                        className="px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl flex items-center gap-1.5"
+                        className="px-4 py-2 text-xs font-bold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl flex items-center gap-1.5 transition cursor-pointer shadow-sm"
                       >
                         <Save className="w-3.5 h-3.5" /> Simpan Perubahan
                       </button>
                     </div>
                   </div>
-                </div>
+                </div>,
+                document.body
               )}
 
               {viewingAttendancePhoto && (
-                <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in" onClick={() => setViewingAttendancePhoto(null)}>
-                  <div className="bg-white rounded-3xl p-4 max-w-md w-full shadow-2xl relative space-y-3" onClick={e => e.stopPropagation()}>
-                    <div className="flex items-center justify-between border-b border-slate-100 pb-2">
-                      <h4 className="font-extrabold text-xs text-slate-800 flex items-center gap-2">
-                        <span>📷</span> Foto Bukti Presensi
-                      </h4>
-                      <button
-                        onClick={() => setViewingAttendancePhoto(null)}
-                        className="p-1 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    </div>
-                    <div className="rounded-2xl overflow-hidden bg-slate-950 flex items-center justify-center min-h-[220px] max-h-[65vh]">
-                      <img
-                        src={viewingAttendancePhoto}
-                        alt="Foto Absen"
-                        className="max-h-[63vh] w-auto object-contain rounded-xl"
-                        referrerPolicy="no-referrer"
-                      />
-                    </div>
-                    <div className="text-center pt-1">
-                      <button
-                        onClick={() => setViewingAttendancePhoto(null)}
-                        className="px-5 py-2 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-slate-800 transition cursor-pointer"
-                      >
-                        Tutup
-                      </button>
-                    </div>
-                  </div>
-                </div>
+                <MediaViewerModal
+                  url={viewingAttendancePhoto}
+                  title="Foto Bukti Presensi Siswa"
+                  onClose={() => setViewingAttendancePhoto(null)}
+                />
               )}
             </div>
           )}

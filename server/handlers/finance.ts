@@ -1,12 +1,12 @@
 import type { Request, Response } from "express";
-import { syncEntityToFirestore, deleteEntityFromFirestore } from "../../src/db/firebase-adapter.ts";
+import { syncEntityToFirestore, syncEntityToFirestoreAsync, deleteEntityFromFirestore, touchSyncMeta } from "../../src/db/firebase-adapter.ts";
 
 // Cash ledger, payments, taxes, and program cost config
 // Extracted verbatim from the monolithic /api/state/update handler in server.ts.
 // Returns a truthy value (the Express Response) if this domain handled the
 // (dataType, action) combination and already sent a response; otherwise false,
 // so the caller (server/handlers/index.ts) can try the next domain in order.
-export function handleFinanceState(req: Request, res: Response, dataType: string, action: string, payload: any, state: any) {
+export async function handleFinanceState(req: Request, res: Response, dataType: string, action: string, payload: any, state: any) {
 
 
     if (dataType === "cashLedger" && action === "add") {
@@ -243,7 +243,12 @@ export function handleFinanceState(req: Request, res: Response, dataType: string
         ...(state.costConfig || {}),
         ...payload
       };
-      syncEntityToFirestore("system", "costConfig", state.costConfig);
+      await syncEntityToFirestoreAsync("system", "costConfig", state.costConfig);
+      await touchSyncMeta({
+        dataType: "costConfig",
+        action: "update",
+        source: "backend"
+      });
       return res.json({ success: true, costConfig: state.costConfig });
     }
 

@@ -1,5 +1,5 @@
 import React from "react";
-import { Award, Calculator, ChevronLeft, ChevronRight, Edit, Eye, FileText, Filter, History, RefreshCw, RotateCcw, Search, Sparkles, Trash2, Users, X } from "lucide-react";
+import { Award, Calculator, ChevronLeft, ChevronRight, Edit, Eye, FileText, Filter, GraduationCap, History, RefreshCw, RotateCcw, Search, Sparkles, Trash2, Users, X } from "lucide-react";
 import { ConfirmButton } from "../ConfirmButton";
 import { createSvgAvatar, getSafePhotoUrl } from "../../lib/storageHelper";
 import { computeAttendanceRate } from "../../lib/attendanceMetrics";
@@ -37,12 +37,25 @@ interface AdminSiswaSegmentProps {
   systemState: any;
 }
 
+function getPaginationRange(current: number, total: number): (number | string)[] {
+  if (total <= 7) {
+    return Array.from({ length: total }, (_, i) => i + 1);
+  }
+  if (current <= 4) {
+    return [1, 2, 3, 4, 5, "...", total];
+  }
+  if (current >= total - 3) {
+    return [1, "...", total - 4, total - 3, total - 2, total - 1, total];
+  }
+  return [1, "...", current - 1, current, current + 1, "...", total];
+}
+
 export default function AdminSiswaSegment({ checkSyncStatus, filterClass, filterMonth, filterStatus, filterYear, filteredSiswaItems, handleReject, isAlumniClass, isStudentRoleOnly, onUpdateState, paginatedSiswaItems, setFilterClass, setFilterMonth, setFilterStatus, setFilterYear, setSiswaPage, setSiswaSearch, setSiswaTab, setStatCardMode, setVerifyingDocsStudent, setViewingCvStudentId, siswaItemsPerPage, siswaPage, siswaSearch, siswaTab, siswaTotalPages, startAdminEditReg, statCardMode, systemState }: AdminSiswaSegmentProps) {
   return (
     <div className="space-y-6 sm:space-y-8 animate-fade-in">
-                <div className="flex flex-col 2xl:flex-row gap-4 justify-between items-stretch 2xl:items-center bg-white p-4 md:p-6 rounded-[2rem] border border-slate-100 shadow-sm w-full overflow-hidden">
+                <div className="flex flex-col xl:flex-row gap-4 justify-between items-stretch xl:items-center bg-white p-4 md:p-6 rounded-[2rem] border border-slate-100 shadow-sm w-full">
                   {/* Menu icon tabs to separate Siswa Aktif, Siswa Baru, and Alumni */}
-                  <div className="flex items-center gap-1 bg-slate-100/70 p-1 rounded-2xl border border-slate-200/40 overflow-x-auto custom-scrollbar max-w-full w-full 2xl:w-auto shrink-0">
+                  <div className="flex items-center gap-1.5 bg-slate-100/70 p-1.5 rounded-2xl border border-slate-200/40 overflow-x-auto custom-scrollbar max-w-full w-full xl:w-auto shrink-0">
                     <button
                       type="button"
                       onClick={() => { setSiswaTab("aktif"); setSiswaPage(1); }}
@@ -103,10 +116,26 @@ export default function AdminSiswaSegment({ checkSyncStatus, filterClass, filter
                       <History className="h-4 w-4" />
                       <span>History Rekap</span>
                     </button>
+
+                    <button
+                      type="button"
+                      onClick={() => { setSiswaTab("sensei"); setSiswaPage(1); }}
+                      className={`flex items-center justify-center gap-2 px-3.5 py-2 rounded-xl text-xs font-extrabold tracking-wide transition-all duration-300 cursor-pointer shrink-0 ${
+                        siswaTab === "sensei"
+                          ? "bg-emerald-600 text-white shadow-md shadow-emerald-100 translate-y-[-1px]"
+                          : "text-slate-600 hover:bg-white hover:text-slate-900"
+                      }`}
+                    >
+                      <GraduationCap className="h-4 w-4" />
+                      <span>Data Sensei</span>
+                      <div className={`px-2 py-0.5 rounded-lg text-[10px] font-extrabold ${siswaTab === "sensei" ? "bg-white/20 text-white" : "bg-slate-200 text-slate-700"}`}>
+                        {(systemState.users || []).filter(u => u.role === "Pengajar").length}
+                      </div>
+                    </button>
                   </div>
     
                   {/* Filter Bulan/Tahun & Sinkronisasi */}
-                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full 2xl:w-auto max-w-full">
+                  <div className="flex flex-wrap items-center gap-2.5 w-full xl:w-auto max-w-full">
                     <button
                       type="button"
                       onClick={checkSyncStatus}
@@ -117,16 +146,16 @@ export default function AdminSiswaSegment({ checkSyncStatus, filterClass, filter
                       <span>Sinkronkan Akun</span>
                     </button>
     
-                    <div className="flex flex-wrap sm:flex-nowrap items-center gap-2 bg-slate-50/80 px-3 py-1.5 rounded-xl border border-slate-200/50 w-full sm:w-auto max-w-full">
-                      <div className="flex items-center gap-1.5 text-slate-500 shrink-0">
+                    <div className="flex flex-wrap items-center gap-2 bg-slate-50/80 p-1.5 rounded-xl border border-slate-200/50 flex-grow sm:flex-grow-0 max-w-full">
+                      <div className="flex items-center gap-1.5 text-slate-500 shrink-0 px-1">
                         <Filter className="h-3.5 w-3.5" />
                         <span className="text-[10px] font-black uppercase tracking-wider hidden sm:inline">Filter:</span>
                       </div>
-                      <div className="flex flex-wrap sm:flex-nowrap items-center gap-1.5 flex-grow min-w-0 max-w-full">
+                      <div className="flex flex-wrap items-center gap-1.5 flex-grow min-w-0">
                         <select
                           value={filterMonth}
                           onChange={(e) => setFilterMonth(e.target.value)}
-                          className="bg-white border border-slate-200/60 rounded-lg px-2 py-1.5 text-[11px] font-bold text-slate-700 outline-none cursor-pointer hover:border-indigo-300 transition-colors shadow-2xs w-full sm:w-auto shrink-0"
+                          className="bg-white border border-slate-200/70 rounded-lg px-2.5 py-1.5 text-[11px] font-bold text-slate-700 outline-none cursor-pointer hover:border-indigo-300 transition-colors shadow-2xs w-full sm:w-auto shrink-0"
                         >
                           <option value="All">Semua Bulan</option>
                           {Array.from({ length: 12 }).map((_, i) => (
@@ -141,7 +170,7 @@ export default function AdminSiswaSegment({ checkSyncStatus, filterClass, filter
                         <select
                           value={filterYear}
                           onChange={(e) => setFilterYear(e.target.value)}
-                          className="bg-white border border-slate-200/60 rounded-lg px-2 py-1.5 text-[11px] font-bold text-slate-700 outline-none cursor-pointer hover:border-indigo-300 transition-colors shadow-2xs w-full sm:w-auto shrink-0"
+                          className="bg-white border border-slate-200/70 rounded-lg px-2.5 py-1.5 text-[11px] font-bold text-slate-700 outline-none cursor-pointer hover:border-indigo-300 transition-colors shadow-2xs w-full sm:w-auto shrink-0"
                         >
                           <option value="All">Semua Tahun</option>
                           {["2021", "2022", "2023", "2024", "2025", "2026", "2027"].map(
@@ -153,14 +182,14 @@ export default function AdminSiswaSegment({ checkSyncStatus, filterClass, filter
                           )}
                         </select>
     
-                        {siswaTab === "aktif" && (
+                        {(siswaTab === "aktif" || siswaTab === "sensei") && (
                           <select
                             value={filterClass}
                             onChange={(e) => {
                               setFilterClass(e.target.value);
                               setSiswaPage(1);
                             }}
-                            className="bg-white border border-slate-200/60 rounded-lg px-2 py-1.5 text-[11px] font-bold text-slate-700 outline-none cursor-pointer hover:border-indigo-300 transition-colors shadow-2xs w-full sm:w-auto shrink-0"
+                            className="bg-white border border-slate-200/70 rounded-lg px-2.5 py-1.5 text-[11px] font-bold text-slate-700 outline-none cursor-pointer hover:border-indigo-300 transition-colors shadow-2xs w-full sm:w-auto shrink-0"
                           >
                             <option value="All">Semua Kelas</option>
                             <option value="Belum Diplot">Belum Diplot</option>
@@ -170,29 +199,81 @@ export default function AdminSiswaSegment({ checkSyncStatus, filterClass, filter
                           </select>
                         )}
     
-                        <select
-                          value={filterStatus}
-                          onChange={(e) => {
-                            setFilterStatus(e.target.value);
-                            setSiswaPage(1);
-                          }}
-                          className="bg-white border border-slate-200/60 rounded-lg px-2 py-1.5 text-[11px] font-bold text-slate-700 outline-none cursor-pointer hover:border-indigo-300 transition-colors shadow-2xs w-full sm:w-auto shrink-0 font-sans"
-                        >
-                          <option value="All">Semua Status & Lokasi</option>
-                          <option value="Belajar">🇮🇩 1. BELAJAR</option>
-                          <option value="On Proges Job">💼 2. ON PROGES JOB</option>
-                          <option value="On Progres JFT/JLPT/SSW">📋 3. ON PROGRES JFT/JLPT/SSW</option>
-                          <option value="Diklat SO">📘 4. DIKLAT SO</option>
-                          <option value="Lulus">🎓 5. LULUS</option>
-                          <option value="Di Jepang">🇯🇵 6. DI JEPANG</option>
-                          <option value="Dikeluarkan">❌ 7. DIKELUARKAN</option>
-                        </select>
+                        {siswaTab === "sensei" ? (
+                          <select
+                            value={filterStatus}
+                            onChange={(e) => {
+                              setFilterStatus(e.target.value);
+                              setSiswaPage(1);
+                            }}
+                            className="bg-white border border-slate-200/70 rounded-lg px-2.5 py-1.5 text-[11px] font-bold text-slate-700 outline-none cursor-pointer hover:border-indigo-300 transition-colors shadow-2xs w-full sm:w-auto font-sans"
+                          >
+                            <option value="All">Semua Status Akun</option>
+                            <option value="Active">🟢 Aktif (Bisa Login)</option>
+                            <option value="Suspended">🔴 Suspended (Dinonaktifkan)</option>
+                          </select>
+                        ) : (
+                          <select
+                            value={filterStatus}
+                            onChange={(e) => {
+                              setFilterStatus(e.target.value);
+                              setSiswaPage(1);
+                            }}
+                            className="bg-white border border-slate-200/70 rounded-lg px-2.5 py-1.5 text-[11px] font-bold text-slate-700 outline-none cursor-pointer hover:border-indigo-300 transition-colors shadow-2xs w-full sm:w-auto font-sans"
+                          >
+                            <option value="All">Semua Status & Lokasi</option>
+                            <option value="Belajar">🇮🇩 1. BELAJAR</option>
+                            <option value="On Proges Job">💼 2. ON PROGES JOB</option>
+                            <option value="Diklat SO">📘 3. DIKLAT SO</option>
+                            <option value="Di Jepang">🇯🇵 4. DI JEPANG</option>
+                            <option value="On Progres JFT/JLPT/SSW">🎓 5. SERTIFIKASI JFT/JLPT/SSW</option>
+                            <option value="Dikeluarkan">❌ 6. DIKELUARKAN</option>
+                          </select>
+                        )}
                       </div>
                     </div>
                   </div>
                 </div>
     
-                {/* Statistik & Filter Kelas: full-width scrollable table */}
+                {/* Statistik & Filter Kelas / Direktori Sensei */}
+                {siswaTab === "sensei" ? (
+                  <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-emerald-950 p-5 sm:p-7 rounded-[2rem] sm:rounded-[2.5rem] text-white shadow-2xl relative overflow-hidden border border-emerald-500/20">
+                    <div className="absolute top-0 right-0 w-48 h-48 bg-emerald-500/10 rounded-full blur-3xl -mr-20 -mt-20 pointer-events-none" />
+                    <div className="absolute bottom-0 left-0 w-48 h-48 bg-teal-500/10 rounded-full blur-3xl -ml-20 -mb-20 pointer-events-none" />
+                    <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-5">
+                      <div>
+                        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 mb-2">
+                          <GraduationCap className="h-3.5 w-3.5" />
+                          <span>Direktori Tenaga Pengajar LPK</span>
+                        </div>
+                        <h4 className="font-display font-black text-white text-base sm:text-xl flex items-center gap-2 mb-1.5">
+                          <span>Data Guru / Sensei & Penugasan Kelas</span>
+                        </h4>
+                        <p className="text-slate-300 text-xs max-w-xl leading-relaxed">
+                          Kelola akun pengajar, pantau sertifikasi kecakapan bahasa Jepang (JLPT/JFT), atur plotting kelas yang diampu, serta cek log kehadiran presensi harian seluruh Sensei.
+                        </p>
+                      </div>
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 shrink-0">
+                        <div className="bg-white/10 backdrop-blur-sm border border-white/10 p-3 rounded-2xl text-center">
+                          <div className="text-[9px] text-emerald-300 font-extrabold uppercase tracking-wider">Total Sensei</div>
+                          <div className="text-xl font-black text-white">{(systemState.users || []).filter((u: any) => u.role === "Pengajar").length}</div>
+                        </div>
+                        <div className="bg-white/10 backdrop-blur-sm border border-white/10 p-3 rounded-2xl text-center">
+                          <div className="text-[9px] text-emerald-300 font-extrabold uppercase tracking-wider">Akun Aktif</div>
+                          <div className="text-xl font-black text-emerald-400">{(systemState.users || []).filter((u: any) => u.role === "Pengajar" && u.status !== "Suspended").length}</div>
+                        </div>
+                        <div className="bg-white/10 backdrop-blur-sm border border-white/10 p-3 rounded-2xl text-center">
+                          <div className="text-[9px] text-emerald-300 font-extrabold uppercase tracking-wider">Plot Kelas</div>
+                          <div className="text-xl font-black text-white">{(systemState.users || []).filter((u: any) => u.role === "Pengajar" && u.assignedClass).length}</div>
+                        </div>
+                        <div className="bg-white/10 backdrop-blur-sm border border-white/10 p-3 rounded-2xl text-center">
+                          <div className="text-[9px] text-emerald-300 font-extrabold uppercase tracking-wider">Total Presensi</div>
+                          <div className="text-xl font-black text-sky-400">{(systemState.logs || []).filter((l: any) => l.type === "PRESENSI_PENGAJAR").length}</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
                 <div className="bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-950 p-5 sm:p-8 rounded-[2rem] sm:rounded-[2.5rem] text-white shadow-2xl relative overflow-hidden border border-white/10 group">
                   <div className="absolute top-0 right-0 w-48 h-48 bg-indigo-500/10 rounded-full blur-3xl -mr-20 -mt-20 pointer-events-none" />
                   <div className="absolute bottom-0 left-0 w-48 h-48 bg-blue-500/10 rounded-full blur-3xl -ml-20 -mb-20 pointer-events-none" />
@@ -293,7 +374,7 @@ export default function AdminSiswaSegment({ checkSyncStatus, filterClass, filter
                             <th className="px-3 py-3 text-center">Siswa</th>
                             <th className="px-3 py-3">🇮🇩 Belajar</th>
                             <th className="px-3 py-3">💼 Job</th>
-                            <th className="px-3 py-3">📋 JFT/JLPT</th>
+                            <th className="px-3 py-3">📋 Sertifikasi JFT/jlpt/SSW</th>
                             <th className="px-3 py-3">📘 Diklat SO</th>
                             <th className="px-3 py-3">🇯🇵 Jepang</th>
                             <th className="px-3 py-3 text-right">Aksi</th>
@@ -369,7 +450,7 @@ export default function AdminSiswaSegment({ checkSyncStatus, filterClass, filter
                               >
                                 <td className="px-3 sm:px-4 py-3 whitespace-nowrap">
                                   <span className={`${colorClass} font-black uppercase tracking-wide text-[11px]`}>
-                                    Kelas {className}
+                                    {className.toLowerCase().startsWith("kelas") || className.toLowerCase().startsWith("sertifikasi") ? className : `Kelas ${className}`}
                                   </span>
                                   {isSelected && (
                                     <span className="ml-2 text-[8px] font-black bg-indigo-500 text-white px-1.5 py-0.5 rounded-full">
@@ -382,7 +463,7 @@ export default function AdminSiswaSegment({ checkSyncStatus, filterClass, filter
                                 </td>
                                 <td className="px-3 py-3"><Badge count={belajarCount} label="Belajar" cls="bg-blue-500/20 text-blue-300" /></td>
                                 <td className="px-3 py-3"><Badge count={jobCount} label="Job" cls="bg-amber-500/20 text-amber-300" /></td>
-                                <td className="px-3 py-3"><Badge count={jftCount} label="JFT" cls="bg-sky-500/20 text-sky-300" /></td>
+                                <td className="px-3 py-3"><Badge count={jftCount} label="Sertifikasi JFT/jlpt/SSW" cls="bg-sky-500/20 text-sky-300" /></td>
                                 <td className="px-3 py-3"><Badge count={diklatCount} label="Diklat" cls="bg-indigo-500/20 text-indigo-300" /></td>
                                 <td className="px-3 py-3"><Badge count={jepangCount} label="Jepang" cls="bg-emerald-500/20 text-emerald-300" /></td>
                                 <td className="px-3 py-3 text-right">
@@ -466,11 +547,10 @@ export default function AdminSiswaSegment({ checkSyncStatus, filterClass, filter
                         {[
                           { id: "Belajar", label: "1. Belajar", icon: "🇮🇩", color: "text-blue-400", border: "border-blue-400/30", bg: "bg-blue-500/10" },
                           { id: "On Proges Job", label: "2. On Proges Job", icon: "💼", color: "text-amber-400", border: "border-amber-400/30", bg: "bg-amber-500/10" },
-                          { id: "On Progres JFT/JLPT/SSW", label: "3. On Progres JFT", icon: "📋", color: "text-sky-400", border: "border-sky-400/30", bg: "bg-sky-500/10" },
-                          { id: "Diklat SO", label: "4. Diklat SO", icon: "📘", color: "text-indigo-400", border: "border-indigo-400/30", bg: "bg-indigo-500/10" },
-                          { id: "Lulus", label: "5. Lulus", icon: "🎓", color: "text-purple-400", border: "border-purple-400/30", bg: "bg-purple-500/10" },
-                          { id: "Di Jepang", label: "6. Di Jepang", icon: "🇯🇵", color: "text-emerald-400", border: "border-emerald-400/30", bg: "bg-emerald-500/10" },
-                          { id: "Dikeluarkan", label: "7. Dikeluarkan", icon: "❌", color: "text-rose-400", border: "border-rose-400/30", bg: "bg-rose-500/10" },
+                          { id: "Diklat SO", label: "3. Diklat SO", icon: "📘", color: "text-indigo-400", border: "border-indigo-400/30", bg: "bg-indigo-500/10" },
+                          { id: "Di Jepang", label: "4. Di Jepang", icon: "🇯🇵", color: "text-emerald-400", border: "border-emerald-400/30", bg: "bg-emerald-500/10" },
+                          { id: "On Progres JFT/JLPT/SSW", label: "5. Sertifikasi JFT/JLPT/SSW", icon: "🎓", color: "text-purple-400", border: "border-purple-400/30", bg: "bg-purple-500/10" },
+                          { id: "Dikeluarkan", label: "6. Dikeluarkan", icon: "❌", color: "text-rose-400", border: "border-rose-400/30", bg: "bg-rose-500/10" },
                         ].map((st) => {
                           const isSelected = filterStatus === st.id;
                           const count = (systemState.activeStudents || []).filter((s: any) => {
@@ -479,7 +559,7 @@ export default function AdminSiswaSegment({ checkSyncStatus, filterClass, filter
                               if (filterClass === "Belum Diplot" && s.class) return false;
                               if (filterClass !== "Belum Diplot" && s.class !== filterClass) return false;
                             }
-                            return s.status === st.id;
+                            return s.status === st.id || (st.id === "On Progres JFT/JLPT/SSW" && s.status === "Lulus");
                           }).length;
     
                           return (
@@ -531,6 +611,7 @@ export default function AdminSiswaSegment({ checkSyncStatus, filterClass, filter
                     )}
                   </div>
                 </div>
+                )}
     
                 <div id="tabel-siswa-section" className="flex flex-col space-y-4 scroll-mt-6">
                   {/* Search Bar Input */}
@@ -539,7 +620,7 @@ export default function AdminSiswaSegment({ checkSyncStatus, filterClass, filter
                       <Search className="h-4 w-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
                       <input
                         type="text"
-                        placeholder="Cari siswa berdasarkan nama, ID, email, nomor HP, atau program..."
+                        placeholder={siswaTab === "sensei" ? "Cari Sensei berdasarkan nama, username, email, kelas, atau level..." : "Cari siswa berdasarkan nama, ID, email, nomor HP, atau program..."}
                         value={siswaSearch}
                         onChange={(e) => {
                           setSiswaSearch(e.target.value);
@@ -566,7 +647,7 @@ export default function AdminSiswaSegment({ checkSyncStatus, filterClass, filter
                       <div className="text-xs font-bold text-slate-500 flex items-center gap-1.5 shrink-0 px-1">
                         <span>Hasil:</span>
                         <span className="bg-indigo-50 text-indigo-700 px-2.5 py-1 rounded-lg border border-indigo-100 font-black">
-                          {filteredSiswaItems.length} Siswa
+                          {filteredSiswaItems.length} {siswaTab === "sensei" ? "Sensei" : "Siswa"}
                         </span>
                       </div>
                     )}
@@ -870,6 +951,168 @@ export default function AdminSiswaSegment({ checkSyncStatus, filterClass, filter
                             })}
                         </tbody>
                       </table>
+                    ) : siswaTab === "sensei" ? (
+                      <table className="w-full text-left border-collapse table-auto md:text-xs text-[10px] leading-tight animate-fade-in">
+                        <thead>
+                          <tr className="bg-slate-50 border-b border-slate-100 text-slate-500 font-bold">
+                            <th className="md:p-4 p-2 py-3 uppercase text-slate-600 font-black">
+                              PROFIL SENSEI
+                            </th>
+                            <th className="md:p-4 p-2 py-3 uppercase text-slate-600 font-black">
+                              LEVEL JLPT / KECAKAPAN
+                            </th>
+                            <th className="md:p-4 p-2 py-3 uppercase text-slate-600 font-black">
+                              KELAS YANG DIAMPU
+                            </th>
+                            <th className="md:p-4 p-2 py-3 uppercase text-slate-600 font-black text-center">
+                              SISWA KELAS
+                            </th>
+                            <th className="md:p-4 p-2 py-3 uppercase text-slate-600 font-black text-center">
+                              PRESENSI HADIR
+                            </th>
+                            <th className="md:p-4 p-2 py-3 uppercase text-slate-600 font-black text-center">
+                              STATUS AKUN
+                            </th>
+                            <th className="md:p-4 p-2 py-3 uppercase text-slate-600 font-black text-center">
+                              BERKAS & REKENING
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {paginatedSiswaItems.map((teacher: any) => {
+                            const studentCount = (systemState.activeStudents || []).filter(
+                              (st: any) => teacher.assignedClass && (st.class || "").toLowerCase() === teacher.assignedClass.toLowerCase() && !["Lulus", "Di Jepang"].includes(st.status)
+                            ).length;
+                            const presensiCount = (systemState.logs || []).filter(
+                              (l: any) => l.type === "PRESENSI_PENGAJAR" && (l.user === teacher.name || l.user === teacher.username)
+                            ).length;
+                            const teacherPhoto = teacher.profilePicture || teacher.docFoto || (teacher.faceBiometricData && teacher.faceBiometricData.startsWith("data:image") ? teacher.faceBiometricData : "");
+                            return (
+                              <tr key={teacher.username || teacher.id} className="hover:bg-indigo-50/20 transition-colors">
+                                <td className="md:p-4 p-2 py-3 min-w-[200px]">
+                                  <div className="flex items-center gap-3">
+                                    <div className="h-10 w-10 rounded-full overflow-hidden bg-slate-100 border border-slate-200 shrink-0 flex items-center justify-center font-bold text-slate-600 text-sm shadow-2xs">
+                                      {teacherPhoto ? (
+                                        <img 
+                                          src={getSafePhotoUrl(teacherPhoto, teacher.name)} 
+                                          className="h-full w-full object-cover" 
+                                          alt="Sensei" 
+                                          referrerPolicy="no-referrer"
+                                          onError={(e) => {
+                                            e.currentTarget.onerror = null;
+                                            e.currentTarget.src = createSvgAvatar(teacher.name || "Sensei");
+                                          }} 
+                                        />
+                                      ) : (
+                                        <span>{teacher.name?.slice(0, 2)?.toUpperCase() || "SE"}</span>
+                                      )}
+                                    </div>
+                                    <div>
+                                      <div className="font-black text-slate-900 text-xs flex items-center gap-1.5">
+                                        <span>{teacher.name}</span>
+                                      </div>
+                                      <div className="text-[10px] text-slate-500 font-mono">@{teacher.username}</div>
+                                      <div className="text-[10px] text-slate-400 font-sans">{teacher.email || "-"}</div>
+                                    </div>
+                                  </div>
+                                </td>
+                                <td className="md:p-4 p-2 py-3 min-w-[160px]">
+                                  <div className="space-y-1">
+                                    <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-extrabold bg-indigo-50 text-indigo-700 border border-indigo-100">
+                                      {teacher.japaneseLevel ? `Level ${teacher.japaneseLevel}` : "Level Belum Diisi"}
+                                    </span>
+                                    {teacher.kecakapanSensei && (
+                                      <p className="text-[10px] text-slate-500 line-clamp-2 max-w-[200px]">
+                                        {teacher.kecakapanSensei}
+                                      </p>
+                                    )}
+                                  </div>
+                                </td>
+                                <td className="md:p-4 p-2 py-3 min-w-[200px]">
+                                  <div className="space-y-1">
+                                    <select
+                                      value={teacher.assignedClass || ""}
+                                      onChange={async (e) => {
+                                        const newClass = e.target.value;
+                                        await onUpdateState("users", "edit", {
+                                          ...teacher,
+                                          assignedClass: newClass
+                                        });
+                                      }}
+                                      className="bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs font-bold text-slate-800 outline-none focus:border-indigo-500 shadow-2xs w-full cursor-pointer hover:border-indigo-300 transition-colors"
+                                    >
+                                      <option value="">-- Belum Diplot Kelas --</option>
+                                      <optgroup label="Ruang Belajar Tersedia">
+                                        {systemState.customization?.lmsClasses?.map((cls: any) => (
+                                          <option key={cls.id} value={cls.name}>{cls.name}</option>
+                                        ))}
+                                      </optgroup>
+                                    </select>
+                                    {teacher.assignedClass ? (
+                                      <div className="text-[9.5px] text-emerald-700 font-bold flex items-center gap-1">
+                                        <span>✓ Mengajar {teacher.assignedClass}</span>
+                                      </div>
+                                    ) : (
+                                      <div className="text-[9.5px] text-amber-600 font-bold">
+                                        ⚠️ Belum ada kelas yang diampu
+                                      </div>
+                                    )}
+                                  </div>
+                                </td>
+                                <td className="md:p-4 p-2 py-3 text-center min-w-[100px]">
+                                  <span className="inline-flex items-center justify-center px-2.5 py-1 rounded-full text-xs font-black bg-blue-50 text-blue-700 border border-blue-100">
+                                    {studentCount} Siswa
+                                  </span>
+                                </td>
+                                <td className="md:p-4 p-2 py-3 text-center min-w-[110px]">
+                                  <span className="inline-flex items-center justify-center px-2.5 py-1 rounded-full text-xs font-black bg-emerald-50 text-emerald-700 border border-emerald-100">
+                                    {presensiCount} Hadir
+                                  </span>
+                                </td>
+                                <td className="md:p-4 p-2 py-3 text-center min-w-[120px]">
+                                  <select
+                                    value={teacher.status || "Active"}
+                                    onChange={async (e) => {
+                                      await onUpdateState("users", "edit", {
+                                        ...teacher,
+                                        status: e.target.value
+                                      });
+                                    }}
+                                    className={`text-[10px] font-black border rounded-lg px-2 py-1 outline-none cursor-pointer ${
+                                      teacher.status === "Suspended"
+                                        ? "bg-rose-50 text-rose-700 border-rose-200"
+                                        : "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                    }`}
+                                  >
+                                    <option value="Active">🟢 Active</option>
+                                    <option value="Suspended">🔴 Suspended</option>
+                                  </select>
+                                </td>
+                                <td className="md:p-4 p-2 py-3 text-center min-w-[140px]">
+                                  <div className="flex items-center justify-center gap-1.5">
+                                    {(teacher.docIjazah || teacher.docSertifikat) ? (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          const docUrl = teacher.docIjazah || teacher.docSertifikat;
+                                          if (docUrl) window.open(docUrl, "_blank");
+                                        }}
+                                        className="p-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-xl transition cursor-pointer"
+                                        title="Periksa Berkas / Sertifikat"
+                                      >
+                                        <FileText className="h-4 w-4" />
+                                      </button>
+                                    ) : null}
+                                    <div className="text-[10px] font-mono text-slate-400">
+                                      {teacher.bankAccount ? `Rek: ${teacher.bankAccount}` : "Rek: -"}
+                                    </div>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
                     ) : (
                       <table className="w-full text-left border-collapse table-auto md:text-xs text-[10px] leading-tight animate-fade-in">
                         <thead>
@@ -1021,7 +1264,7 @@ export default function AdminSiswaSegment({ checkSyncStatus, filterClass, filter
                                         💼 2. ON PROGES JOB
                                       </option>
                                       <option value="On Progres JFT/JLPT/SSW">
-                                        📋 3. ON PROGRES JFT/JLPT/SSW
+                                        📋 3. SERTIFIKASI JFT/JLPT/SSW
                                       </option>
                                       <option value="Diklat SO">
                                         📘 4. DIKLAT SO
@@ -1404,6 +1647,88 @@ export default function AdminSiswaSegment({ checkSyncStatus, filterClass, filter
                             );
                           })}
                       </div>
+                    ) : siswaTab === "sensei" ? (
+                      <div className="space-y-3 animate-fade-in">
+                        {paginatedSiswaItems.map((teacher: any) => {
+                          const studentCount = (systemState.activeStudents || []).filter(
+                            (st: any) => teacher.assignedClass && (st.class || "").toLowerCase() === teacher.assignedClass.toLowerCase() && !["Lulus", "Di Jepang"].includes(st.status)
+                          ).length;
+                          const presensiCount = (systemState.logs || []).filter(
+                            (l: any) => l.type === "PRESENSI_PENGAJAR" && (l.user === teacher.name || l.user === teacher.username)
+                          ).length;
+                          return (
+                            <div
+                              key={teacher.username || teacher.id}
+                              className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm space-y-3 text-left"
+                            >
+                              <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+                                <span className="font-mono text-[10px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded">
+                                  @{teacher.username}
+                                </span>
+                                <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${teacher.status === "Suspended" ? "bg-rose-50 text-rose-700" : "bg-emerald-50 text-emerald-700"}`}>
+                                  {teacher.status === "Suspended" ? "Suspended" : "Active"}
+                                </span>
+                              </div>
+                              <div className="flex items-start gap-3">
+                                {(() => {
+                                  const teacherPhoto = teacher.profilePicture || teacher.docFoto || (teacher.faceBiometricData && teacher.faceBiometricData.startsWith("data:image") ? teacher.faceBiometricData : "");
+                                  return (
+                                    <div className="h-12 w-12 rounded-full overflow-hidden bg-slate-100 border border-slate-200 shrink-0 flex items-center justify-center font-bold text-slate-600 text-sm shadow-2xs">
+                                      {teacherPhoto ? (
+                                        <img 
+                                          src={getSafePhotoUrl(teacherPhoto, teacher.name)} 
+                                          className="h-full w-full object-cover" 
+                                          alt="Sensei" 
+                                          referrerPolicy="no-referrer"
+                                          onError={(e) => {
+                                            e.currentTarget.onerror = null;
+                                            e.currentTarget.src = createSvgAvatar(teacher.name || "Sensei");
+                                          }} 
+                                        />
+                                      ) : (
+                                        <span>{teacher.name?.slice(0, 2)?.toUpperCase() || "SE"}</span>
+                                      )}
+                                    </div>
+                                  );
+                                })()}
+                                <div className="flex-1 min-w-0">
+                                  <h5 className="font-black text-slate-900 text-sm truncate">{teacher.name}</h5>
+                                  <p className="text-[11px] text-slate-500 truncate">{teacher.email || "-"}</p>
+                                  <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                                    <span className="text-[9.5px] font-black bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded-md border border-indigo-100">
+                                      {teacher.japaneseLevel ? `JLPT ${teacher.japaneseLevel}` : "Level -"}
+                                    </span>
+                                    <span className="text-[9.5px] font-black bg-blue-50 text-blue-700 px-2 py-0.5 rounded-md border border-blue-100">
+                                      {studentCount} Siswa
+                                    </span>
+                                    <span className="text-[9.5px] font-black bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-md border border-emerald-100">
+                                      {presensiCount} Presensi
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="bg-slate-50 p-3 rounded-xl space-y-1.5 border border-slate-100">
+                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Plotting Kelas Binaan</label>
+                                <select
+                                  value={teacher.assignedClass || ""}
+                                  onChange={async (e) => {
+                                    await onUpdateState("users", "edit", {
+                                      ...teacher,
+                                      assignedClass: e.target.value
+                                    });
+                                  }}
+                                  className="bg-white border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-800 outline-none w-full shadow-2xs cursor-pointer hover:border-indigo-300 transition-colors"
+                                >
+                                  <option value="">-- Belum Diplot Kelas --</option>
+                                  {systemState.customization?.lmsClasses?.map((cls: any) => (
+                                    <option key={cls.id} value={cls.name}>{cls.name}</option>
+                                  ))}
+                                </select>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
                     ) : (
                       <div className="space-y-3 animate-fade-in">
                         {paginatedSiswaItems
@@ -1565,7 +1890,7 @@ export default function AdminSiswaSegment({ checkSyncStatus, filterClass, filter
                                       💼 2. ON PROGES JOB
                                     </option>
                                     <option value="On Progres JFT/JLPT/SSW">
-                                      📋 3. ON PROGRES JFT/JLPT/SSW
+                                      📋 3. SERTIFIKASI JFT/JLPT/SSW
                                     </option>
                                     <option value="Diklat SO">📘 4. DIKLAT SO</option>
                                     <option value="Lulus">🎓 5. LULUS</option>
@@ -1632,65 +1957,80 @@ export default function AdminSiswaSegment({ checkSyncStatus, filterClass, filter
                   </div>
     
                   {/* Pagination Controls */}
-                  {siswaTab !== "rekap" && siswaTab !== "sensei" && siswaTotalPages > 1 && (
-                    <div className="flex items-center justify-between border-t border-slate-200 bg-white px-4 py-3 sm:px-6 rounded-2xl shadow-sm mt-4">
-                      <div className="hidden sm:flex sm:flex-1 sm:items-center sm:justify-between">
-                        <div>
-                          <p className="text-sm text-slate-700">
-                            Menampilkan <span className="font-medium">{((siswaPage - 1) * siswaItemsPerPage) + 1}</span> hingga <span className="font-medium">{Math.min(siswaPage * siswaItemsPerPage, filteredSiswaItems.length)}</span> dari <span className="font-medium">{filteredSiswaItems.length}</span> hasil
-                          </p>
-                        </div>
-                        <div>
-                          <nav className="isolate inline-flex -space-x-px rounded-md shadow-sm" aria-label="Pagination">
-                            <button
-                              onClick={() => setSiswaPage(p => Math.max(1, p - 1))}
-                              disabled={siswaPage === 1}
-                              className="relative inline-flex items-center rounded-l-md px-2 py-2 text-slate-400 ring-1 ring-inset ring-slate-300 hover:bg-slate-50 focus:z-20 focus:outline-offset-0 disabled:opacity-50"
-                            >
-                              <span className="sr-only">Previous</span>
-                              <ChevronLeft className="h-5 w-5" aria-hidden="true" />
-                            </button>
+                  {siswaTab !== "rekap" && siswaTotalPages > 1 && (
+                    <div className="flex flex-col md:flex-row items-center justify-between gap-4 border-t border-slate-200 bg-white p-4 sm:p-5 rounded-2xl shadow-sm mt-4 w-full">
+                      {/* Left side: Information and quick jump */}
+                      <div className="flex flex-wrap items-center justify-center md:justify-start gap-2.5 text-xs sm:text-sm text-slate-600 w-full md:w-auto">
+                        <p>
+                          Menampilkan <span className="font-bold text-slate-900">{((siswaPage - 1) * siswaItemsPerPage) + 1}</span> - <span className="font-bold text-slate-900">{Math.min(siswaPage * siswaItemsPerPage, filteredSiswaItems.length)}</span> dari <span className="font-bold text-slate-900">{filteredSiswaItems.length}</span> siswa
+                        </p>
+                        <div className="flex items-center gap-1.5 pl-2.5 border-l border-slate-200">
+                          <span className="text-xs text-slate-500 font-semibold">Hal:</span>
+                          <select
+                            value={siswaPage}
+                            onChange={(e) => setSiswaPage(Number(e.target.value))}
+                            className="bg-slate-50 border border-slate-300 rounded-lg px-2 py-1 text-xs font-bold text-slate-800 outline-none hover:border-indigo-400 cursor-pointer transition shadow-2xs"
+                            aria-label="Pilih Halaman"
+                          >
                             {Array.from({ length: siswaTotalPages }).map((_, i) => (
-                              <button
-                                key={i}
-                                onClick={() => setSiswaPage(i + 1)}
-                                className={`relative inline-flex items-center px-4 py-2 text-sm font-semibold ${
-                                  siswaPage === i + 1 
-                                    ? "z-10 bg-indigo-600 text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
-                                    : "text-slate-900 ring-1 ring-inset ring-slate-300 hover:bg-slate-50 focus:z-20 focus:outline-offset-0"
-                                }`}
-                              >
-                                {i + 1}
-                              </button>
+                              <option key={i + 1} value={i + 1}>
+                                {i + 1} / {siswaTotalPages}
+                              </option>
                             ))}
-                            <button
-                              onClick={() => setSiswaPage(p => Math.min(siswaTotalPages, p + 1))}
-                              disabled={siswaPage === siswaTotalPages}
-                              className="relative inline-flex items-center rounded-r-md px-2 py-2 text-slate-400 ring-1 ring-inset ring-slate-300 hover:bg-slate-50 focus:z-20 focus:outline-offset-0 disabled:opacity-50"
-                            >
-                              <span className="sr-only">Next</span>
-                              <ChevronRight className="h-5 w-5" aria-hidden="true" />
-                            </button>
-                          </nav>
+                          </select>
                         </div>
                       </div>
-                      
-                      {/* Mobile Pagination */}
-                      <div className="flex flex-1 justify-between sm:hidden items-center">
+
+                      {/* Right side: Compact pagination buttons */}
+                      <div className="flex items-center justify-center gap-1.5 w-full md:w-auto">
                         <button
+                          type="button"
                           onClick={() => setSiswaPage(p => Math.max(1, p - 1))}
                           disabled={siswaPage === 1}
-                          className="relative inline-flex items-center rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-700 hover:bg-slate-50 hover:border-indigo-300 disabled:opacity-40 disabled:cursor-not-allowed transition shrink-0 cursor-pointer shadow-2xs"
                         >
-                          Sebelumnya
+                          <ChevronLeft className="h-4 w-4" />
+                          <span className="hidden sm:inline">Sebelumnya</span>
                         </button>
-                        <span className="text-xs text-slate-500 font-medium">Hal {siswaPage} / {siswaTotalPages}</span>
+
+                        <div className="flex items-center gap-1">
+                          {getPaginationRange(siswaPage, siswaTotalPages).map((item, index) => {
+                            if (typeof item === "string") {
+                              return (
+                                <span
+                                  key={`ellipsis-${index}`}
+                                  className="w-6 text-center text-slate-400 font-black text-xs select-none"
+                                >
+                                  …
+                                </span>
+                              );
+                            }
+                            const isCurrent = siswaPage === item;
+                            return (
+                              <button
+                                key={item}
+                                type="button"
+                                onClick={() => setSiswaPage(item)}
+                                className={`min-w-[32px] sm:min-w-[36px] h-8 sm:h-9 px-2 rounded-xl text-xs font-extrabold transition cursor-pointer flex items-center justify-center shrink-0 ${
+                                  isCurrent
+                                    ? "bg-indigo-600 text-white shadow-md shadow-indigo-100 ring-2 ring-indigo-600/20"
+                                    : "border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 hover:border-indigo-200"
+                                }`}
+                              >
+                                {item}
+                              </button>
+                            );
+                          })}
+                        </div>
+
                         <button
+                          type="button"
                           onClick={() => setSiswaPage(p => Math.min(siswaTotalPages, p + 1))}
                           disabled={siswaPage === siswaTotalPages}
-                          className="relative inline-flex items-center rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-white text-xs font-bold text-slate-700 hover:bg-slate-50 hover:border-indigo-300 disabled:opacity-40 disabled:cursor-not-allowed transition shrink-0 cursor-pointer shadow-2xs"
                         >
-                          Selanjutnya
+                          <span className="hidden sm:inline">Selanjutnya</span>
+                          <ChevronRight className="h-4 w-4" />
                         </button>
                       </div>
                     </div>

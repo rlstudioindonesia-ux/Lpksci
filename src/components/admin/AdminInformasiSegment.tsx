@@ -1,6 +1,7 @@
 import React from "react";
-import { Bell, Check } from "lucide-react";
+import { Bell, Check, Sparkles, RotateCcw } from "lucide-react";
 import { ConfirmForm } from "../ConfirmForm";
+import RunningTextTicker from "../RunningTextTicker";
 
 interface AdminInformasiSegmentProps {
   apkUpdateSaveSuccess: any;
@@ -19,6 +20,8 @@ interface AdminInformasiSegmentProps {
 }
 
 export default function AdminInformasiSegment({ apkUpdateSaveSuccess, custApkUpdateNotes, custLatestApkVersion, custPlayStoreUrl, custRunningText, onUpdateState, runningTextSaveSuccess, setApkUpdateSaveSuccess, setCustApkUpdateNotes, setCustLatestApkVersion, setCustPlayStoreUrl, setCustRunningText, setRunningTextSaveSuccess }: AdminInformasiSegmentProps) {
+  const DEFAULT_PRESET = "🇯🇵 Selamat Datang di Portal Resmi LPK Source Course Indonesia (SCI) Pati • Lembaga Resmi Pelatihan Kerja & Pengiriman Tenaga Profesional ke Jepang (Program Tokutei Ginou / SSW & Magang) • Bimbingan Bahasa Jepang Intensif N5, N4, JFT-Basic & Skill Kaigo Lansia • Info Pendaftaran & Konsultasi Hubungi Kantor LPK SCI Pati";
+
   return (
     <div className="bg-white rounded-3xl border border-slate-200/60 p-4.5 sm:p-6 md:p-8 space-y-6 animate-fade-in text-slate-800 shadow-xs">
                 <div className="border-b border-slate-100 pb-4">
@@ -27,24 +30,50 @@ export default function AdminInformasiSegment({ apkUpdateSaveSuccess, custApkUpd
                     BROADCAST INFORMASI LPK
                   </h3>
                   <p className="text-xs text-slate-500 mt-1">
-                    Atur teks berjalan (marquee) yang akan tampil di halaman Beranda utama untuk semua pengguna.
+                    Atur teks berjalan (running text / marquee) yang akan tampil di halaman Beranda utama untuk semua pengguna (Tampilan Web & Mobile).
                   </p>
                 </div>
                 
                 <div className="bg-slate-50 p-5 rounded-2xl border border-slate-200/80 space-y-4 max-w-2xl">
-                  <label className="text-[10px] uppercase font-black tracking-wider text-slate-400 font-mono block">
-                    Teks Berjalan (Marquee)
-                  </label>
+                  <div className="flex items-center justify-between">
+                    <label className="text-[10px] uppercase font-black tracking-wider text-slate-400 font-mono block">
+                      Teks Berjalan (Marquee)
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setCustRunningText(DEFAULT_PRESET)}
+                      className="text-[10px] font-bold text-indigo-600 hover:text-indigo-800 flex items-center gap-1 cursor-pointer"
+                      title="Gunakan format standar LPK SCI"
+                    >
+                      <RotateCcw className="h-3 w-3" />
+                      <span>Pakai Teks Standar</span>
+                    </button>
+                  </div>
+
                   <textarea
                     value={custRunningText || ""}
                     onChange={(e) => setCustRunningText(e.target.value)}
-                    className="w-full text-sm rounded-xl border border-slate-200 p-4 outline-none focus:border-indigo-500 transition min-h-[120px] bg-white shadow-inner text-slate-800"
-                    placeholder="Masukkan info terkini yang akan berjalan di layar utama..."
+                    className="w-full text-sm rounded-xl border border-slate-200 p-4 outline-none focus:border-indigo-500 transition min-h-[110px] bg-white shadow-inner text-slate-800 leading-relaxed"
+                    placeholder="Masukkan info pengumuman yang akan berjalan di layar utama..."
                   />
-                  <div className="text-xs text-slate-500 flex items-center justify-between gap-2 flex-wrap">
+
+                  {/* Live Interactive Preview */}
+                  <div className="space-y-1.5 pt-1">
+                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                      <Sparkles className="h-3 w-3 text-indigo-500" />
+                      <span>Pratinjau Langsung (Live Preview):</span>
+                    </div>
+                    <RunningTextTicker
+                      customization={{ runningText: custRunningText }}
+                      variant="mobile"
+                      className="mx-0 my-0 shadow-xs"
+                    />
+                  </div>
+
+                  <div className="text-xs text-slate-500 flex items-center justify-between gap-2 flex-wrap pt-2 border-t border-slate-200/60">
                     <div className="flex items-center gap-2">
                       <span className="text-yellow-500 text-lg">💡</span> 
-                      Gunakan simbol | (garis vertikal) untuk memisahkan pengumuman.
+                      Gunakan simbol • atau | untuk memisahkan antar pengumuman.
                     </div>
                     
                     <ConfirmForm

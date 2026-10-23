@@ -60,10 +60,15 @@ export default function LmsAbsenSegment({ activeStudentClass, activeStudents, al
     
                     <div className="bg-white border border-slate-200 rounded-3xl shadow-sm overflow-hidden">
                       {(() => {
-                        const studentIdToMatch = matchingStudent?.id || currentUser?.studentId ;
-                        const myAttendance = (attendanceRecords || []).filter(
-                          (a: any) => a.studentId === studentIdToMatch || (a.studentName && a.studentName === currentUser?.name)
-                        ).sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
+                        const studentIdToMatch = (matchingStudent?.id || currentUser?.studentId || "").trim().toLowerCase();
+                        const currentNameNorm = (currentUser?.name || matchingStudent?.name || "").trim().toLowerCase();
+                        const myAttendance = (attendanceRecords || []).filter((a: any) => {
+                          const aStudentId = (a.studentId || "").trim().toLowerCase();
+                          const aStudentName = (a.studentName || "").trim().toLowerCase();
+                          if (studentIdToMatch && aStudentId === studentIdToMatch) return true;
+                          if (currentNameNorm && aStudentName === currentNameNorm) return true;
+                          return false;
+                        }).sort((a: any, b: any) => new Date(b.date).getTime() - new Date(a.date).getTime());
     
                         if (myAttendance.length === 0) {
                           return (
@@ -104,13 +109,13 @@ export default function LmsAbsenSegment({ activeStudentClass, activeStudents, al
                               return (
                                 <div key={record.id || idx} className="p-4 sm:p-5 hover:bg-slate-50 transition-colors flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
                                   <div className="flex gap-4 items-start">
-                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center border shrink-0 \${statusColor}`}>
+                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center border shrink-0 ${statusColor}`}>
                                       <StatusIcon className="w-5 h-5" />
                                     </div>
                                     <div className="space-y-1">
                                       <div className="flex flex-wrap items-center gap-2">
                                         <h5 className="font-bold text-slate-800 text-sm">{dateStr}</h5>
-                                        <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full border \${statusColor}`}>
+                                        <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full border ${statusColor}`}>
                                           {record.status}
                                         </span>
                                       </div>
