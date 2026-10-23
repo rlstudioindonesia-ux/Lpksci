@@ -1,3 +1,5 @@
+import { defaultStudentPaymentId, studentPaymentKey } from "../lib/paymentIds";
+import { uniqueIdSuffix } from "../lib/idGenerator";
 import { todayLocalISO } from "../lib/dateUtils";
 import React, { useState } from "react";
 import { createPortal } from "react-dom";
@@ -110,7 +112,7 @@ export function getStudentPayments(
         }
       } else {
         result.push({
-          id: `PAY-${studentName.replace(/\s+/g, "").toUpperCase().slice(0, 6)}-AL`,
+          id: defaultStudentPaymentId(studentName, "AL"),
           studentName,
           category: defaultAlumniCategory.category,
           amount: defaultAlumniCategory.amount,
@@ -146,11 +148,10 @@ export function getStudentPayments(
   const result: PaymentRecord[] = [];
 
   if (!isClearedAll) {
-    const studentClean = (studentName || "").replace(/\s+/g, "").toUpperCase();
 
     // For each default category, find ALL matching actual payments for this student
     defaultCategories.forEach((cat) => {
-      const defaultId = `PAY-${studentClean.slice(0, 6)}-${cat.idSuffix}`;
+      const defaultId = defaultStudentPaymentId(studentName, cat.idSuffix);
 
       // All actual payments in DB that match this default category
       const matching = studentActualPayments.filter(p =>
@@ -382,7 +383,7 @@ export default function PembayaranSiswaView({
       return;
     }
     const payload = {
-      id: `PAY-${formStudentName.replace(/\s+/g, "").toUpperCase().slice(0, 6)}-${Date.now().toString().slice(-3)}`,
+      id: `PAY-${studentPaymentKey(formStudentName)}-${uniqueIdSuffix()}`,
       studentName: formStudentName,
       category: formCategory,
       amount: Number(formAmount),
