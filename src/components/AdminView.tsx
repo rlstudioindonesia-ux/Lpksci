@@ -123,7 +123,7 @@ import { CHAPTERS_LIST } from "../chapters";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import PembayaranSiswaView, { getStudentPayments } from "./PembayaranSiswaView";
-import { countStudentsByStatusGroup, studentMatchesStatusGroup } from "../lib/studentStatusGroups";
+import { countStudentsByStatusGroup, studentMatchesStatusGroup, isActiveStudent } from "../lib/studentStatusGroups";
 
 export function parsePrice(val: any): number {
   if (val === undefined || val === null) return 0;
@@ -1766,7 +1766,8 @@ export default function AdminView({
             if (!studentMatchesStatusGroup(s, filterStatus)) return false;
           } else {
             if (siswaTab === "alumni" && !isAlumni) return false;
-            if (siswaTab === "aktif" && isAlumni) return false;
+            // "Siswa Aktif" tab uses the owner's formula (lib/studentStatusGroups).
+            if (siswaTab === "aktif" && !isActiveStudent(s)) return false;
           }
           
           if (filterClass !== "All") {

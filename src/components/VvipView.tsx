@@ -100,7 +100,7 @@ import VvipGajiSegment from "./vvip/VvipGajiSegment";
 import VvipGajiSummarySegment from "./vvip/VvipGajiSummarySegment";
 import VvipExecSegment from "./vvip/VvipExecSegment";
 import VvipKalenderSegment from "./vvip/VvipKalenderSegment";
-import { countStudentsByStatusGroup, getStudentStatusGroup, studentMatchesStatusGroup, isStudentStillActive } from "../lib/studentStatusGroups";
+import { countStudentsByStatusGroup, getStudentStatusGroup, studentMatchesStatusGroup, isStudentStillActive, countActiveStudents } from "../lib/studentStatusGroups";
 
 interface VvipViewProps {
   currentUser?: UserAccount | null;
@@ -325,9 +325,8 @@ export default function VvipView({
     (s) => ["Lulus", "Di Jepang"].includes(s.status),
   ).length, [activeStudents]);
   
-  const studyingCount = useMemo(() => activeStudents.filter(
-    (s) => studentMatchesStatusGroup(s, "Belajar"),
-  ).length, [activeStudents]);
+  // "Siswa Aktif" card: owner's formula (lib/studentStatusGroups isActiveStudent)
+  const studyingCount = useMemo(() => countActiveStudents(activeStudents), [activeStudents]);
   
   const totalLunasRevenue = useMemo(() => systemState.payments
     .filter((p) => p.status === "Lunas")

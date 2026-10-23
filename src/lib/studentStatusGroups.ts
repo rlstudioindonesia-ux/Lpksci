@@ -77,9 +77,24 @@ export function countStudentsByStatusGroup(students: Array<{ status?: string | n
   return counts;
 }
 
-/** Students still in the LPK pipeline (not expelled, not yet working in Japan) - "Jumlah Siswa" of a class. */
-export function isStudentStillActive(student: { status?: string | null } | null | undefined): boolean {
+/**
+ * "Siswa Aktif" (owner's formula, 23-10-2026):
+ *   Belajar + On Progres Job + On Progres JFT/JLPT/SSW + Lulus sertifikasi JFT/JLPT.
+ * Diklat SO, Di Jepang and Dikeluarkan are NOT active students.
+ * (Lulus is part of the Sertifikasi group, so this is the union of three groups.)
+ */
+export const ACTIVE_STUDENT_GROUPS: StudentStatusGroupId[] = ["Belajar", "On Proges Job", "On Progres JFT/JLPT/SSW"];
+
+export function isActiveStudent(student: { status?: string | null } | null | undefined): boolean {
   if (!student) return false;
-  const group = getStudentStatusGroup(student.status);
-  return group !== "Dikeluarkan" && group !== "Di Jepang";
+  return ACTIVE_STUDENT_GROUPS.includes(getStudentStatusGroup(student.status));
+}
+
+export function countActiveStudents(students: Array<{ status?: string | null }> | null | undefined): number {
+  return (students || []).filter((s) => isActiveStudent(s)).length;
+}
+
+/** @deprecated use isActiveStudent (same "Siswa Aktif" rule everywhere). */
+export function isStudentStillActive(student: { status?: string | null } | null | undefined): boolean {
+  return isActiveStudent(student);
 }

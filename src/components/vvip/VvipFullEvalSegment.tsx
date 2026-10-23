@@ -8,7 +8,7 @@ import { hasStaffOversight } from "../../lib/permissions";
 import { countWorkingDaysInPayrollPeriod, formatPayrollPeriodLabel, generateRecentPayrollPeriods, isTimestampInPayrollPeriod } from "../../lib/staffAttendancePeriod";
 import { downloadHrAttendanceSummaryPdf, downloadDailyLoginLogsPdf } from "../../lib/attendanceReportPdf";
 import { Bar, BarChart, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { countStudentsByStatusGroup, getStudentStatusGroup, studentMatchesStatusGroup, isStudentStillActive } from "../../lib/studentStatusGroups";
+import { countStudentsByStatusGroup, getStudentStatusGroup, studentMatchesStatusGroup, isStudentStillActive, countActiveStudents, isActiveStudent } from "../../lib/studentStatusGroups";
 
 interface VvipFullEvalSegmentProps {
   activeStudents: any;
@@ -380,7 +380,7 @@ export default function VvipFullEvalSegment({ activeStudents, classFilter, class
                       <Users className="h-4 w-4" />
                       <span>Siswa Aktif</span>
                       <div className={`px-2 py-0.5 rounded-lg text-[10px] font-extrabold ${siswaTab === "aktif" ? "bg-white/20 text-white" : "bg-slate-200 text-slate-700"}`}>
-                        {activeStudents.filter(s => !["Lulus", "Di Jepang", "Alumni", "Diklat SO", "On Proges Job", "On Progres JFT/JLPT/SSW", "Berhenti"].includes(s.status || "")).length}
+                        {countActiveStudents(activeStudents)}
                       </div>
                     </button>
     
@@ -905,7 +905,7 @@ export default function VvipFullEvalSegment({ activeStudents, classFilter, class
                         matchesStatus = studentMatchesStatusGroup(student, selectedClassTab);
                       } else {
                         if (siswaTab === "aktif") {
-                          matchesStatus = !alumniStatuses.includes(student.status || "");
+                          matchesStatus = isActiveStudent(student);
                         } else if (siswaTab === "alumni") {
                           matchesStatus = alumniStatuses.includes(student.status || "");
                         }
