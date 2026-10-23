@@ -2,6 +2,10 @@ import {StrictMode, Component, ReactNode} from 'react';
 import {createRoot} from 'react-dom/client';
 import App from './App.tsx';
 import './index.css';
+import { installAuthFetch } from './lib/sessionToken';
+
+// Sends the login session token with every /api request (security stage 1).
+installAuthFetch();
 
 class ErrorBoundary extends Component<{children: ReactNode}, {hasError: boolean, error: Error | null}> {
   constructor(props: {children: ReactNode}) {

@@ -27,4 +27,4 @@ Android/PWA, peta sebaran.
 - `syncCustomizationToFirestore` menulis seluruh pengaturan dari memori instance (galeri, kelas, kustomisasi) - bisa menimpa perubahan dari instance lain yang belum tersinkron.
 
 ## Cara melapor ke pemilik
-Tabel "Bug → akibatnya bagi pengguna", bahasa sederhana. Hal yang mengubah aturan bisnis atau berisiko menghapus data: **tanya dulu**, jangan langsung diubah. Masalah login/keamanan: ditunda sampai pemilik setuju.
+Tabel "Bug → akibatnya bagi pengguna", bahasa sederhana. Hal yang mengubah aturan bisnis atau berisiko menghapus data: **tanya dulu**, jangan langsung diubah. Keamanan/login: dikerjakan bertahap atas persetujuan pemilik (serah terima butir 1); jangan lompat tahap.

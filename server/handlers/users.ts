@@ -1,6 +1,8 @@
 import type { Request, Response } from "express";
 import { syncEntityToFirestore, deleteEntityFromFirestore, uploadBufferToFirebaseStorage, mergeEntityFieldsToFirestore } from "../../src/db/firebase-adapter.ts";
 import { hashPassword, isHashedPassword, stripPassword } from "../auth-utils.ts";
+import { createSessionToken } from "../sessions.ts";
+import { isDefaultPasswordValue } from "../../src/lib/loginPolicy.ts";
 import { findRecordIndex } from "../../src/lib/recordMatching.ts";
 
 async function uploadBase64IfPresent(dataStr: string | undefined, prefix: string, folder: string): Promise<string> {
@@ -121,6 +123,11 @@ export function handleUsersState(req: Request, res: Response, dataType: string, 
               assignedClass: assignedClass !== undefined ? assignedClass : state.users[index].assignedClass,
               birthDate: birthDate !== undefined ? birthDate : state.users[index].birthDate,
               password: password !== undefined ? (isHashedPassword(password) ? password : hashPassword(password)) : state.users[index].password,
+              // 23-10-2026 (security): a real (non-default) new password ends the
+              // "default password still accepted" grace and invalidates older sessions.
+              passwordChangedAt: password !== undefined && password !== "" && !isHashedPassword(password) && !isDefaultPasswordValue(password)
+                ? new Date().toISOString()
+                : state.users[index].passwordChangedAt,
               status: status !== undefined ? status : (state.users[index].status || "Active"),
               bankAccount: bankAccount !== undefined ? bankAccount : state.users[index].bankAccount,
               faceRegistered: faceRegistered !== undefined ? faceRegistered : state.users[index].faceRegistered,
@@ -230,7 +237,13 @@ export function handleUsersState(req: Request, res: Response, dataType: string, 
               }
             }
             syncEntityToFirestore("users", state.users[index].username, state.users[index]);
-            return res.json({ success: true, item: stripPassword(state.users[index]) });
+            // Changing your own password must not log you out: hand out a fresh session.
+            const actingUsername = String((req as any).authUser?.username || "").toLowerCase();
+            const passwordChanged = state.users[index].passwordChangedAt !== oldData.passwordChangedAt;
+            const sessionToken = passwordChanged && actingUsername && actingUsername === String(username || "").toLowerCase()
+              ? createSessionToken(state.users[index])
+              : undefined;
+            return res.json({ success: true, item: stripPassword(state.users[index]), ...(sessionToken ? { sessionToken } : {}) });
           };
 
           processEditUser().catch(err => {

@@ -72,15 +72,30 @@ Skill Claude Code ada di `.claude/skills/` (`alur-perubahan`, `aturan-data-siswa
 - #72 pendaftar hantu disembunyikan di server (tidak lagi dihapus otomatis berulang)
 - #73 akun siswa tidak lagi jadi Alumni karena nama sama (saat server mulai), impor pajak tidak menghitung pemasukan dua kali
 - #74 status "Lulus" tetap siswa (kelas/sensei/akun tidak diubah)
-- berikutnya: siswa bernama sama tidak lagi melihat/mengubah data siswa lain (`findStudentForUser` di ~20 layar + notifikasi)
+- #75 siswa bernama sama tidak lagi melihat/mengubah data siswa lain (`findStudentForUser` di ~20 layar + notifikasi)
+- berikutnya: keamanan Tahap 1 (tiket sesi, aturan kata sandi, Google diverifikasi server, audit log-only)
 
 ## Tindak lanjut terbuka
 
-1. **Keamanan/login (DITUNDA atas permintaan pemilik — jangan dikerjakan tanpa persetujuan):**
-   - login menerima `123456`/`adminadmin` untuk akun apa pun; email VVIP/username admin + `123456` masuk sebagai VVIP/Admin;
-   - server tanpa autentikasi (`/api/state`, `/api/state/update` terbuka untuk siapa pun);
-   - `/api/request-reset` mengembalikan tautan reset langsung ke peminta;
-   - `firestore.rules` terbuka penuh.
+1. **Keamanan/login — disetujui pemilik 23-10-2026, dikerjakan BERTAHAP.**
+   - **Tahap 1 (selesai):**
+     - tiket sesi bertanda tangan (`server/sessions.ts`, header `Authorization: Bearer`, dipasang otomatis oleh `installAuthFetch` di `src/lib/sessionToken.ts`);
+     - aturan kata sandi (`src/lib/loginPolicy.ts`): sandi bawaan (123456/adminadmin/admin123) hanya berlaku sampai akun punya `passwordChangedAt`, dan login dengan sandi bawaan WAJIB ganti (`ForcePasswordChangeModal`, `/api/auth/change-password`);
+     - login Google diverifikasi server (`/api/auth/google`, `server/googleIdToken.ts`);
+     - akun Google tidak bisa login dengan sandi `google-auth-user`;
+     - email berisi "admin" tidak lagi otomatis Admin;
+     - `/api/auth/validate` memakai tiket bila ada.
+     - Permintaan TANPA tiket masih DIIZINKAN tetapi DICATAT (`GET /api/auth/audit`, khusus Admin/VVIP, per instance).
+   - **Sebelum Tahap 2:**
+     - pemilik harus mengisi env `SESSION_SECRET` (>= 16 karakter acak) di Cloud Run; tanpa itu tiket bisa dipalsukan (`strongSecret:false` di audit);
+     - tinjau audit. Diperkirakan masih anonim: gambar/berkas lewat `<img src="/api/...">` (perlu tiket lewat query/cookie), pendaftaran publik, `GET /api/state` untuk pengunjung.
+   - **Tahap 2:**
+     - tolak permintaan tanpa tiket + hak akses per peran di `/api/state/update`;
+     - `GET /api/state` dipangkas per peran;
+     - sesi lama (sebelum Tahap 1) harus login ulang.
+   - **Tahap 3:**
+     - kunci `firestore.rules`. PENTING: server memakai Firebase *client* SDK tanpa login, jadi aturan tidak bisa dikunci sebelum server memakai firebase-admin atau akun layanan;
+     - reset kata sandi lewat Admin (pilihan b, default sementara — pemilik belum memilih). `/api/request-reset` masih mengembalikan tautan ke peminta.
 2. **Sudah diputuskan pemilik (23-10-2026) dan diterapkan:** nilai < 75 ikut rata-rata, essay diperketat, tab Alumni = Di Jepang. Sisa: rata-rata nilai & kehadiran di peramban masih mencocokkan siswa lewat nama juga (sengaja dibiarkan karena data lama); essay tanpa kunci jawaban tetap dianggap benar (ditinjau Sensei).
 3. **Data lama yang mungkin sudah rusak** (perbaikan hanya mencegah kejadian baru): siswa berstatus "Terverifikasi"/"Disetujui" (dari form edit lama), tagihan `PAY-<6 huruf>-…` yang tertukar, entri Buku Kas yang saling menimpa. Bisa dibuat skrip pemeriksa bila pemilik minta.
 4. **Pendaftar "hantu" disembunyikan, TIDAK dihapus otomatis** (keputusan pemilik 23-10-2026, menggantikan pembersihan otomatis #70 yang membuat pendaftar muncul-hilang berulang): `hideConvertedRegistrations` membuang dari memori server (bukan dari Firestore) pendaftar yang orangnya sudah siswa aktif (ID sama, atau email DAN nama sama; kecuali pendaftar alumni berstatus "Disetujui") dan pendaftar kosong. Berjalan setelah load, resync, dan change feed. Karena tidak ada di memori, pendaftar itu tidak pernah tampil dan tidak ditulis ulang.

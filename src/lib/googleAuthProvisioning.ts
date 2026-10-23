@@ -38,7 +38,9 @@ export function resolveGoogleSignupRole(
 ): GoogleProvisionedRole {
   if (VVIP_EMAILS.includes(email)) return { role: "VVIP" };
   if (PENGAJAR_EMAILS.includes(email)) return { role: "Pengajar" };
-  if (email.includes("admin") || ADMIN_EMAIL_ALLOWLIST.includes(email)) return { role: "Admin" };
+  // 23-10-2026 (security): only listed emails become Admin. "Any email containing
+  // 'admin'" let anyone create e.g. admin.x@gmail.com and get Admin access.
+  if (ADMIN_EMAIL_ALLOWLIST.includes(email)) return { role: "Admin" };
   if (activeMatch) {
     const role: ProvisionedRole = isStudentAlumni(activeMatch) ? "Alumni" : "Siswa";
     return { role, studentId: activeMatch.id, assignedClass: activeMatch.class };

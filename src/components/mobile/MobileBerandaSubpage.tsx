@@ -1,4 +1,5 @@
 import React from "react";
+import { loginWithGoogleOnServer } from "../../lib/sessionToken";
 import { AlertCircle, Apple, ArrowRight, BarChart3, BookOpen, Briefcase, Building, Calendar, ChevronDown, ChevronUp, Compass, CreditCard, Crown, DollarSign, Eye, EyeOff, Facebook, FileText, FolderOpen, GraduationCap, Image as ImageIcon, Info, Instagram, Key, Landmark, LogIn, MapPin, Menu, MessagesSquare, Package, Receipt, Share2, Shield, ShieldAlert, ShieldCheck, Sliders, Star, TrendingUp, User, UserPlus, Users, X, Youtube } from "lucide-react";
 import { GoogleAuthProvider, signInWithPopup } from "firebase/auth";
 import { auth } from "../../firebaseClient";
@@ -349,6 +350,17 @@ export default function MobileBerandaSubpage({ currentMobileSlide, currentUser, 
                             const result = await signInWithPopup(auth, provider);
                             const user = result.user;
                             const email = (user.email || "").trim().toLowerCase();
+                            // Verified by the server first (security stage 1); the browser-only flow below
+                            // is only a fallback while an older server version is still running.
+                            const serverLogin = await loginWithGoogleOnServer(user);
+                            if (serverLogin.status === "ok") {
+                              onLoginSuccess(serverLogin.user);
+                              return;
+                            }
+                            if (serverLogin.status === "error") {
+                              alert(serverLogin.message);
+                              return;
+                            }
                             
                             let existingUser = (systemState.unfilteredUsers || systemState.users || [])?.find(
                               (u) => (u.email || "").trim().toLowerCase() === email || (u.username || "").trim().toLowerCase() === email,
