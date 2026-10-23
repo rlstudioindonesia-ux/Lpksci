@@ -39,7 +39,7 @@ Skill Claude Code ada di `.claude/skills/` (`alur-perubahan`, `aturan-data-siswa
 | Essay ketat: harus sama dengan kunci/varian (abaikan huruf besar, spasi, tanda baca), typo 1 huruf untuk jawaban >= 5 huruf; "mengandung kunci" TIDAK lagi benar | `src/lib/essayAnswer.ts` |
 | Tab **Alumni** = hanya siswa **Di Jepang** | `isAlumniTabStudent` |
 | **"Lulus" tetap siswa**: kelas & sensei tetap, akun tetap Siswa; alumni hanya "Di Jepang" | `isAlumniStatusValue`, `isStudentAlumni` |
-| **Rujukan alumni**: kode tidak peka huruf besar/spasi; tidak dihitung: ditolak, rujukan diri sendiri, duplikat pendaftar-siswa; "Sukses" = jadi Siswa Aktif atau Di Jepang; total ikut pendaftar yang menunggu | `src/lib/referrals.ts` |
+| **Rujukan alumni**: kode tidak peka huruf besar/spasi; tidak dihitung: ditolak, rujukan diri sendiri, duplikat pendaftar-siswa; "Sukses" = jadi Siswa Aktif atau Di Jepang; total ikut pendaftar yang menunggu (Admin, VVIP, dasbor alumni, mobile) | `src/lib/referrals.ts` |
 | 6 berkas tambahan: Sertifikat JFT/JLPT/NAT, SSW 1, SSW 2, LPK SCI, COE, CV | `src/lib/studentDocuments.ts` |
 | Tanggal "hari ini" = WIB (peramban: `todayLocalISO`, server: `todayJakartaISO`) | `src/lib/dateUtils.ts` |
 
@@ -89,7 +89,8 @@ Skill Claude Code ada di `.claude/skills/` (`alur-perubahan`, `aturan-data-siswa
 - #82 gaji ↔ Buku Kas sinkron di server, persentase kehadiran ikut koreksi absen
 - #83 notifikasi tertarget tidak lagi tersebar ke semua siswa, kirim notifikasi massal khusus staf (saat sakelar), kuota kelas tanpa siswa dikeluarkan & tanpa akun Sensei, data dimuat ulang saat logout
 - #84 nilai bab/kuis tidak lagi tersimpan ke siswa lain bernama sama, tanda tangan kontrak sensei ke kontrak yang benar, chat dengan "admin_shared" tetap pribadi & kosongkan grup khusus staf (Tahap 2)
-- berikutnya: profil siswa, edit siswa oleh Admin (termasuk kata sandi), dan form Edit Data Lengkap tidak lagi menyentuh siswa/akun lain bernama sama
+- #85 profil siswa, edit siswa oleh Admin (termasuk kata sandi), dan form Edit Data Lengkap tidak lagi menyentuh siswa/akun lain bernama sama
+- berikutnya: rekap Afiliasi mobile pakai rumus yang sama dengan web, panel Lihat Berkas tidak memilih pendaftar lain bernama sama
 
 ## Tindak lanjut terbuka
 

@@ -1,4 +1,5 @@
 import React from "react";
+import { collectReferrals, groupReferralsByReferrer, normalizeReferralCode } from "../../lib/referrals";
 import { InlineLoginPanel } from "../InlineLoginPanel";
 import { Award, Copy, Share2 } from "lucide-react";
 
@@ -66,48 +67,16 @@ export default function MobileAfiliasiSubpage({ currentUser, onLoginSuccess, sys
                         Rekap total rekomendasi siswa baru dan alumni yang berhasil diajak oleh masing-masing alumni sponsor.
                       </p>
                       {(() => {
-                        const allRegs = systemState.registeredStudents || [];
-                        const allActives = systemState.activeStudents || [];
-    
-                        // The "Kode Referral" field on the registration form is free
-                        // text and optional - some applicants fill it with their own
-                        // email or name instead of leaving it blank, and since a
-                        // student's login username is set to their own email at
-                        // approval, that later resolves to a "referral" that is
-                        // really just themselves. Exclude those so they don't
-                        // inflate an alumni's referral count.
-                        const isSelfReferral = (s: { id: string; name: string; email?: string }, ref: string) => {
-                          const r = (ref || "").trim().toLowerCase();
-                          if (!r) return false;
-                          if (s?.name && typeof s.name === "string" && s.name.trim().toLowerCase() === r) return true;
-                          if (s?.email && typeof s.email === "string" && s.email.trim().toLowerCase() === r) return true;
-                          const ownUser = (systemState.users || []).find(u => (u.studentId && u.studentId === s.id) || (u.name && u.name === s.name));
-                          return !!ownUser && typeof ownUser.username === "string" && ownUser.username.trim().toLowerCase() === r;
-                        };
-    
-                        // Group referrals by referrer username/email
-                        const statsByReferrer: { [key: string]: { name: string, regs: number, actives: number } } = {};
-    
-                        allRegs.forEach(s => {
-                          if (s?.referrer && typeof s.referrer === "string" && s.referrer.trim() && !isSelfReferral(s, s.referrer)) {
-                            const refKey = s.referrer.trim().toLowerCase();
-                            if (!statsByReferrer[refKey]) {
-                              statsByReferrer[refKey] = { name: s.referrer.trim(), regs: 0, actives: 0 };
-                            }
-                            statsByReferrer[refKey].regs += 1;
-                          }
-                        });
-    
-                        allActives.forEach(s => {
-                          if (s?.referrer && typeof s.referrer === "string" && s.referrer.trim() && !isSelfReferral(s, s.referrer)) {
-                            const refKey = s.referrer.trim().toLowerCase();
-                            if (!statsByReferrer[refKey]) {
-                              statsByReferrer[refKey] = { name: s.referrer.trim(), regs: 0, actives: 0 };
-                            }
-                            statsByReferrer[refKey].actives += 1;
-                          }
-                        });
-    
+                        // Same referral list as the web Afiliasi pages (src/lib/referrals.ts):
+                        // case-insensitive codes, no rejected / self / duplicate entries.
+                        const referrerMap = groupReferralsByReferrer(
+                          collectReferrals(systemState.registeredStudents, systemState.activeStudents, systemState.users),
+                          systemState.users,
+                        );
+                        const statsByReferrer = Object.fromEntries(
+                          Object.entries(referrerMap).map(([k, r]) => [k, { name: r.realName, regs: r.registeredCount, actives: r.activeCount }]),
+                        );
+
                         const statsList = Object.values(statsByReferrer);
     
                         if (statsList.length === 0) {
@@ -148,45 +117,14 @@ export default function MobileAfiliasiSubpage({ currentUser, onLoginSuccess, sys
                     <div className="space-y-3">
                       {(() => {
                         const isAdminOrVip = currentUser?.role === "Admin" || currentUser?.role === "Admin Super" || currentUser?.role === "Admin Biasa" || currentUser?.role === "VVIP";
-                        const isReferrerMatch = (ref: string) => {
-                          if (!ref || typeof ref !== "string") return false;
-                          const r = ref.toLowerCase().trim();
-                          return (!!currentUser?.username && r === String(currentUser.username).toLowerCase().trim()) ||
-                                 (!!currentUser?.email && r === String(currentUser.email).toLowerCase().trim()) ||
-                                 (!!currentUser?.name && r === String(currentUser.name).toLowerCase().trim());
-                        };
-                        // A student cannot refer themselves - some applicants type
-                        // their own email/name into the optional "Kode Referral"
-                        // field on the registration form, which later resolves back
-                        // to their own account. Never show that as a referral.
-                        const isSelfReferral = (s: { name: string }, ref: string) => {
-                          const r = (ref || "").toLowerCase().trim();
-                          return !!r && !!s?.name && String(s.name).toLowerCase().trim() === r;
-                        };
-    
-                        const myReferrals = [
-                          ...(systemState.registeredStudents || [])
-                            .filter(s => s.referrer && !isSelfReferral(s, s.referrer) && (isAdminOrVip || isReferrerMatch(s.referrer)))
-                            .map(s => ({
-                              id: s.id,
-                              name: s.name,
-                              status: s.status,
-                              date: s.date,
-                              type: 'Pendaftar',
-                              referrer: s.referrer
-                            })),
-                          ...(systemState.activeStudents || [])
-                            .filter(s => s.referrer && !isSelfReferral(s, s.referrer) && (isAdminOrVip || isReferrerMatch(s.referrer)))
-                            .map(s => ({
-                              id: s.id,
-                              name: s.name,
-                              status: s.status,
-                              date: "-",
-                              type: 'Siswa Aktif',
-                              referrer: s.referrer
-                            }))
-                        ];
-    
+                        // Codes this account may own (username, email or name), compared case-insensitively.
+                        const myCodes = new Set(
+                          [currentUser?.username, currentUser?.email, currentUser?.name].map((v) => normalizeReferralCode(v)).filter(Boolean),
+                        );
+                        const myReferrals = collectReferrals(systemState.registeredStudents, systemState.activeStudents, systemState.users)
+                          .filter((r) => isAdminOrVip || myCodes.has(r.referrer))
+                          .map((r) => ({ ...r, type: r.type === "active" ? "Siswa Aktif" : "Pendaftar" }));
+
                         if (myReferrals.length === 0) {
                           return (
                             <div className="text-center py-6 text-slate-500 text-xs italic">

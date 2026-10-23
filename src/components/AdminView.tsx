@@ -1284,6 +1284,13 @@ export default function AdminView({
   const [editingPayment, setEditingPayment] = useState<any>(null);
   const [editingLedger, setEditingLedger] = useState<any | null>(null);
   const [editingLedgerIsStudent, setEditingLedgerIsStudent] = useState(false);
+  // Registration form behind a student for the documents panel: id, then email,
+  // then a unique name - never the first registrant who merely shares the name.
+  const resolveDocsStudent = (st: any) => {
+    if (!st) return st;
+    const idx = findRecordIndex(systemState.registeredStudents, { id: st.id, email: st.email, name: st.name });
+    return idx !== -1 ? systemState.registeredStudents[idx] : st;
+  };
   const [editingLedgerStudentName, setEditingLedgerStudentName] = useState("");
   const [editingLedgerCategory, setEditingLedgerCategory] = useState("");
   const [previewTaxFile, setPreviewTaxFile] = useState<string | null>(null);
@@ -3731,7 +3738,7 @@ export default function AdminView({
                 <div className="flex items-center gap-2">
                   {(() => {
                     const activeStudentMatch = systemState.activeStudents.find(s => s.id === adminEditingStudentId);
-                    const student = systemState.registeredStudents.find(s => s.id === adminEditingStudentId) || systemState.registeredStudents.find(s => s.name === activeStudentMatch?.name) || activeStudentMatch;
+                    const student = resolveDocsStudent(systemState.registeredStudents.find(s => s.id === adminEditingStudentId) || activeStudentMatch);
                     if (!student) return null;
                     return (
                       <>
@@ -4354,7 +4361,7 @@ export default function AdminView({
                       Edit Biodata Siswa
                     </button>
                     {(() => {
-                      const studentInfo = (systemState.registeredStudents.find(s => s.id === verifyingDocsStudent.id) || systemState.registeredStudents.find(s => s.name === verifyingDocsStudent.name) || verifyingDocsStudent);
+                      const studentInfo = resolveDocsStudent(verifyingDocsStudent);
                       if (studentInfo.proofOfPayment) {
                         return (
                           <button
@@ -4381,13 +4388,13 @@ export default function AdminView({
               
               <div className="p-6 bg-slate-50 flex-1 overflow-y-auto">
                 <StudentDocsManager 
-                  student={(systemState.registeredStudents.find(s => s.id === verifyingDocsStudent.id) || systemState.registeredStudents.find(s => s.name === verifyingDocsStudent.name) || verifyingDocsStudent)} 
+                  student={resolveDocsStudent(verifyingDocsStudent)} 
                   onUpdateState={onUpdateState} 
                   onViewDoc={(url, title) => setViewingDocUrl({url, title})} 
                 />
 
                 {(() => {
-                  const student = (systemState.registeredStudents.find(s => s.id === verifyingDocsStudent.id) || systemState.registeredStudents.find(s => s.name === verifyingDocsStudent.name) || verifyingDocsStudent);
+                  const student = resolveDocsStudent(verifyingDocsStudent);
                   if (student.status === "Berkas Valid") {
                     return (
                       <div className="mt-8 bg-white border border-indigo-200 p-6 rounded-2xl shadow-sm animate-fade-in">
@@ -4494,7 +4501,7 @@ export default function AdminView({
                   Tutup
                 </button>
                 {(() => {
-                  const student = (systemState.registeredStudents.find(s => s.id === verifyingDocsStudent.id) || systemState.registeredStudents.find(s => s.name === verifyingDocsStudent.name) || verifyingDocsStudent);
+                  const student = resolveDocsStudent(verifyingDocsStudent);
                   if (student.status === "Pending") {
                     return (
                       <button
