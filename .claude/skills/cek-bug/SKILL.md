@@ -19,7 +19,7 @@ description: Cara mencari bug di LPK SCI saat pemilik meminta "cek bug lainnya" 
 ## Area yang sudah diperiksa (Okt 2026)
 Status/jumlah siswa, sinkron antar-instance, CV, berkas & sertifikat, nilai/kuis/essay, ID, Buku Kas/pembayaran, absen/presensi & tanggal, hapus akun/siswa, pendaftaran & persetujuan, Job Order, kelas/pengaturan, inventaris, upload, ETag/resync.
 
-Afiliasi/referral & Alumni dashboard (satu rumus di `src/lib/referrals.ts`), kalender/acara (urutan aman untuk data tanpa tanggal), pajak (impor bulanan: `src/lib/taxImport.ts`), akun alumni saat server mulai (`findStudentUserIndex`), notifikasi & semua pencarian "data siswa milik akun yang login" (`findStudentForUser`), tagihan per `studentId`, edit Buku Kas (`src/lib/ledgerEdit.ts`), Lowongan (baca ulang dari Firestore sebelum menulis).
+Afiliasi/referral & Alumni dashboard (satu rumus di `src/lib/referrals.ts`), kalender/acara (urutan aman untuk data tanpa tanggal), pajak (impor bulanan: `src/lib/taxImport.ts`), akun alumni saat server mulai (`findStudentUserIndex`), notifikasi & semua pencarian "data siswa milik akun yang login" (`findStudentForUser`), tagihan per `studentId`, edit Buku Kas (`src/lib/ledgerEdit.ts`), gaji ↔ Buku Kas (`src/lib/salaryLedger.ts`), absensi (persentase dihitung ulang saat edit), Lowongan (baca ulang dari Firestore sebelum menulis).
 
 ## Belum diperiksa mendalam
 Android/PWA, peta sebaran.

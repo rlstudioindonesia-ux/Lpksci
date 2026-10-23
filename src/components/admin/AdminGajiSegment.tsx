@@ -971,15 +971,7 @@ export default function AdminGajiSegment({ currentUser, editingSalId, hrFilterMo
                                                         const salOk = await onUpdateState("salaries", "add", salPayload);
     
                                                         if (salOk) {
-                                                          // Buku Kas Ledger (cashLedger)
-                                                          await onUpdateState("cashLedger", "add", {
-                                                            code: "P1", // Gaji Karyawan
-                                                            date: todayLocalISO(),
-                                                            description: `Gaji Staff: ${u.name} (${formattedMonthStr})`,
-                                                            inAmount: 0,
-                                                            outAmount: amt
-                                                          });
-                                                          
+                                                          // The server writes the linked Buku Kas payroll entry itself (src/lib/salaryLedger.ts).
                                                           alert(`Sukses! Gaji ${u.name} sebesar Rp ${amt.toLocaleString("id-ID")} telah lunas dibayarkan dan otomatis disinkronkan ke Buku Kas (Ledger).`);
                                                           setSelectedStaffForQuickPay(null);
                                                         } else {

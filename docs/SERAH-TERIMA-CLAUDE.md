@@ -58,7 +58,7 @@ Skill Claude Code ada di `.claude/skills/` (`alur-perubahan`, `aturan-data-siswa
   - saat pendaftar disetujui, tagihan pindah REG→SIS (`movePaymentsToStudent`);
   - halaman tagihan memisahkan siswa bernama sama ("Nama (SIS-001)", `buildBillingEntries`);
   - siswa melihat tagihannya lewat record siswa (`findStudentForUser`), bukan nama akun.
-- **Buku Kas**: entri pemasukan otomatis mengikuti pembayaran (`src/lib/paymentLedger.ts`).
+- **Buku Kas**: entri pemasukan otomatis mengikuti pembayaran (`src/lib/paymentLedger.ts`); entri gaji (kode P1, `salaryId`) otomatis mengikuti data gaji yang Lunas, diubah, atau dihapus (`src/lib/salaryLedger.ts`, di server — jangan tambah entri kas gaji dari peramban).
 - Jangan fallback ke `"SIS-001"` untuk akun tanpa studentId.
 - Jenis kelamin dinormalisasi lewat `normalizeGender` (`src/lib/gender.ts`).
 - **Update pendaftar tidak pernah membuat pendaftar baru** (`src/lib/registrationUpdate.ts`): target = pendaftar (id) → siswa aktif (id) → pendaftar (email/nama unik) → 404. Pendaftar asli hanya lewat `/api/register`.
@@ -85,7 +85,8 @@ Skill Claude Code ada di `.claude/skills/` (`alur-perubahan`, `aturan-data-siswa
 - #78 keamanan Tahap 2 di balik sakelar (hak akses per peran, data dipangkas per peran, Midtrans simulasi ditutup)
 - #79 tagihan ditautkan ke nomor siswa (siswa bernama sama terpisah, ganti nama tidak melepas tagihan, tagihan ikut saat pendaftar disetujui)
 - #80 edit Buku Kas tidak lagi mengubah kode jadi "P1 Gaji" / tidak menambah nominal tagihan, Lowongan dibaca ulang sebelum ditulis, panel berkas pendaftar hanya kirim kolom yang berubah
-- berikutnya: galeri kosong tetap kosong, agenda/materi/pengaturan/galeri dibaca ulang sebelum ditulis (`server/freshRead.ts`), nilai kuis dihitung server, kunci jawaban tidak dikirim sebelum dikumpulkan
+- #81 galeri kosong tetap kosong, agenda/materi/pengaturan/galeri dibaca ulang sebelum ditulis (`server/freshRead.ts`), nilai kuis dihitung server, kunci jawaban tidak dikirim sebelum dikumpulkan
+- berikutnya: gaji ↔ Buku Kas sinkron di server, persentase kehadiran ikut koreksi absen
 
 ## Tindak lanjut terbuka
 
